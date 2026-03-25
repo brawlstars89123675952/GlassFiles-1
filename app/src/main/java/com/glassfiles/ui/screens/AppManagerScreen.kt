@@ -269,7 +269,7 @@ private fun ActionBtn(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
     }
 }
 
-private fun loadApps(context: Context): List<AppItem> {
+internal fun loadApps(context: Context): List<AppItem> {
     val pm = context.packageManager
     val packages = pm.getInstalledPackages(0)
     return packages.mapNotNull { pi ->

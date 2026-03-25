@@ -1,20 +1,35 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/BrowseScreen.kt",
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/ShizukuScreen.kt",
       "selection": {
         "end": {
           "column": 0,
-          "index": 9656,
-          "line": 138
+          "index": 0,
+          "line": 0
         },
         "start": {
           "column": 0,
-          "index": 9656,
-          "line": 138
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/AppManagerScreen.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 15805,
+          "line": 315
+        },
+        "start": {
+          "column": 0,
+          "index": 15805,
+          "line": 315
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/BrowseScreen.kt"
+  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/AppManagerScreen.kt"
 }
