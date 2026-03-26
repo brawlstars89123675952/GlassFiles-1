@@ -220,6 +220,228 @@ object ShizukuManager {
     suspend fun getMounts(): String = exec("mount").let { if (it.success) it.stdout else "" }
 
     // ═══════════════════════════════════
+    // Automation — tap, swipe, keyevents
+    // ═══════════════════════════════════
+
+    /** Simulate screen tap at coordinates */
+    suspend fun tap(x: Int, y: Int): Boolean = exec("input tap $x $y").success
+
+    /** Simulate swipe gesture */
+    suspend fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Int = 300): Boolean =
+        exec("input swipe $x1 $y1 $x2 $y2 $durationMs").success
+
+    /** Simulate long press */
+    suspend fun longPress(x: Int, y: Int, durationMs: Int = 1000): Boolean =
+        exec("input swipe $x $y $x $y $durationMs").success
+
+    /** Simulate key event (e.g. KEYCODE_BACK=4, HOME=3, POWER=26, VOLUME_UP=24, VOLUME_DOWN=25) */
+    suspend fun keyEvent(keyCode: Int): Boolean = exec("input keyevent $keyCode").success
+
+    /** Simulate text input */
+    suspend fun inputText(text: String): Boolean {
+        val escaped = text.replace(" ", "%s").replace("\"", "\\\"")
+        return exec("input text \"$escaped\"").success
+    }
+
+    /** Press Home button */
+    suspend fun pressHome(): Boolean = keyEvent(3)
+    /** Press Back button */
+    suspend fun pressBack(): Boolean = keyEvent(4)
+    /** Press Power button */
+    suspend fun pressPower(): Boolean = keyEvent(26)
+    /** Press Recent Apps */
+    suspend fun pressRecents(): Boolean = keyEvent(187)
+    /** Volume Up */
+    suspend fun volumeUp(): Boolean = keyEvent(24)
+    /** Volume Down */
+    suspend fun volumeDown(): Boolean = keyEvent(25)
+    /** Media Play/Pause */
+    suspend fun mediaPlayPause(): Boolean = keyEvent(85)
+    /** Media Next */
+    suspend fun mediaNext(): Boolean = keyEvent(87)
+    /** Media Previous */
+    suspend fun mediaPrevious(): Boolean = keyEvent(88)
+    /** Toggle mute */
+    suspend fun mute(): Boolean = keyEvent(164)
+    /** Open camera */
+    suspend fun openCamera(): Boolean = keyEvent(27)
+    /** Take screenshot via key combo */
+    suspend fun screenshotKey(): Boolean = exec("input keyevent 120").success
+
+    // ═══════════════════════════════════
+    // Automation — display & brightness
+    // ═══════════════════════════════════
+
+    /** Get current brightness (0-255) */
+    suspend fun getBrightness(): Int {
+        val r = exec("settings get system screen_brightness")
+        return r.stdout.trim().toIntOrNull() ?: -1
+    }
+
+    /** Set brightness (0-255), bypasses system limits */
+    suspend fun setBrightness(value: Int): Boolean {
+        val v = value.coerceIn(0, 255)
+        exec("settings put system screen_brightness_mode 0") // manual mode
+        return exec("settings put system screen_brightness $v").success
+    }
+
+    /** Toggle auto brightness */
+    suspend fun setAutoBrightness(on: Boolean): Boolean =
+        exec("settings put system screen_brightness_mode ${if (on) 1 else 0}").success
+
+    /** Get animation scale */
+    suspend fun getAnimationScale(): String {
+        val w = exec("settings get global window_animation_scale").stdout.trim()
+        val t = exec("settings get global transition_animation_scale").stdout.trim()
+        val a = exec("settings get global animator_duration_scale").stdout.trim()
+        return "window=$w transition=$t animator=$a"
+    }
+
+    /** Set all animation scales (0.0 = off, 0.5 = fast, 1.0 = normal, 2.0 = slow) */
+    suspend fun setAnimationScale(scale: Float): Boolean {
+        val s = scale.toString()
+        val r1 = exec("settings put global window_animation_scale $s")
+        val r2 = exec("settings put global transition_animation_scale $s")
+        val r3 = exec("settings put global animator_duration_scale $s")
+        return r1.success && r2.success && r3.success
+    }
+
+    /** Get screen timeout in ms */
+    suspend fun getScreenTimeout(): Long {
+        val r = exec("settings get system screen_off_timeout")
+        return r.stdout.trim().toLongOrNull() ?: -1L
+    }
+
+    /** Set screen timeout in ms */
+    suspend fun setScreenTimeout(ms: Long): Boolean =
+        exec("settings put system screen_off_timeout $ms").success
+
+    /** Force dark mode for specific app */
+    suspend fun forceDarkMode(packageName: String, enable: Boolean): Boolean {
+        // Uses cmd overlay or appcompat
+        return if (enable) {
+            exec("cmd uimode night yes 2>/dev/null; settings put secure ui_night_mode 2").success
+        } else {
+            exec("cmd uimode night no 2>/dev/null; settings put secure ui_night_mode 1").success
+        }
+    }
+
+    /** Set global dark mode */
+    suspend fun setDarkMode(on: Boolean): Boolean =
+        exec("cmd uimode night ${if (on) "yes" else "no"}").success
+
+    /** Get stay-on-while-charging setting */
+    suspend fun getStayOnWhileCharging(): Boolean {
+        val r = exec("settings get global stay_on_while_plugged_in")
+        return r.stdout.trim() != "0"
+    }
+
+    /** Keep screen on while charging (0=off, 3=usb+ac, 7=all) */
+    suspend fun setStayOnWhileCharging(mode: Int): Boolean =
+        exec("settings put global stay_on_while_plugged_in $mode").success
+
+    // ═══════════════════════════════════
+    // Automation — connectivity
+    // ═══════════════════════════════════
+
+    /** Toggle mobile data */
+    suspend fun setMobileData(on: Boolean): Boolean =
+        exec("svc data ${if (on) "enable" else "disable"}").success
+
+    /** Toggle airplane mode */
+    suspend fun setAirplaneMode(on: Boolean): Boolean {
+        exec("settings put global airplane_mode_on ${if (on) 1 else 0}")
+        return exec("am broadcast -a android.intent.action.AIRPLANE_MODE --ez state $on").success
+    }
+
+    /** Toggle NFC */
+    suspend fun setNfc(on: Boolean): Boolean =
+        exec("svc nfc ${if (on) "enable" else "disable"}").success
+
+    /** Toggle GPS/Location */
+    suspend fun setLocationMode(mode: Int): Boolean =
+        exec("settings put secure location_mode $mode").success // 0=off, 3=high accuracy
+
+    /** Get current connected Wi-Fi SSID */
+    suspend fun getCurrentSsid(): String {
+        val r = exec("dumpsys wifi | grep 'mWifiInfo' | head -1")
+        val match = Regex("SSID: ([^,]+)").find(r.stdout)
+        return match?.groupValues?.get(1)?.trim() ?: ""
+    }
+
+    /** Get IP address */
+    suspend fun getIpAddress(): String {
+        val r = exec("ip addr show wlan0 | grep 'inet ' | awk '{print \$2}' | cut -d/ -f1")
+        return r.stdout.trim()
+    }
+
+    /** Get MAC address */
+    suspend fun getMacAddress(): String {
+        val r = exec("cat /sys/class/net/wlan0/address 2>/dev/null")
+        return r.stdout.trim()
+    }
+
+    // ═══════════════════════════════════
+    // Automation — sound
+    // ═══════════════════════════════════
+
+    /** Get current volume (stream 3 = music) */
+    suspend fun getVolume(stream: Int = 3): Int {
+        val r = exec("cmd media_session volume --get --stream $stream 2>/dev/null || dumpsys audio | grep 'STREAM_MUSIC' -A5 | grep 'Current' | head -1")
+        return Regex("(\\d+)").find(r.stdout)?.value?.toIntOrNull() ?: -1
+    }
+
+    /** Set volume for stream */
+    suspend fun setVolume(value: Int, stream: Int = 3): Boolean =
+        exec("cmd media_session volume --set $value --stream $stream 2>/dev/null || media volume --set $value --stream $stream").success
+
+    /** Set Do Not Disturb mode (0=off, 1=priority, 2=none/total silence, 3=alarms only) */
+    suspend fun setDndMode(mode: Int): Boolean =
+        exec("cmd notification set_dnd $mode 2>/dev/null || settings put global zen_mode $mode").success
+
+    /** Disable system sounds */
+    suspend fun setSystemSounds(on: Boolean): Boolean {
+        exec("settings put system sound_effects_enabled ${if (on) 1 else 0}")
+        return exec("settings put system haptic_feedback_enabled ${if (on) 1 else 0}").success
+    }
+
+    // ═══════════════════════════════════
+    // Automation — open/launch
+    // ═══════════════════════════════════
+
+    /** Launch any app by package */
+    suspend fun launchApp(packageName: String): Boolean {
+        val r = exec("monkey -p $packageName -c android.intent.category.LAUNCHER 1 2>/dev/null")
+        return r.success || exec("am start -n $(cmd package resolve-activity --brief $packageName | tail -1) 2>/dev/null").success
+    }
+
+    /** Open URL in browser */
+    suspend fun openUrl(url: String): Boolean =
+        exec("am start -a android.intent.action.VIEW -d \"$url\"").success
+
+    /** Send intent broadcast */
+    suspend fun sendBroadcast(action: String, extras: String = ""): Boolean =
+        exec("am broadcast -a $action $extras").success
+
+    /** Start activity */
+    suspend fun startActivity(component: String): Boolean =
+        exec("am start -n $component").success
+
+    // ═══════════════════════════════════
+    // Automation — clipboard
+    // ═══════════════════════════════════
+
+    /** Get clipboard content */
+    suspend fun getClipboard(): String {
+        val r = exec("cmd clipboard get-text 2>/dev/null || service call clipboard 2 2>/dev/null")
+        return r.stdout.trim()
+    }
+
+    /** Set clipboard content */
+    suspend fun setClipboard(text: String): Boolean =
+        exec("cmd clipboard set-text \"$text\" 2>/dev/null || am broadcast -a clipper.set -e text \"$text\"").success
+
+    // ═══════════════════════════════════
     // Helpers
     // ═══════════════════════════════════
 
@@ -268,4 +490,3 @@ object ShizukuManager {
     data class ShizukuFileItem(val name: String, val path: String, val isDirectory: Boolean, val size: Long)
     data class ProcessInfo(val pid: Int, val memKb: Long, val name: String)
 }
-

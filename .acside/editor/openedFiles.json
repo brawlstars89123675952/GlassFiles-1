@@ -35,16 +35,31 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 12498,
-          "line": 271
+          "index": 21644,
+          "line": 492
         },
         "start": {
           "column": 0,
-          "index": 12498,
-          "line": 271
+          "index": 21644,
+          "line": 492
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/ShizukuScreen.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 48876,
+          "line": 791
+        },
+        "start": {
+          "column": 0,
+          "index": 48876,
+          "line": 791
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/ShizukuManager.kt"
+  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/ShizukuScreen.kt"
 }
