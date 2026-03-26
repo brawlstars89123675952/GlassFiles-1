@@ -20,12 +20,12 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 20600,
+          "index": 20602,
           "line": 318
         },
         "start": {
           "column": 0,
-          "index": 20600,
+          "index": 20602,
           "line": 318
         }
       }
@@ -50,16 +50,31 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 48876,
-          "line": 791
+          "index": 43827,
+          "line": 515
         },
         "start": {
           "column": 0,
-          "index": 48876,
-          "line": 791
+          "index": 43827,
+          "line": 515
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/Localization.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 34125,
+          "line": 708
+        },
+        "start": {
+          "column": 0,
+          "index": 34125,
+          "line": 708
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/ShizukuScreen.kt"
+  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/GlassFilesApp.kt"
 }

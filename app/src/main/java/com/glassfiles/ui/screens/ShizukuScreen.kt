@@ -43,9 +43,9 @@ private enum class ShTab { FILES, APPS, SYSTEM, LOGS, AUTO }
 private fun shTabLabel(tab: ShTab): String = when (tab) {
     ShTab.FILES -> Strings.tools
     ShTab.APPS -> Strings.appManager
-    ShTab.SYSTEM -> "Система"
-    ShTab.LOGS -> "Логи"
-    ShTab.AUTO -> "Авто"
+    ShTab.SYSTEM -> Strings.shSystem
+    ShTab.LOGS -> Strings.shLogs
+    ShTab.AUTO -> Strings.shAuto
 }
 
 @Composable
@@ -63,7 +63,6 @@ fun ShizukuScreen(onBack: () -> Unit, onBrowseRestricted: (String) -> Unit = {})
     }
 
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        // ── Top bar ──
         Row(Modifier.fillMaxWidth().background(SurfaceWhite).padding(top = 44.dp, start = 4.dp, end = 12.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = Blue) }
@@ -72,7 +71,6 @@ fun ShizukuScreen(onBack: () -> Unit, onBrowseRestricted: (String) -> Unit = {})
                 .background(if (hasPermission) Color(0xFF34C759) else if (isRunning) Color(0xFFFF9F0A) else Color(0xFFFF3B30)))
         }
 
-        // ── Status ──
         if (!hasPermission) {
             Box(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(16.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -97,7 +95,6 @@ fun ShizukuScreen(onBack: () -> Unit, onBrowseRestricted: (String) -> Unit = {})
             return@Column
         }
 
-        // ── Tabs ──
         Row(Modifier.fillMaxWidth().background(SurfaceWhite).horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ShTab.entries.forEach { tab ->
@@ -108,15 +105,12 @@ fun ShizukuScreen(onBack: () -> Unit, onBrowseRestricted: (String) -> Unit = {})
                     .border(1.dp, if (sel) Blue.copy(0.3f) else SeparatorColor, RoundedCornerShape(8.dp))
                     .clickable { selectedTab = tab }
                     .padding(horizontal = 12.dp, vertical = 7.dp)) {
-                    Text(label, fontSize = 13.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (sel) Blue else TextSecondary)
+                    Text(label, fontSize = 13.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal, color = if (sel) Blue else TextSecondary)
                 }
             }
         }
-
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor))
 
-        // ── Content ──
         when (selectedTab) {
             ShTab.FILES -> FilesContent(context, scope, onBrowseRestricted)
             ShTab.APPS -> AppsContent(context, scope)
@@ -127,81 +121,60 @@ fun ShizukuScreen(onBack: () -> Unit, onBrowseRestricted: (String) -> Unit = {})
     }
 }
 
-// ═══════════════════════════════════════════
-// Files
-// ═══════════════════════════════════════════
+// ═══ Files ═══
 
 @Composable
 private fun FilesContent(context: Context, scope: kotlinx.coroutines.CoroutineScope, onBrowse: (String) -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        item { Label("Ограниченные директории") }
+        item { Label(Strings.shRestrictedDirs) }
         item { Card(Icons.Rounded.Folder, Strings.androidData, "/storage/emulated/0/Android/data", Color(0xFF007AFF)) { onBrowse("shizuku:///storage/emulated/0/Android/data") } }
         item { Card(Icons.Rounded.Folder, Strings.androidObb, "/storage/emulated/0/Android/obb", Color(0xFF5856D6)) { onBrowse("shizuku:///storage/emulated/0/Android/obb") } }
-
-        item { Label("Системные директории") }
-        item { Card(Icons.Rounded.Storage, "/data/local/tmp", "Временные файлы", Color(0xFF8E8E93)) { onBrowse("shizuku:///data/local/tmp") } }
-        item { Card(Icons.Rounded.SettingsApplications, "/system/app", "Системные приложения", Color(0xFFFF9F0A)) { onBrowse("shizuku:///system/app") } }
-        item { Card(Icons.Rounded.FolderSpecial, "/data/data", "Данные приложений", Color(0xFFFF3B30)) { onBrowse("shizuku:///data/data") } }
-
-        item { Label("Файловые инструменты") }
+        item { Label(Strings.shSystemDirs) }
+        item { Card(Icons.Rounded.Storage, "/data/local/tmp", Strings.shTempFiles, Color(0xFF8E8E93)) { onBrowse("shizuku:///data/local/tmp") } }
+        item { Card(Icons.Rounded.SettingsApplications, "/system/app", Strings.shSystemApps, Color(0xFFFF9F0A)) { onBrowse("shizuku:///system/app") } }
+        item { Card(Icons.Rounded.FolderSpecial, "/data/data", Strings.shAppData, Color(0xFFF44336)) { onBrowse("shizuku:///data/data") } }
+        item { Label(Strings.shFileTools) }
         item {
             var show by remember { mutableStateOf(false) }
-            Card(Icons.Rounded.Lock, "Изменить права", "chmod для файлов и папок", Color(0xFF8E8E93)) { show = true }
+            Card(Icons.Rounded.Lock, Strings.shChangePerms, Strings.shChmodSub, Color(0xFF8E8E93)) { show = true }
             if (show) ChmodDialog(scope) { show = false }
         }
         item {
             var show by remember { mutableStateOf(false) }
-            Card(Icons.Rounded.Link, "Символическая ссылка", "Создать symlink", Color(0xFF30D158)) { show = true }
+            Card(Icons.Rounded.Link, Strings.shSymlink, Strings.shCreateSymlink, Color(0xFF30D158)) { show = true }
             if (show) SymlinkDialog(context, scope) { show = false }
         }
-        item { Card(Icons.Rounded.ListAlt, "Точки монтирования", "Скопировать mount в буфер", Color(0xFF636366)) {
-            scope.launch {
-                val m = ShizukuManager.getMounts()
+        item { Card(Icons.Rounded.ListAlt, Strings.shMountPoints, Strings.shCopyMount, Color(0xFF636366)) {
+            scope.launch { val m = ShizukuManager.getMounts()
                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 cm.setPrimaryClip(android.content.ClipData.newPlainText("mounts", m))
-                tst(context, true, "Скопировано (${m.lines().size} строк)")
-            }
+                tst(context, true, "${Strings.shCopied} (${m.lines().size})") }
         }}
         item { Spacer(Modifier.height(80.dp)) }
     }
 }
 
-// ═══════════════════════════════════════════
-// Apps
-// ═══════════════════════════════════════════
+// ═══ Apps ═══
 
 @Composable
 private fun AppsContent(context: Context, scope: kotlinx.coroutines.CoroutineScope) {
     var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
-
     LaunchedEffect(Unit) { withContext(Dispatchers.IO) { apps = loadApps(context); loading = false } }
-
     val filtered = remember(apps, query) {
         val list = apps.filter { !it.isSystem }
         if (query.isNotBlank()) list.filter { it.name.contains(query, true) || it.packageName.contains(query, true) }
         else list.sortedBy { it.name.lowercase() }
     }
-
     Column(Modifier.fillMaxSize()) {
-        // Search
-        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(10.dp))
-            .background(SurfaceWhite).padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).padding(horizontal = 12.dp, vertical = 10.dp)) {
             if (query.isEmpty()) Text(Strings.searchApps, color = TextTertiary, fontSize = 14.sp)
-            BasicTextField(query, { query = it },
-                textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp),
-                singleLine = true, modifier = Modifier.fillMaxWidth())
+            BasicTextField(query, { query = it }, textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp), singleLine = true, modifier = Modifier.fillMaxWidth())
         }
-
-        if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
-            }
-        } else {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 100.dp)) {
-                items(filtered, key = { it.packageName }) { app -> AppRow(app, context, scope) }
-            }
+        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+        else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 100.dp)) {
+            items(filtered, key = { it.packageName }) { app -> AppRow(app, context, scope) }
         }
     }
 }
@@ -211,22 +184,12 @@ private fun AppRow(app: AppItem, context: Context, scope: kotlinx.coroutines.Cor
     var expanded by remember { mutableStateOf(false) }
     var isFrozen by remember { mutableStateOf(false) }
     var dataSize by remember { mutableStateOf<Long?>(null) }
-
     LaunchedEffect(app.packageName) { isFrozen = ShizukuManager.isAppFrozen(app.packageName) }
 
     Column(Modifier.fillMaxWidth().clickable { expanded = !expanded }) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Icon
-            if (app.icon != null) {
-                val bmp = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
-                Image(bmp, app.name, Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)))
-            } else {
-                Box(Modifier.size(40.dp).background(Blue.copy(0.08f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Android, null, Modifier.size(22.dp), tint = Blue)
-                }
-            }
-            // Info
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (app.icon != null) { val bmp = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }; Image(bmp, app.name, Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))) }
+            else Box(Modifier.size(40.dp).background(Blue.copy(0.08f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Android, null, Modifier.size(22.dp), tint = Blue) }
             Column(Modifier.weight(1f)) {
                 Text(app.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -234,506 +197,230 @@ private fun AppRow(app: AppItem, context: Context, scope: kotlinx.coroutines.Cor
                     if (dataSize != null) Text(fmtSz(dataSize!!), fontSize = 11.sp, color = Blue, fontWeight = FontWeight.Medium)
                 }
             }
-            if (isFrozen) {
-                Box(Modifier.background(Color(0xFF007AFF).copy(0.1f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                    Text(Strings.frozen, fontSize = 10.sp, color = Color(0xFF007AFF), fontWeight = FontWeight.SemiBold)
-                }
-            }
+            if (isFrozen) Box(Modifier.background(Color(0xFF007AFF).copy(0.1f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                Text(Strings.frozen, fontSize = 10.sp, color = Color(0xFF007AFF), fontWeight = FontWeight.SemiBold) }
         }
-
-        // ── Expanded actions ──
         AnimatedVisibility(expanded, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
             Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                // Row 1
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Chip(Strings.forceStop, Color(0xFFFF3B30), Modifier.weight(1f)) {
-                        scope.launch { tst(context, ShizukuManager.forceStop(app.packageName), Strings.forceStopped) } }
+                    Chip(Strings.forceStop, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.forceStop(app.packageName), Strings.forceStopped) } }
                     Chip(if (isFrozen) Strings.unfreezeApp else Strings.freezeApp, Color(0xFF007AFF), Modifier.weight(1f)) {
                         scope.launch { val ok = if (isFrozen) ShizukuManager.unfreezeApp(app.packageName) else ShizukuManager.freezeApp(app.packageName)
                             if (ok) isFrozen = !isFrozen; tst(context, ok, if (isFrozen) Strings.frozen else Strings.unfrozen) } }
-                    Chip(Strings.clearCacheDone, Color(0xFF34C759), Modifier.weight(1f)) {
-                        scope.launch { tst(context, ShizukuManager.clearCache(app.packageName), Strings.clearCacheDone) } }
+                    Chip(Strings.clearCacheDone, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.clearCache(app.packageName), Strings.clearCacheDone) } }
                 }
-                // Row 2
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Chip("Очистить всё", Color(0xFFFF9F0A), Modifier.weight(1f)) {
-                        scope.launch { tst(context, ShizukuManager.clearAllData(app.packageName), "Данные очищены") } }
-                    Chip("Удалить", Color(0xFFFF3B30), Modifier.weight(1f)) {
-                        scope.launch { tst(context, ShizukuManager.uninstallApp(app.packageName), "Удалено") } }
-                    Chip("Размер", Color(0xFF8E8E93), Modifier.weight(1f)) {
-                        scope.launch { dataSize = ShizukuManager.getAppDataSize(app.packageName) } }
+                    Chip(Strings.shClearAll, Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.clearAllData(app.packageName), Strings.shDataCleared) } }
+                    Chip(Strings.delete, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.uninstallApp(app.packageName), Strings.shRemoved) } }
+                    Chip(Strings.shSize, Color(0xFF8E8E93), Modifier.weight(1f)) { scope.launch { dataSize = ShizukuManager.getAppDataSize(app.packageName) } }
                 }
-                // Row 3
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Chip("Огр. фон", Color(0xFF636366), Modifier.weight(1f)) {
-                        scope.launch { tst(context, ShizukuManager.restrictBackground(app.packageName, true), "Фон ограничен") } }
-                    Chip("Разр. фон", Color(0xFF30D158), Modifier.weight(1f)) {
-                        scope.launch { tst(context, ShizukuManager.restrictBackground(app.packageName, false), "Фон разрешён") } }
-                    Chip("Бэкап", Color(0xFF5856D6), Modifier.weight(1f)) {
-                        scope.launch {
-                            val dir = java.io.File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Backup"); dir.mkdirs()
-                            val p = "${dir.absolutePath}/${app.packageName}_data.tar.gz"
-                            tst(context, ShizukuManager.backupAppData(app.packageName, p), "Бэкап сохранён")
-                        } }
+                    Chip(Strings.shRestrictBg, Color(0xFF636366), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.restrictBackground(app.packageName, true), Strings.shBgRestricted) } }
+                    Chip(Strings.shAllowBg, Color(0xFF30D158), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.restrictBackground(app.packageName, false), Strings.shBgAllowed) } }
+                    Chip(Strings.shBackup, Color(0xFF5856D6), Modifier.weight(1f)) {
+                        scope.launch { val dir = java.io.File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Backup"); dir.mkdirs()
+                            val p = "${dir.absolutePath}/${app.packageName}_data.tar.gz"; tst(context, ShizukuManager.backupAppData(app.packageName, p), Strings.shBackupSaved) } }
                 }
             }
         }
-
         Box(Modifier.fillMaxWidth().padding(start = 68.dp).height(0.5.dp).background(SeparatorColor))
     }
 }
 
-// ═══════════════════════════════════════════
-// System
-// ═══════════════════════════════════════════
+// ═══ System ═══
 
 @Composable
 private fun SystemContent(context: Context, scope: kotlinx.coroutines.CoroutineScope) {
-    var dpi by remember { mutableStateOf("...") }
-    var res by remember { mutableStateOf("...") }
-    var battery by remember { mutableStateOf("") }
-    var procs by remember { mutableStateOf<List<ShizukuManager.ProcessInfo>>(emptyList()) }
-    var showDpi by remember { mutableStateOf(false) }
-    var showRes by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        dpi = ShizukuManager.getScreenDpi().let { if (it > 0) it.toString() else "?" }
-        res = ShizukuManager.getScreenResolution().ifBlank { "?" }
-        battery = ShizukuManager.getBatteryStats()
-    }
+    var dpi by remember { mutableStateOf("...") }; var res by remember { mutableStateOf("...") }; var battery by remember { mutableStateOf("") }
+    var procs by remember { mutableStateOf<List<ShizukuManager.ProcessInfo>>(emptyList()) }; var showDpi by remember { mutableStateOf(false) }; var showRes by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { dpi = ShizukuManager.getScreenDpi().let { if (it > 0) it.toString() else "?" }; res = ShizukuManager.getScreenResolution().ifBlank { "?" }; battery = ShizukuManager.getBatteryStats() }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        // Display
-        item { Label("Дисплей") }
-        item { Card(Icons.Rounded.Smartphone, "DPI: $dpi", "Изменить плотность экрана", Color(0xFF007AFF)) { showDpi = true } }
-        item { Card(Icons.Rounded.AspectRatio, res, "Изменить разрешение экрана", Color(0xFF5856D6)) { showRes = true } }
-        item { Card(Icons.Rounded.Refresh, "Сбросить дисплей", "Вернуть DPI и разрешение по умолчанию", Color(0xFF8E8E93)) {
-            scope.launch {
-                ShizukuManager.resetScreenDpi(); ShizukuManager.resetScreenResolution()
-                dpi = ShizukuManager.getScreenDpi().toString(); res = ShizukuManager.getScreenResolution()
-                tst(context, true, "Сброшено")
-            }
-        }}
-
-        // Capture
-        item { Label("Захват экрана") }
-        item { Card(Icons.Rounded.Screenshot, "Скриншот", "Сохранить снимок экрана", Color(0xFF34C759)) {
-            scope.launch {
-                val p = "${Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)}/scr_${System.currentTimeMillis()}.png"
-                tst(context, ShizukuManager.takeScreenshot(p), "Скриншот сохранён")
-            }
-        }}
-        item { Card(Icons.Rounded.Videocam, "Запись экрана", "30 секунд screenrecord", Color(0xFFFF2D55)) {
-            scope.launch {
-                val p = "${Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)}/rec_${System.currentTimeMillis()}.mp4"
-                tst(context, ShizukuManager.startScreenRecord(p, 30), "Запись начата (30с)")
-            }
-        }}
-        item { Card(Icons.Rounded.StopCircle, "Остановить запись", "Завершить screenrecord", Color(0xFF636366)) {
-            scope.launch { ShizukuManager.stopScreenRecord(); tst(context, true, "Запись остановлена") }
-        }}
-
-        // Connectivity
-        item { Label("Подключение") }
+        item { Label(Strings.shDisplay) }
+        item { Card(Icons.Rounded.Smartphone, "DPI: $dpi", Strings.shChangeDpi, Color(0xFF007AFF)) { showDpi = true } }
+        item { Card(Icons.Rounded.AspectRatio, res, Strings.shChangeRes, Color(0xFF5856D6)) { showRes = true } }
+        item { Card(Icons.Rounded.Refresh, Strings.shResetDisplay, Strings.shResetDisplaySub, Color(0xFF8E8E93)) {
+            scope.launch { ShizukuManager.resetScreenDpi(); ShizukuManager.resetScreenResolution(); dpi = ShizukuManager.getScreenDpi().toString(); res = ShizukuManager.getScreenResolution(); tst(context, true, Strings.shReset) } } }
+        item { Label(Strings.shScreenCapture) }
+        item { Card(Icons.Rounded.Screenshot, Strings.shScreenshot, Strings.shSaveScreenshot, Color(0xFF34C759)) {
+            scope.launch { val p = "${Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)}/scr_${System.currentTimeMillis()}.png"; tst(context, ShizukuManager.takeScreenshot(p), Strings.shScreenshotSaved) } } }
+        item { Card(Icons.Rounded.Videocam, Strings.shScreenRecord, Strings.shScreenRecordSub, Color(0xFFFF2D55)) {
+            scope.launch { val p = "${Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)}/rec_${System.currentTimeMillis()}.mp4"; tst(context, ShizukuManager.startScreenRecord(p, 30), Strings.shRecordStarted) } } }
+        item { Card(Icons.Rounded.StopCircle, Strings.shStopRecord, Strings.shStopRecordSub, Color(0xFF636366)) { scope.launch { ShizukuManager.stopScreenRecord(); tst(context, true, Strings.shRecordStopped) } } }
+        item { Label(Strings.shConnection) }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Card(Icons.Rounded.Wifi, "Wi-Fi вкл", "", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.setWifi(true); tst(context, true, "Wi-Fi ON") } }
-            Card(Icons.Rounded.WifiOff, "Wi-Fi выкл", "", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.setWifi(false); tst(context, true, "Wi-Fi OFF") } }
-        }}
+            Card(Icons.Rounded.Wifi, Strings.shWifiOn, "", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.setWifi(true); tst(context, true, "ON") } }
+            Card(Icons.Rounded.WifiOff, Strings.shWifiOff, "", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.setWifi(false); tst(context, true, "OFF") } }
+        } }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Card(Icons.Rounded.Bluetooth, "Bluetooth вкл", "", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.setBluetooth(true); tst(context, true, "Bluetooth ON") } }
-            Card(Icons.Rounded.BluetoothDisabled, "Bluetooth выкл", "", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.setBluetooth(false); tst(context, true, "Bluetooth OFF") } }
-        }}
-
-        // Battery
-        item { Label("Батарея") }
-        item {
-            if (battery.isNotBlank()) {
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp)) {
-                    Text(battery.take(500), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = TextPrimary, lineHeight = 16.sp)
-                }
-            }
-        }
-
-        // Processes
-        item { Label("Процессы") }
-        item {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Blue).clickable {
-                scope.launch { procs = ShizukuManager.getRunningProcesses() }
-            }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                Text("Загрузить процессы", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
-        if (procs.isNotEmpty()) {
-            item {
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Row(Modifier.fillMaxWidth()) {
-                            Text("PID", fontSize = 10.sp, color = TextTertiary, fontWeight = FontWeight.Bold, modifier = Modifier.width(48.dp))
-                            Text("RAM", fontSize = 10.sp, color = TextTertiary, fontWeight = FontWeight.Bold, modifier = Modifier.width(60.dp))
-                            Text("Процесс", fontSize = 10.sp, color = TextTertiary, fontWeight = FontWeight.Bold)
-                        }
-                        procs.take(25).forEach { p ->
-                            Row(Modifier.fillMaxWidth()) {
-                                Text("${p.pid}", fontSize = 11.sp, color = TextSecondary, fontFamily = FontFamily.Monospace, modifier = Modifier.width(48.dp))
-                                Text(fmtSz(p.memKb * 1024), fontSize = 11.sp, color = Blue, fontFamily = FontFamily.Monospace, modifier = Modifier.width(60.dp))
-                                Text(p.name, fontSize = 11.sp, color = TextPrimary, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Reboot
-        item { Label("Перезагрузка") }
+            Card(Icons.Rounded.Bluetooth, Strings.shBtOn, "", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.setBluetooth(true); tst(context, true, "ON") } }
+            Card(Icons.Rounded.BluetoothDisabled, Strings.shBtOff, "", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.setBluetooth(false); tst(context, true, "OFF") } }
+        } }
+        item { Label(Strings.shBattery) }
+        item { if (battery.isNotBlank()) Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp)) {
+            Text(battery.take(500), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = TextPrimary, lineHeight = 16.sp) } }
+        item { Label(Strings.shProcesses) }
+        item { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Blue).clickable { scope.launch { procs = ShizukuManager.getRunningProcesses() } }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+            Text(Strings.shLoadProcesses, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) } }
+        if (procs.isNotEmpty()) { item { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(Modifier.fillMaxWidth()) { Text("PID", fontSize = 10.sp, color = TextTertiary, fontWeight = FontWeight.Bold, modifier = Modifier.width(48.dp)); Text("RAM", fontSize = 10.sp, color = TextTertiary, fontWeight = FontWeight.Bold, modifier = Modifier.width(60.dp)); Text(Strings.shProcess, fontSize = 10.sp, color = TextTertiary, fontWeight = FontWeight.Bold) }
+                procs.take(25).forEach { p -> Row(Modifier.fillMaxWidth()) { Text("${p.pid}", fontSize = 11.sp, color = TextSecondary, fontFamily = FontFamily.Monospace, modifier = Modifier.width(48.dp)); Text(fmtSz(p.memKb * 1024), fontSize = 11.sp, color = Blue, fontFamily = FontFamily.Monospace, modifier = Modifier.width(60.dp)); Text(p.name, fontSize = 11.sp, color = TextPrimary, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
+            } } } }
+        item { Label(Strings.shReboot) }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Card(Icons.Rounded.RestartAlt, "Reboot", "", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.reboot() } }
             Card(Icons.Rounded.PhoneAndroid, "Recovery", "", Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { ShizukuManager.reboot("recovery") } }
             Card(Icons.Rounded.DeveloperMode, "Bootloader", "", Color(0xFF636366), Modifier.weight(1f)) { scope.launch { ShizukuManager.reboot("bootloader") } }
-        }}
+        } }
         item { Spacer(Modifier.height(80.dp)) }
     }
-
     if (showDpi) DpiDialog(context, scope, dpi, { showDpi = false }) { dpi = it }
     if (showRes) ResDialog(context, scope, { showRes = false }) { res = it }
 }
 
-// ═══════════════════════════════════════════
-// Logcat
-// ═══════════════════════════════════════════
+// ═══ Logs ═══
 
 @Composable
 private fun LogsContent(context: Context, scope: kotlinx.coroutines.CoroutineScope) {
-    var log by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-
+    var log by remember { mutableStateOf("") }; var filter by remember { mutableStateOf("") }; var loading by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        // Controls
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).padding(horizontal = 12.dp, vertical = 10.dp)) {
-                if (filter.isEmpty()) Text("Фильтр...", color = TextTertiary, fontSize = 14.sp)
-                BasicTextField(filter, { filter = it },
-                    textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp, fontFamily = FontFamily.Monospace),
-                    singleLine = true, modifier = Modifier.fillMaxWidth())
-            }
-            IconButton(onClick = { loading = true; scope.launch { log = ShizukuManager.getLogcat(300, filter); loading = false } }) {
-                Icon(Icons.Rounded.Refresh, null, Modifier.size(22.dp), tint = Blue) }
-            IconButton(onClick = { scope.launch { ShizukuManager.clearLogcat(); log = ""; tst(context, true, "Логи очищены") } }) {
-                Icon(Icons.Rounded.DeleteSweep, null, Modifier.size(22.dp), tint = Red) }
+                if (filter.isEmpty()) Text(Strings.shFilter, color = TextTertiary, fontSize = 14.sp)
+                BasicTextField(filter, { filter = it }, textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp, fontFamily = FontFamily.Monospace), singleLine = true, modifier = Modifier.fillMaxWidth()) }
+            IconButton(onClick = { loading = true; scope.launch { log = ShizukuManager.getLogcat(300, filter); loading = false } }) { Icon(Icons.Rounded.Refresh, null, Modifier.size(22.dp), tint = Blue) }
+            IconButton(onClick = { scope.launch { ShizukuManager.clearLogcat(); log = ""; tst(context, true, Strings.shLogsCleared) } }) { Icon(Icons.Rounded.DeleteSweep, null, Modifier.size(22.dp), tint = Red) }
         }
-
-        // Content
-        if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
-            }
-        } else if (log.isBlank()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Rounded.Terminal, null, Modifier.size(40.dp), tint = TextTertiary)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Нажмите обновить для загрузки", color = TextSecondary, fontSize = 14.sp)
-                }
-            }
-        } else {
-            Box(Modifier.fillMaxSize().padding(8.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF1C1C1E))
-                .verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState())) {
-                Text(log, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFE5E5EA), lineHeight = 14.sp,
-                    modifier = Modifier.padding(10.dp))
-            }
-        }
+        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+        else if (log.isBlank()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Rounded.Terminal, null, Modifier.size(40.dp), tint = TextTertiary); Spacer(Modifier.height(8.dp)); Text(Strings.shPressRefresh, color = TextSecondary, fontSize = 14.sp) } }
+        else Box(Modifier.fillMaxSize().padding(8.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF1C1C1E)).verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState())) {
+            Text(log, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFE5E5EA), lineHeight = 14.sp, modifier = Modifier.padding(10.dp)) }
     }
 }
 
-// ═══════════════════════════════════════════
-// Dialogs
-// ═══════════════════════════════════════════
-
-@Composable
-private fun DpiDialog(context: Context, scope: kotlinx.coroutines.CoroutineScope, cur: String, onDismiss: () -> Unit, onApplied: (String) -> Unit) {
-    var v by remember { mutableStateOf(cur) }
-    AlertDialog(onDismissRequest = onDismiss, containerColor = SurfaceWhite,
-        title = { Text("Изменить DPI", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Текущий: $cur", fontSize = 13.sp, color = TextSecondary)
-            OutlinedTextField(v, { v = it }, label = { Text("DPI") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("320", "360", "400", "420", "480", "560").forEach { d ->
-                    Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (v == d) Blue.copy(0.12f) else SurfaceLight)
-                        .clickable { v = d }.padding(horizontal = 8.dp, vertical = 5.dp)) {
-                        Text(d, fontSize = 12.sp, color = if (v == d) Blue else TextSecondary) } } }
-        } },
-        confirmButton = { TextButton(onClick = { scope.launch { ShizukuManager.setScreenDpi(v.toIntOrNull() ?: 420); onApplied(v) }; onDismiss() }) { Text("OK", color = Blue) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } })
-}
-
-@Composable
-private fun ResDialog(context: Context, scope: kotlinx.coroutines.CoroutineScope, onDismiss: () -> Unit, onApplied: (String) -> Unit) {
-    var w by remember { mutableStateOf("1080") }; var h by remember { mutableStateOf("2400") }
-    AlertDialog(onDismissRequest = onDismiss, containerColor = SurfaceWhite,
-        title = { Text("Разрешение экрана", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(w, { w = it }, label = { Text("W") }, singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-            Text("×", fontSize = 20.sp, color = TextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
-            OutlinedTextField(h, { h = it }, label = { Text("H") }, singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-        } },
-        confirmButton = { TextButton(onClick = { val ww = w.toIntOrNull() ?: 1080; val hh = h.toIntOrNull() ?: 2400
-            scope.launch { ShizukuManager.setScreenResolution(ww, hh); onApplied("${ww}x${hh}") }; onDismiss()
-        }) { Text("OK", color = Blue) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } })
-}
-
-@Composable
-private fun ChmodDialog(scope: kotlinx.coroutines.CoroutineScope, onDismiss: () -> Unit) {
-    var path by remember { mutableStateOf("") }; var mode by remember { mutableStateOf("755") }; val ctx = LocalContext.current
-    AlertDialog(onDismissRequest = onDismiss, containerColor = SurfaceWhite,
-        title = { Text("Изменить права", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(path, { path = it }, label = { Text("Путь к файлу") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
-            OutlinedTextField(mode, { mode = it }, label = { Text("Права") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("644", "755", "777", "600").forEach { m ->
-                    Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (mode == m) Blue.copy(0.12f) else SurfaceLight)
-                        .clickable { mode = m }.padding(horizontal = 10.dp, vertical = 5.dp)) {
-                        Text(m, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = if (mode == m) Blue else TextSecondary) } } }
-        } },
-        confirmButton = { TextButton(onClick = { if (path.isNotBlank()) scope.launch { tst(ctx, ShizukuManager.chmod(path, mode), "chmod $mode") }; onDismiss() }) { Text("OK", color = Blue) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } })
-}
-
-@Composable
-private fun SymlinkDialog(context: Context, scope: kotlinx.coroutines.CoroutineScope, onDismiss: () -> Unit) {
-    var target by remember { mutableStateOf("") }; var link by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, containerColor = SurfaceWhite,
-        title = { Text("Символическая ссылка", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(target, { target = it }, label = { Text("Цель") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
-            OutlinedTextField(link, { link = it }, label = { Text("Путь ссылки") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
-        } },
-        confirmButton = { TextButton(onClick = { if (target.isNotBlank() && link.isNotBlank()) scope.launch { tst(context, ShizukuManager.symlink(target, link), "Создано") }; onDismiss() }) { Text(Strings.create, color = Blue) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } })
-}
-
-// ═══════════════════════════════════════════
-// Automation
-// ═══════════════════════════════════════════
+// ═══ Automation ═══
 
 @Composable
 private fun AutoContent(context: Context, scope: kotlinx.coroutines.CoroutineScope) {
-    var brightness by remember { mutableStateOf(-1) }
-    var animScale by remember { mutableStateOf("") }
-    var screenTimeout by remember { mutableStateOf(-1L) }
-    var ssid by remember { mutableStateOf("") }
-    var ip by remember { mutableStateOf("") }
-    var mac by remember { mutableStateOf("") }
-    var tapX by remember { mutableStateOf("540") }
-    var tapY by remember { mutableStateOf("960") }
-    var textToType by remember { mutableStateOf("") }
-
-    LaunchedEffect(Unit) {
-        brightness = ShizukuManager.getBrightness()
-        animScale = ShizukuManager.getAnimationScale()
-        screenTimeout = ShizukuManager.getScreenTimeout()
-        ssid = ShizukuManager.getCurrentSsid()
-        ip = ShizukuManager.getIpAddress()
-        mac = ShizukuManager.getMacAddress()
-    }
+    var brightness by remember { mutableStateOf(-1) }; var animScale by remember { mutableStateOf("") }; var screenTimeout by remember { mutableStateOf(-1L) }
+    var ssid by remember { mutableStateOf("") }; var ip by remember { mutableStateOf("") }; var mac by remember { mutableStateOf("") }
+    var tapX by remember { mutableStateOf("540") }; var tapY by remember { mutableStateOf("960") }; var textToType by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) { brightness = ShizukuManager.getBrightness(); animScale = ShizukuManager.getAnimationScale(); screenTimeout = ShizukuManager.getScreenTimeout(); ssid = ShizukuManager.getCurrentSsid(); ip = ShizukuManager.getIpAddress(); mac = ShizukuManager.getMacAddress() }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-
-        // ── Touch simulation ──
-        item { Label("Симуляция касаний") }
-        item {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(tapX, { tapX = it }, label = { Text("X") }, singleLine = true,
-                            modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                        OutlinedTextField(tapY, { tapY = it }, label = { Text("Y") }, singleLine = true,
-                            modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip("Тап", Color(0xFF007AFF), Modifier.weight(1f)) {
-                            scope.launch { tst(context, ShizukuManager.tap(tapX.toIntOrNull() ?: 540, tapY.toIntOrNull() ?: 960), "Тап") } }
-                        Chip("Долгий тап", Color(0xFF5856D6), Modifier.weight(1f)) {
-                            scope.launch { tst(context, ShizukuManager.longPress(tapX.toIntOrNull() ?: 540, tapY.toIntOrNull() ?: 960), "Долгий тап") } }
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip("Свайп вверх", Color(0xFF34C759), Modifier.weight(1f)) {
-                            scope.launch { ShizukuManager.swipe(540, 1600, 540, 400, 300) } }
-                        Chip("Свайп вниз", Color(0xFF34C759), Modifier.weight(1f)) {
-                            scope.launch { ShizukuManager.swipe(540, 400, 540, 1600, 300) } }
-                    }
-                }
-            }
-        }
-
-        // ── Text input ──
-        item { Label("Ввод текста") }
-        item {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(textToType, { textToType = it }, label = { Text("Текст для ввода") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Blue).clickable {
-                        if (textToType.isNotBlank()) scope.launch { tst(context, ShizukuManager.inputText(textToType), "Введено") }
-                    }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                        Text("Ввести", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-        }
-
-        // ── Hardware keys ──
-        item { Label("Кнопки управления") }
-        item {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip("Назад", Color(0xFF8E8E93), Modifier.weight(1f)) { scope.launch { ShizukuManager.pressBack() } }
-                        Chip("Домой", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.pressHome() } }
-                        Chip("Недавние", Color(0xFF5856D6), Modifier.weight(1f)) { scope.launch { ShizukuManager.pressRecents() } }
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip("Громкость +", Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { ShizukuManager.volumeUp() } }
-                        Chip("Громкость -", Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { ShizukuManager.volumeDown() } }
-                        Chip("Без звука", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.mute() } }
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip("Play/Pause", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.mediaPlayPause() } }
-                        Chip("Вперёд", Color(0xFF636366), Modifier.weight(1f)) { scope.launch { ShizukuManager.mediaNext() } }
-                        Chip("Назад", Color(0xFF636366), Modifier.weight(1f)) { scope.launch { ShizukuManager.mediaPrevious() } }
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip("Питание", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.pressPower() } }
-                        Chip("Камера", Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { ShizukuManager.openCamera() } }
-                        Chip("Скриншот", Color(0xFF5856D6), Modifier.weight(1f)) { scope.launch { ShizukuManager.screenshotKey() } }
-                    }
-                }
-            }
-        }
-
-        // ── Brightness ──
-        item { Label("Яркость: $brightness") }
-        item {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Slider(
-                        value = brightness.coerceIn(0, 255).toFloat(),
-                        onValueChange = { brightness = it.toInt() },
-                        onValueChangeFinished = { scope.launch { ShizukuManager.setBrightness(brightness) } },
-                        valueRange = 0f..255f,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = SliderDefaults.colors(thumbColor = Blue, activeTrackColor = Blue)
-                    )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip("Мин", Color(0xFF636366), Modifier.weight(1f)) { scope.launch { brightness = 1; ShizukuManager.setBrightness(1) } }
-                        Chip("Средняя", Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { brightness = 128; ShizukuManager.setBrightness(128) } }
-                        Chip("Макс", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { brightness = 255; ShizukuManager.setBrightness(255) } }
-                        Chip("Авто", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAutoBrightness(true); tst(context, true, "Авто-яркость") } }
-                    }
-                }
-            }
-        }
-
-        // ── Animations ──
-        item { Label("Анимации: $animScale") }
-        item {
+        item { Label(Strings.shTouchSim) }
+        item { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(tapX, { tapX = it }, label = { Text("X") }, singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                OutlinedTextField(tapY, { tapY = it }, label = { Text("Y") }, singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip("Выкл", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAnimationScale(0f); animScale = ShizukuManager.getAnimationScale(); tst(context, true, "0x") } }
-                Chip("0.5x", Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAnimationScale(0.5f); animScale = ShizukuManager.getAnimationScale(); tst(context, true, "0.5x") } }
-                Chip("1x", Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAnimationScale(1f); animScale = ShizukuManager.getAnimationScale(); tst(context, true, "1x") } }
-                Chip("2x", Color(0xFF5856D6), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAnimationScale(2f); animScale = ShizukuManager.getAnimationScale(); tst(context, true, "2x") } }
-            }
-        }
-
-        // ── Screen timeout ──
-        item { Label("Таймаут экрана: ${if (screenTimeout > 0) "${screenTimeout / 1000}с" else "?"}") }
-        item {
+                Chip(Strings.shTap, Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.tap(tapX.toIntOrNull() ?: 540, tapY.toIntOrNull() ?: 960), Strings.shTap) } }
+                Chip(Strings.shLongTap, Color(0xFF5856D6), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.longPress(tapX.toIntOrNull() ?: 540, tapY.toIntOrNull() ?: 960), Strings.shLongTap) } } }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip("15с", Color(0xFF8E8E93), Modifier.weight(1f)) { scope.launch { ShizukuManager.setScreenTimeout(15000); screenTimeout = 15000; tst(context, true, "15с") } }
-                Chip("1 мин", Color(0xFF636366), Modifier.weight(1f)) { scope.launch { ShizukuManager.setScreenTimeout(60000); screenTimeout = 60000; tst(context, true, "1 мин") } }
-                Chip("5 мин", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.setScreenTimeout(300000); screenTimeout = 300000; tst(context, true, "5 мин") } }
-                Chip("30 мин", Color(0xFF5856D6), Modifier.weight(1f)) { scope.launch { ShizukuManager.setScreenTimeout(1800000); screenTimeout = 1800000; tst(context, true, "30 мин") } }
-            }
-        }
+                Chip(Strings.shSwipeUp, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { ShizukuManager.swipe(540, 1600, 540, 400, 300) } }
+                Chip(Strings.shSwipeDown, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { ShizukuManager.swipe(540, 400, 540, 1600, 300) } } }
+        } } }
 
-        // ── Connectivity ──
-        item { Label("Подключение") }
-        item {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip("Данные вкл", Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setMobileData(true), "Данные ON") } }
-                        Chip("Данные выкл", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setMobileData(false), "Данные OFF") } }
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip("Авиа вкл", Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setAirplaneMode(true), "Авиа ON") } }
-                        Chip("Авиа выкл", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setAirplaneMode(false), "Авиа OFF") } }
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Chip("GPS вкл", Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setLocationMode(3), "GPS ON") } }
-                        Chip("GPS выкл", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setLocationMode(0), "GPS OFF") } }
-                    }
-                    if (ssid.isNotBlank()) InfoRow("Wi-Fi", ssid)
-                    if (ip.isNotBlank()) InfoRow("IP", ip)
-                    if (mac.isNotBlank()) InfoRow("MAC", mac)
-                }
-            }
-        }
+        item { Label(Strings.shTextInput) }
+        item { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(textToType, { textToType = it }, label = { Text(Strings.shTextToType) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Blue).clickable { if (textToType.isNotBlank()) scope.launch { tst(context, ShizukuManager.inputText(textToType), Strings.shTyped) } }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                Text(Strings.shType, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+        } } }
 
-        // ── Sound ──
-        item { Label("Звук") }
-        item {
+        item { Label(Strings.shControlButtons) }
+        item { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip("Тишина", Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setDndMode(2), "Тишина") } }
-                Chip("Только будильники", Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setDndMode(3), "Будильники") } }
-                Chip("Всё вкл", Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setDndMode(0), "Звук ON") } }
-            }
-        }
-        item {
+                Chip(Strings.shBack, Color(0xFF8E8E93), Modifier.weight(1f)) { scope.launch { ShizukuManager.pressBack() } }
+                Chip(Strings.shHome, Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.pressHome() } }
+                Chip(Strings.shRecent, Color(0xFF5856D6), Modifier.weight(1f)) { scope.launch { ShizukuManager.pressRecents() } } }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip("Сист. звуки выкл", Color(0xFF636366), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setSystemSounds(false), "Выкл") } }
-                Chip("Сист. звуки вкл", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setSystemSounds(true), "Вкл") } }
-            }
-        }
+                Chip(Strings.shVolumeUp, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { ShizukuManager.volumeUp() } }
+                Chip(Strings.shVolumeDown, Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { ShizukuManager.volumeDown() } }
+                Chip(Strings.shMute, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.mute() } } }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip("Play/Pause", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.mediaPlayPause() } }
+                Chip(Strings.shForward, Color(0xFF636366), Modifier.weight(1f)) { scope.launch { ShizukuManager.mediaNext() } }
+                Chip(Strings.shBack, Color(0xFF636366), Modifier.weight(1f)) { scope.launch { ShizukuManager.mediaPrevious() } } }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(Strings.shPower, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.pressPower() } }
+                Chip(Strings.shCamera, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { ShizukuManager.openCamera() } }
+                Chip(Strings.shScreenshot, Color(0xFF5856D6), Modifier.weight(1f)) { scope.launch { ShizukuManager.screenshotKey() } } }
+        } } }
 
-        // ── Dark mode & stay on ──
-        item { Label("Режим отображения") }
-        item {
+        item { Label("${Strings.shBrightness}: $brightness") }
+        item { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Slider(value = brightness.coerceIn(0, 255).toFloat(), onValueChange = { brightness = it.toInt() }, onValueChangeFinished = { scope.launch { ShizukuManager.setBrightness(brightness) } },
+                valueRange = 0f..255f, modifier = Modifier.fillMaxWidth(), colors = SliderDefaults.colors(thumbColor = Blue, activeTrackColor = Blue))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip("Тёмная тема", Color(0xFF636366), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setDarkMode(true), "Тёмная") } }
-                Chip("Светлая тема", Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setDarkMode(false), "Светлая") } }
-            }
-        }
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip("Не гаснуть (зарядка)", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setStayOnWhileCharging(7), "Вкл") } }
-                Chip("Гаснуть обычно", Color(0xFF8E8E93), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setStayOnWhileCharging(0), "Выкл") } }
-            }
-        }
+                Chip(Strings.shMin, Color(0xFF636366), Modifier.weight(1f)) { scope.launch { brightness = 1; ShizukuManager.setBrightness(1) } }
+                Chip(Strings.shMedium, Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { brightness = 128; ShizukuManager.setBrightness(128) } }
+                Chip(Strings.shMax, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { brightness = 255; ShizukuManager.setBrightness(255) } }
+                Chip(Strings.shAutoBrightness, Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAutoBrightness(true); tst(context, true, Strings.shAutoB) } } }
+        } } }
 
-        // ── Quick launch ──
-        item { Label("Быстрый запуск") }
-        item {
-            var url by remember { mutableStateOf("") }
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(url, { url = it }, label = { Text("URL для открытия") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                        textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
-                    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Blue).clickable {
-                        if (url.isNotBlank()) scope.launch { tst(context, ShizukuManager.openUrl(url), "Открыто") }
-                    }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
-                        Text("Открыть URL", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-        }
+        item { Label("${Strings.shAnimations}: $animScale") }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(Strings.shOff, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAnimationScale(0f); animScale = ShizukuManager.getAnimationScale() } }
+            Chip("0.5x", Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAnimationScale(0.5f); animScale = ShizukuManager.getAnimationScale() } }
+            Chip("1x", Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAnimationScale(1f); animScale = ShizukuManager.getAnimationScale() } }
+            Chip("2x", Color(0xFF5856D6), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAnimationScale(2f); animScale = ShizukuManager.getAnimationScale() } }
+        } }
+
+        item { Label("${Strings.shScreenTimeout}: ${if (screenTimeout > 0) "${screenTimeout / 1000}s" else "?"}") }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip("15s", Color(0xFF8E8E93), Modifier.weight(1f)) { scope.launch { ShizukuManager.setScreenTimeout(15000); screenTimeout = 15000 } }
+            Chip("1m", Color(0xFF636366), Modifier.weight(1f)) { scope.launch { ShizukuManager.setScreenTimeout(60000); screenTimeout = 60000 } }
+            Chip("5m", Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.setScreenTimeout(300000); screenTimeout = 300000 } }
+            Chip("30m", Color(0xFF5856D6), Modifier.weight(1f)) { scope.launch { ShizukuManager.setScreenTimeout(1800000); screenTimeout = 1800000 } }
+        } }
+
+        item { Label(Strings.shConnection) }
+        item { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(Strings.shDataOn, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { ShizukuManager.setMobileData(true) } }
+                Chip(Strings.shDataOff, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.setMobileData(false) } } }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(Strings.shAirplaneOn, Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAirplaneMode(true) } }
+                Chip(Strings.shAirplaneOff, Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.setAirplaneMode(false) } } }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(Strings.shGpsOn, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { ShizukuManager.setLocationMode(3) } }
+                Chip(Strings.shGpsOff, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.setLocationMode(0) } } }
+            if (ssid.isNotBlank()) InfoRow("Wi-Fi", ssid)
+            if (ip.isNotBlank()) InfoRow("IP", ip)
+            if (mac.isNotBlank()) InfoRow("MAC", mac)
+        } } }
+
+        item { Label(Strings.shSound) }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(Strings.shSilence, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.setDndMode(2) } }
+            Chip(Strings.shAlarmsOnly, Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { ShizukuManager.setDndMode(3) } }
+            Chip(Strings.shSoundOn, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { ShizukuManager.setDndMode(0) } }
+        } }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(Strings.shSysSoundsOff, Color(0xFF636366), Modifier.weight(1f)) { scope.launch { ShizukuManager.setSystemSounds(false) } }
+            Chip(Strings.shSysSoundsOn, Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.setSystemSounds(true) } }
+        } }
+
+        item { Label(Strings.shDisplayMode) }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(Strings.shDarkTheme, Color(0xFF636366), Modifier.weight(1f)) { scope.launch { ShizukuManager.setDarkMode(true) } }
+            Chip(Strings.shLightTheme, Color(0xFFFF9F0A), Modifier.weight(1f)) { scope.launch { ShizukuManager.setDarkMode(false) } }
+        } }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(Strings.shStayOnCharging, Color(0xFF007AFF), Modifier.weight(1f)) { scope.launch { ShizukuManager.setStayOnWhileCharging(7) } }
+            Chip(Strings.shNormalTimeout, Color(0xFF8E8E93), Modifier.weight(1f)) { scope.launch { ShizukuManager.setStayOnWhileCharging(0) } }
+        } }
+
+        item { Label(Strings.shQuickLaunch) }
+        item { var url by remember { mutableStateOf("") }
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(url, { url = it }, label = { Text(Strings.shUrlToOpen) }, singleLine = true, modifier = Modifier.fillMaxWidth(), textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Blue).clickable { if (url.isNotBlank()) scope.launch { tst(context, ShizukuManager.openUrl(url), Strings.shOpened) } }.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                    Text(Strings.shOpenUrl, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
+            } } }
 
         item { Spacer(Modifier.height(80.dp)) }
     }
@@ -742,50 +429,87 @@ private fun AutoContent(context: Context, scope: kotlinx.coroutines.CoroutineSco
 @Composable
 private fun InfoRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 12.sp, color = TextSecondary)
-        Text(value, fontSize = 12.sp, color = TextPrimary, fontFamily = FontFamily.Monospace)
-    }
+        Text(label, fontSize = 12.sp, color = TextSecondary); Text(value, fontSize = 12.sp, color = TextPrimary, fontFamily = FontFamily.Monospace) }
 }
 
-// ═══════════════════════════════════════════
-// Shared UI
-// ═══════════════════════════════════════════
+// ═══ Dialogs ═══
 
 @Composable
-private fun Label(text: String) {
-    Text(text, fontSize = 13.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp))
+private fun DpiDialog(context: Context, scope: kotlinx.coroutines.CoroutineScope, cur: String, onDismiss: () -> Unit, onApplied: (String) -> Unit) {
+    var v by remember { mutableStateOf(cur) }
+    AlertDialog(onDismissRequest = onDismiss, containerColor = SurfaceWhite,
+        title = { Text(Strings.shChangeDpiTitle, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("${Strings.shCurrent}: $cur", fontSize = 13.sp, color = TextSecondary)
+            OutlinedTextField(v, { v = it }, label = { Text("DPI") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("320", "360", "400", "420", "480", "560").forEach { d ->
+                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (v == d) Blue.copy(0.12f) else SurfaceLight).clickable { v = d }.padding(horizontal = 8.dp, vertical = 5.dp)) { Text(d, fontSize = 12.sp, color = if (v == d) Blue else TextSecondary) } } }
+        } },
+        confirmButton = { TextButton(onClick = { scope.launch { ShizukuManager.setScreenDpi(v.toIntOrNull() ?: 420); onApplied(v) }; onDismiss() }) { Text(Strings.ok, color = Blue) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } })
 }
+
+@Composable
+private fun ResDialog(context: Context, scope: kotlinx.coroutines.CoroutineScope, onDismiss: () -> Unit, onApplied: (String) -> Unit) {
+    var w by remember { mutableStateOf("1080") }; var h by remember { mutableStateOf("2400") }
+    AlertDialog(onDismissRequest = onDismiss, containerColor = SurfaceWhite,
+        title = { Text(Strings.shResolution, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(w, { w = it }, label = { Text("W") }, singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            Text("×", fontSize = 20.sp, color = TextSecondary, modifier = Modifier.align(Alignment.CenterVertically))
+            OutlinedTextField(h, { h = it }, label = { Text("H") }, singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        } },
+        confirmButton = { TextButton(onClick = { val ww = w.toIntOrNull() ?: 1080; val hh = h.toIntOrNull() ?: 2400; scope.launch { ShizukuManager.setScreenResolution(ww, hh); onApplied("${ww}x${hh}") }; onDismiss() }) { Text(Strings.ok, color = Blue) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } })
+}
+
+@Composable
+private fun ChmodDialog(scope: kotlinx.coroutines.CoroutineScope, onDismiss: () -> Unit) {
+    var path by remember { mutableStateOf("") }; var mode by remember { mutableStateOf("755") }; val ctx = LocalContext.current
+    AlertDialog(onDismissRequest = onDismiss, containerColor = SurfaceWhite,
+        title = { Text(Strings.shChangePerms, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(path, { path = it }, label = { Text(Strings.shFilePath) }, singleLine = true, modifier = Modifier.fillMaxWidth(), textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
+            OutlinedTextField(mode, { mode = it }, label = { Text(Strings.shPermissions) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("644", "755", "777", "600").forEach { m ->
+                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (mode == m) Blue.copy(0.12f) else SurfaceLight).clickable { mode = m }.padding(horizontal = 10.dp, vertical = 5.dp)) { Text(m, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = if (mode == m) Blue else TextSecondary) } } }
+        } },
+        confirmButton = { TextButton(onClick = { if (path.isNotBlank()) scope.launch { tst(ctx, ShizukuManager.chmod(path, mode), "chmod $mode") }; onDismiss() }) { Text(Strings.ok, color = Blue) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } })
+}
+
+@Composable
+private fun SymlinkDialog(context: Context, scope: kotlinx.coroutines.CoroutineScope, onDismiss: () -> Unit) {
+    var target by remember { mutableStateOf("") }; var link by remember { mutableStateOf("") }
+    AlertDialog(onDismissRequest = onDismiss, containerColor = SurfaceWhite,
+        title = { Text(Strings.shSymlink, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(target, { target = it }, label = { Text(Strings.shTarget) }, singleLine = true, modifier = Modifier.fillMaxWidth(), textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
+            OutlinedTextField(link, { link = it }, label = { Text(Strings.shLinkPath) }, singleLine = true, modifier = Modifier.fillMaxWidth(), textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
+        } },
+        confirmButton = { TextButton(onClick = { if (target.isNotBlank() && link.isNotBlank()) scope.launch { tst(context, ShizukuManager.symlink(target, link), Strings.shCreated) }; onDismiss() }) { Text(Strings.create, color = Blue) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } })
+}
+
+// ═══ Shared UI ═══
+
+@Composable
+private fun Label(text: String) { Text(text, fontSize = 13.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)) }
 
 @Composable
 private fun Card(icon: ImageVector, title: String, subtitle: String, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite)
-        .clickable(onClick = onClick).padding(14.dp),
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).clickable(onClick = onClick).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.size(34.dp).background(color.copy(0.1f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-            Icon(icon, null, Modifier.size(18.dp), tint = color)
-        }
-        Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle.isNotBlank()) Text(subtitle, fontSize = 11.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
+        Box(Modifier.size(34.dp).background(color.copy(0.1f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Icon(icon, null, Modifier.size(18.dp), tint = color) }
+        Column(Modifier.weight(1f)) { Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle.isNotBlank()) Text(subtitle, fontSize = 11.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
 }
 
 @Composable
 private fun Chip(label: String, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(0.08f))
-        .clickable(onClick = onClick).padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center) {
-        Text(label, fontSize = 11.sp, color = color, fontWeight = FontWeight.Medium, maxLines = 1)
-    }
+    Box(modifier.clip(RoundedCornerShape(8.dp)).background(color.copy(0.08f)).clickable(onClick = onClick).padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+        Text(label, fontSize = 11.sp, color = color, fontWeight = FontWeight.Medium, maxLines = 1) }
 }
 
-private fun tst(ctx: Context, ok: Boolean, msg: String) { Toast.makeText(ctx, if (ok) msg else "Ошибка", Toast.LENGTH_SHORT).show() }
-
-private fun fmtSz(b: Long): String = when {
-    b < 1024 -> "$b B"
-    b < 1024L * 1024 -> "%.1f KB".format(b / 1024.0)
-    b < 1024L * 1024 * 1024 -> "%.1f MB".format(b / (1024.0 * 1024))
-    else -> "%.2f GB".format(b / (1024.0 * 1024 * 1024))
-}
+private fun tst(ctx: Context, ok: Boolean, msg: String) { Toast.makeText(ctx, if (ok) msg else Strings.error, Toast.LENGTH_SHORT).show() }
+private fun fmtSz(b: Long): String = when { b < 1024 -> "$b B"; b < 1024L * 1024 -> "%.1f KB".format(b / 1024.0); b < 1024L * 1024 * 1024 -> "%.1f MB".format(b / (1024.0 * 1024)); else -> "%.2f GB".format(b / (1024.0 * 1024 * 1024)) }

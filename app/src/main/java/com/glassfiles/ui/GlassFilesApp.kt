@@ -220,7 +220,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                                                 )
                                             }
                                             if (files.isEmpty()) {
-                                                errorMsg = ShizukuManager.getLastError(realPath).ifBlank { "Пусто или нет доступа" }
+                                                errorMsg = ShizukuManager.getLastError(realPath).ifBlank { Strings.shEmptyOrNoAccess }
                                             }
                                         } else {
                                             files = FileManager.listFiles(path, settings.showHiddenFiles)
