@@ -705,4 +705,12 @@ val shWifiOff get() = s("Wi-Fi выкл", "Wi-Fi off")
 val shBtOn get() = s("Bluetooth вкл", "Bluetooth on")
 val shBtOff get() = s("Bluetooth выкл", "Bluetooth off")
 val shEmptyOrNoAccess get() = s("Пусто или нет доступа", "Empty or no access")
+
+// ═══════════════════════════════════
+// Security
+// ═══════════════════════════════════
+val securityViolation get() = s(
+    "Обнаружена модификация приложения. Использование модифицированной версии невозможно.",
+    "Application modification detected. Modified version cannot be used."
+)
 }

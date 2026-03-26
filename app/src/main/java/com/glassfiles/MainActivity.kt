@@ -23,6 +23,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -31,7 +32,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.glassfiles.BuildConfig
 import com.glassfiles.data.AppSettings
+import com.glassfiles.security.SecurityManager
 import com.glassfiles.ui.GlassFilesApp
 import com.glassfiles.ui.screens.OnboardingScreen
 import com.glassfiles.ui.theme.*
@@ -65,10 +68,23 @@ class MainActivity : ComponentActivity() {
 
         appSettings = AppSettings(this)
 
+        // ── Security checks ──
+        // Reset hashes on app update
+        val currentVersion = try { packageManager.getPackageInfo(packageName, 0).versionCode } catch (_: Exception) { 0 }
+        val prefs = getSharedPreferences("gf_sec", MODE_PRIVATE)
+        val storedVersion = prefs.getInt("v", 0)
+        if (currentVersion != storedVersion) {
+            SecurityManager.resetHashes(this)
+            prefs.edit().putInt("v", currentVersion).apply()
+        }
+
+        val securityResult = SecurityManager.performChecks(this)
+
         setContent {
             GlassFilesTheme(themeMode = appSettings.themeMode) {
                 var showSplash by remember { mutableStateOf(true) }
                 var showOnboarding by remember { mutableStateOf(!appSettings.onboardingDone) }
+                val isTampered = remember { !securityResult.isSecure && !BuildConfig.DEBUG }
                 LaunchedEffect(Unit) {
                     delay(1500)
                     showSplash = false
@@ -80,6 +96,7 @@ class MainActivity : ComponentActivity() {
                 AnimatedContent(
                     targetState = when {
                         showSplash -> "splash"
+                        isTampered -> "blocked"
                         showOnboarding -> "onboarding"
                         else -> "app"
                     }, label = "main",
@@ -89,6 +106,7 @@ class MainActivity : ComponentActivity() {
                 ) { state ->
                     when (state) {
                         "splash" -> SplashScreen()
+                        "blocked" -> TamperedScreen { finish() }
                         "onboarding" -> OnboardingScreen(
                             appSettings = appSettings,
                             hasPermission = permState,
@@ -196,6 +214,35 @@ private fun SplashScreen() {
             Icon(Icons.Rounded.Folder, null, Modifier.size(80.dp), tint = Blue)
             Text("Glass Files", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
             Text(com.glassfiles.data.Strings.splashSubtitle, fontSize = 14.sp, color = TextSecondary)
+        }
+    }
+}
+
+@Composable
+private fun TamperedScreen(onExit: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(SurfaceLight), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Icon(Icons.Rounded.Shield, null, Modifier.size(72.dp), tint = androidx.compose.ui.graphics.Color(0xFFFF3B30))
+            Text("Glass Files", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(
+                com.glassfiles.data.Strings.securityViolation,
+                fontSize = 15.sp,
+                color = TextSecondary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.Button(
+                onClick = onExit,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = androidx.compose.ui.graphics.Color(0xFFFF3B30)
+                )
+            ) {
+                Text(com.glassfiles.data.Strings.close, color = androidx.compose.ui.graphics.Color.White, fontSize = 16.sp)
+            }
         }
     }
 }
