@@ -21,10 +21,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.glassfiles.data.*
+import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.components.*
 import com.glassfiles.ui.theme.*
 
@@ -51,15 +55,18 @@ fun BrowseScreen(
     onFtp: () -> Unit = {},
     onDualPane: () -> Unit = {},
     onTheme: () -> Unit = {},
+    onGitHub: () -> Unit = {},
     onTagClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var favoritesExpanded by remember { mutableStateOf(true) }
     var locationsExpanded by remember { mutableStateOf(true) }
     var toolsExpanded by remember { mutableStateOf(true) }
     var tagsExpanded by remember { mutableStateOf(false) }
     val favorites = remember { FileManager.getFavorites() }
     val locations = remember { FileManager.getStorageLocations() }
+    val ghUser = remember { GitHubManager.getCachedUser(context) }
 
     LazyColumn(modifier.fillMaxSize().background(SurfaceLight), contentPadding = PaddingValues(bottom = 100.dp)) {
         item { Text(Strings.browse, style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold, color = TextPrimary,
@@ -109,6 +116,30 @@ fun BrowseScreen(
                 val trashSizeText = remember(trashSize) { if (trashSize > 0) fmtTrashSize(trashSize) else null }
                 LRow(Icons.Rounded.DeleteOutline, Strings.trash, Red, subtitle = trashSizeText) { onTrash() }
             } } }
+        // GitHub card — prominent at top
+        item {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(16.dp))
+                .background(if (ThemeState.isDark) Color(0xFF2C2C2E) else Color(0xFFFFFFFF))
+                .clickable { onGitHub() }.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    if (ghUser != null && ghUser.avatarUrl.isNotBlank()) {
+                        AsyncImage(ghUser.avatarUrl, ghUser.login, Modifier.size(52.dp).clip(CircleShape))
+                    } else {
+                        Box(Modifier.size(52.dp).clip(CircleShape).background(TextPrimary), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Rounded.Code, null, Modifier.size(26.dp), tint = SurfaceLight)
+                        }
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(if (ghUser != null) ghUser.name.ifBlank { "@${ghUser.login}" } else "GitHub",
+                            fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(if (ghUser != null) "${ghUser.publicRepos + ghUser.privateRepos} ${Strings.ghRepos.lowercase()}"
+                            else Strings.ghSignIn,
+                            fontSize = 13.sp, color = TextSecondary)
+                    }
+                    Icon(Icons.AutoMirrored.Rounded.ArrowForwardIos, null, Modifier.size(14.dp), tint = TextTertiary)
+                }
+            }
+        }
         // Tools
         item { CHeader(Strings.tools, toolsExpanded) { toolsExpanded = !toolsExpanded } }
         item { AnimatedVisibility(toolsExpanded, enter = expandVertically(tween(300)) + fadeIn(tween(200)), exit = shrinkVertically(tween(250)) + fadeOut(tween(150))) {

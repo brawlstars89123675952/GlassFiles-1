@@ -40,7 +40,7 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import java.io.File
 
-enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_CHAT, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME }
+enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_CHAT, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
 
 @Composable
 fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Unit = {}, appSettings: com.glassfiles.data.AppSettings? = null) {
@@ -176,6 +176,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                 AppScreen.FTP -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { FtpScreen(onBack = { goBack() }) }
                 AppScreen.DUAL_PANE -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { DualPaneScreen(onBack = { goBack() }, appSettings = settings) }
                 AppScreen.THEME -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { ThemeScreen(settings = settings, onBack = { goBack() }) }
+                AppScreen.GITHUB -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { GitHubScreen(onBack = { goBack() }) }
                 AppScreen.MAIN -> {
                     Box(Modifier.fillMaxSize().background(SurfaceLight).layerBackdrop(backdrop)) {
                         AnimatedContent(
@@ -271,6 +272,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                                             onFtp = { navigateTo(AppScreen.FTP) },
                                             onDualPane = { navigateTo(AppScreen.DUAL_PANE) },
                                             onTheme = { navigateTo(AppScreen.THEME) },
+                                            onGitHub = { navigateTo(AppScreen.GITHUB) },
                                             onTagClick = { tag -> selectedTagName = tag; navigateTo(AppScreen.TAGGED_FILES) })
                                     }
                                 }
