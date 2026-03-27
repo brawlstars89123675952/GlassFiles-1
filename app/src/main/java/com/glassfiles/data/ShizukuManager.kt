@@ -442,6 +442,305 @@ object ShizukuManager {
         exec("cmd clipboard set-text \"$text\" 2>/dev/null || am broadcast -a clipper.set -e text \"$text\"").success
 
     // ═══════════════════════════════════
+    // Privacy & Security
+    // ═══════════════════════════════════
+
+    /** Hide app from launcher (disable main activity) */
+    suspend fun hideApp(pkg: String): Boolean =
+        exec("pm disable --user 0 $pkg/.$(cmd package resolve-activity --brief $pkg 2>/dev/null | tail -1 | sed 's|.*/||') 2>/dev/null || pm hide $pkg").success
+
+    /** Unhide app */
+    suspend fun unhideApp(pkg: String): Boolean =
+        exec("pm enable --user 0 $pkg 2>/dev/null || pm unhide $pkg").success
+
+    /** Block camera access for app via appops */
+    suspend fun blockCamera(pkg: String): Boolean =
+        exec("appops set $pkg CAMERA deny").success
+
+    /** Allow camera access for app */
+    suspend fun allowCamera(pkg: String): Boolean =
+        exec("appops set $pkg CAMERA allow").success
+
+    /** Block microphone access for app */
+    suspend fun blockMicrophone(pkg: String): Boolean =
+        exec("appops set $pkg RECORD_AUDIO deny").success
+
+    /** Allow microphone access */
+    suspend fun allowMicrophone(pkg: String): Boolean =
+        exec("appops set $pkg RECORD_AUDIO allow").success
+
+    /** Block location access for app */
+    suspend fun blockLocation(pkg: String): Boolean {
+        exec("appops set $pkg COARSE_LOCATION deny")
+        return exec("appops set $pkg FINE_LOCATION deny").success
+    }
+
+    /** Allow location access for app */
+    suspend fun allowLocation(pkg: String): Boolean {
+        exec("appops set $pkg COARSE_LOCATION allow")
+        return exec("appops set $pkg FINE_LOCATION allow").success
+    }
+
+    /** Get app ops (permissions usage) for package */
+    suspend fun getAppOps(pkg: String): String {
+        val r = exec("appops get $pkg")
+        return if (r.success) r.stdout else ""
+    }
+
+    /** Get recent camera usage */
+    suspend fun getRecentCameraUsage(): List<AppOpsEntry> = parseAppOps("CAMERA")
+
+    /** Get recent microphone usage */
+    suspend fun getRecentMicUsage(): List<AppOpsEntry> = parseAppOps("RECORD_AUDIO")
+
+    /** Get recent location usage */
+    suspend fun getRecentLocationUsage(): List<AppOpsEntry> = parseAppOps("FINE_LOCATION")
+
+    /** Get recent clipboard reads */
+    suspend fun getRecentClipboardReads(): List<AppOpsEntry> = parseAppOps("READ_CLIPBOARD")
+
+    private suspend fun parseAppOps(op: String): List<AppOpsEntry> = withContext(Dispatchers.IO) {
+        val r = exec("dumpsys appops 2>/dev/null | grep -B2 '$op' | grep 'Package\\|$op'")
+        if (!r.success) return@withContext emptyList()
+        val entries = mutableListOf<AppOpsEntry>()
+        var currentPkg = ""
+        r.stdout.lines().forEach { line ->
+            val trimmed = line.trim()
+            if (trimmed.startsWith("Package:")) {
+                currentPkg = trimmed.removePrefix("Package:").trim().substringBefore(" ")
+            } else if (trimmed.contains(op) && currentPkg.isNotBlank()) {
+                val mode = when {
+                    trimmed.contains("allow") -> "allow"
+                    trimmed.contains("deny") -> "deny"
+                    trimmed.contains("ignore") -> "ignore"
+                    else -> "default"
+                }
+                val timeMatch = Regex("time=([^;]+)").find(trimmed)
+                entries.add(AppOpsEntry(currentPkg, op, mode, timeMatch?.groupValues?.get(1) ?: ""))
+            }
+        }
+        entries
+    }
+
+    /** Revoke all dangerous permissions from app */
+    suspend fun revokeAllPermissions(pkg: String): String {
+        val r = exec("dumpsys package $pkg | grep 'granted=true' | awk '{print \$1}' | sed 's/://g'")
+        if (!r.success) return ""
+        val perms = r.stdout.lines().filter { it.startsWith("android.permission.") }
+        var revoked = 0
+        perms.forEach { perm ->
+            if (exec("pm revoke $pkg $perm 2>/dev/null").success) revoked++
+        }
+        return "$revoked/${perms.size}"
+    }
+
+    /** Get list of granted permissions for app */
+    suspend fun getGrantedPermissions(pkg: String): List<String> {
+        val r = exec("dumpsys package $pkg | grep 'granted=true' | awk '{print \$1}' | sed 's/://g'")
+        return if (r.success) r.stdout.lines().filter { it.isNotBlank() } else emptyList()
+    }
+
+    // ═══════════════════════════════════
+    // Network
+    // ═══════════════════════════════════
+
+    /** Get active network connections */
+    suspend fun getNetstat(): String {
+        val r = exec("netstat -tunp 2>/dev/null || cat /proc/net/tcp /proc/net/tcp6 2>/dev/null")
+        return if (r.success) r.stdout else ""
+    }
+
+    /** Block internet for specific app using iptables */
+    suspend fun blockInternet(uid: Int): Boolean {
+        val r1 = exec("iptables -A OUTPUT -m owner --uid-owner $uid -j DROP 2>/dev/null")
+        val r2 = exec("ip6tables -A OUTPUT -m owner --uid-owner $uid -j DROP 2>/dev/null")
+        return r1.success || r2.success
+    }
+
+    /** Unblock internet for specific app */
+    suspend fun unblockInternet(uid: Int): Boolean {
+        val r1 = exec("iptables -D OUTPUT -m owner --uid-owner $uid -j DROP 2>/dev/null")
+        val r2 = exec("ip6tables -D OUTPUT -m owner --uid-owner $uid -j DROP 2>/dev/null")
+        return r1.success || r2.success
+    }
+
+    /** Get UID for package */
+    suspend fun getAppUid(pkg: String): Int {
+        val r = exec("dumpsys package $pkg | grep userId= | head -1")
+        return Regex("userId=(\\d+)").find(r.stdout)?.groupValues?.get(1)?.toIntOrNull() ?: -1
+    }
+
+    /** Get current iptables rules */
+    suspend fun getIptablesRules(): String {
+        val r = exec("iptables -L OUTPUT -n -v 2>/dev/null")
+        return if (r.success) r.stdout else ""
+    }
+
+    /** Flush all custom iptables rules */
+    suspend fun flushIptables(): Boolean {
+        exec("iptables -F OUTPUT 2>/dev/null")
+        return exec("ip6tables -F OUTPUT 2>/dev/null").success
+    }
+
+    /** Set DNS servers */
+    suspend fun setDns(dns1: String, dns2: String = ""): Boolean {
+        exec("setprop net.dns1 $dns1")
+        if (dns2.isNotBlank()) exec("setprop net.dns2 $dns2")
+        return exec("ndc resolver setnetdns wlan0 '' $dns1 ${dns2.ifBlank { "" }} 2>/dev/null").success
+    }
+
+    /** Get current DNS */
+    suspend fun getDns(): String {
+        val r = exec("getprop net.dns1 && getprop net.dns2")
+        return r.stdout.trim()
+    }
+
+    /** Get all network interfaces info */
+    suspend fun getNetworkInfo(): String {
+        val r = exec("ip addr show 2>/dev/null || ifconfig 2>/dev/null")
+        return if (r.success) r.stdout else ""
+    }
+
+    /** Ping host */
+    suspend fun ping(host: String, count: Int = 4): String {
+        val r = exec("ping -c $count -W 2 $host 2>&1")
+        return r.stdout
+    }
+
+    /** Get routing table */
+    suspend fun getRoutes(): String {
+        val r = exec("ip route show 2>/dev/null || route -n 2>/dev/null")
+        return if (r.success) r.stdout else ""
+    }
+
+    // ═══════════════════════════════════
+    // Battery & Performance
+    // ═══════════════════════════════════
+
+    /** Force Doze mode for specific app */
+    suspend fun forceDoze(pkg: String): Boolean =
+        exec("dumpsys deviceidle force-idle 2>/dev/null; am set-inactive $pkg true").success
+
+    /** Remove app from Doze whitelist */
+    suspend fun removeDozeWhitelist(pkg: String): Boolean =
+        exec("dumpsys deviceidle whitelist -$pkg 2>/dev/null").success
+
+    /** Add app to Doze whitelist */
+    suspend fun addDozeWhitelist(pkg: String): Boolean =
+        exec("dumpsys deviceidle whitelist +$pkg 2>/dev/null").success
+
+    /** Get Doze whitelist */
+    suspend fun getDozeWhitelist(): String {
+        val r = exec("dumpsys deviceidle whitelist 2>/dev/null")
+        return if (r.success) r.stdout else ""
+    }
+
+    /** Kill all background processes */
+    suspend fun killAllBackground(): Int {
+        val r = exec("am kill-all 2>/dev/null")
+        return if (r.success) 1 else 0
+    }
+
+    /** Kill background process by package */
+    suspend fun killBackground(pkg: String): Boolean =
+        exec("am kill $pkg 2>/dev/null").success
+
+    /** Get detailed battery stats per app (top consumers) */
+    suspend fun getBatteryConsumers(): String {
+        val r = exec("dumpsys batterystats --charged 2>/dev/null | grep 'Uid\\|Estimated' | head -40")
+        return if (r.success) r.stdout else ""
+    }
+
+    /** Get battery temperature */
+    suspend fun getBatteryTemp(): String {
+        val r = exec("dumpsys battery | grep temperature")
+        val temp = Regex("(\\d+)").find(r.stdout)?.value?.toIntOrNull()
+        return if (temp != null) "${temp / 10.0}°C" else "?"
+    }
+
+    /** Get battery health */
+    suspend fun getBatteryHealth(): String {
+        val r = exec("dumpsys battery | grep health")
+        return when {
+            r.stdout.contains("2") -> "Good"
+            r.stdout.contains("3") -> "Overheat"
+            r.stdout.contains("4") -> "Dead"
+            r.stdout.contains("5") -> "Over voltage"
+            r.stdout.contains("6") -> "Unspecified failure"
+            r.stdout.contains("7") -> "Cold"
+            else -> r.stdout.trim()
+        }
+    }
+
+    /** Get battery cycle count (if supported) */
+    suspend fun getBatteryCycles(): String {
+        val r = exec("cat /sys/class/power_supply/battery/cycle_count 2>/dev/null || echo N/A")
+        return r.stdout.trim()
+    }
+
+    /** Set max charging level (if kernel supports) */
+    suspend fun setChargeLimit(percent: Int): Boolean {
+        // Different paths for different devices
+        val paths = listOf(
+            "/sys/class/power_supply/battery/charge_control_limit",
+            "/sys/class/power_supply/battery/charging_enabled",
+            "/sys/devices/platform/battery/charge_limit"
+        )
+        for (path in paths) {
+            if (exec("test -f $path && echo Y").stdout.contains("Y")) {
+                return exec("echo $percent > $path").success
+            }
+        }
+        return false
+    }
+
+    /** Get wakelock stats */
+    suspend fun getWakelocks(): String {
+        val r = exec("dumpsys power | grep 'Wake Locks' -A 20 2>/dev/null")
+        return if (r.success) r.stdout else ""
+    }
+
+    // ═══════════════════════════════════
+    // Extra File Operations
+    // ═══════════════════════════════════
+
+    /** Clear Dalvik/ART cache */
+    suspend fun clearDalvikCache(): Boolean =
+        exec("pm art clear-app-profiles 2>/dev/null; rm -rf /data/dalvik-cache/* 2>/dev/null").success
+
+    /** Force media scanner rescan */
+    suspend fun rescanMedia(): Boolean =
+        exec("am broadcast -a android.intent.action.MEDIA_MOUNTED -d file:///storage/emulated/0 2>/dev/null || am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///storage/emulated/0").success
+
+    /** Get saved Wi-Fi passwords (Android <10) */
+    suspend fun getWifiPasswords(): String {
+        val r = exec("cat /data/misc/wifi/wpa_supplicant.conf 2>/dev/null || cat /data/misc/apexdata/com.android.wifi/WifiConfigStore.xml 2>/dev/null")
+        return if (r.success) r.stdout else "Access denied or not available"
+    }
+
+    /** Get total internal storage usage */
+    suspend fun getStorageUsage(): String {
+        val r = exec("df -h /data 2>/dev/null")
+        return if (r.success) r.stdout else ""
+    }
+
+    /** Get top 10 largest files on device */
+    suspend fun getLargestFiles(): String {
+        val r = exec("find /storage/emulated/0 -type f -printf '%s %p\\n' 2>/dev/null | sort -rn | head -10")
+        return if (r.success) r.stdout else ""
+    }
+
+    /** Empty all app caches at once */
+    suspend fun clearAllCaches(): Boolean =
+        exec("pm trim-caches 999999999999 2>/dev/null").success
+
+    // ═══════════════════════════════════
+    // Data models
+    // ═══════════════════════════════════
+
+    data class AppOpsEntry(val pkg: String, val op: String, val mode: String, val lastAccess: String)
+
+    // ═══════════════════════════════════
     // Helpers
     // ═══════════════════════════════════
 

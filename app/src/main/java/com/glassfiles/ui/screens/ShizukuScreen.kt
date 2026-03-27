@@ -37,7 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class ShTab { FILES, APPS, SYSTEM, LOGS, AUTO }
+private enum class ShTab { FILES, APPS, SYSTEM, LOGS, AUTO, PRIVACY, NETWORK, BATTERY, FILES_EXTRA }
 
 @Composable
 private fun shTabLabel(tab: ShTab): String = when (tab) {
@@ -46,6 +46,10 @@ private fun shTabLabel(tab: ShTab): String = when (tab) {
     ShTab.SYSTEM -> Strings.shSystem
     ShTab.LOGS -> Strings.shLogs
     ShTab.AUTO -> Strings.shAuto
+    ShTab.PRIVACY -> Strings.shPrivacy
+    ShTab.NETWORK -> Strings.shNetwork
+    ShTab.BATTERY -> Strings.shBatteryTab
+    ShTab.FILES_EXTRA -> Strings.shFilesExtra
 }
 
 @Composable
@@ -117,6 +121,10 @@ fun ShizukuScreen(onBack: () -> Unit, onBrowseRestricted: (String) -> Unit = {})
             ShTab.SYSTEM -> SystemContent(context, scope)
             ShTab.LOGS -> LogsContent(context, scope)
             ShTab.AUTO -> AutoContent(context, scope)
+            ShTab.PRIVACY -> PrivacyContent(context, scope)
+            ShTab.NETWORK -> NetworkContent(context, scope)
+            ShTab.BATTERY -> BatteryContent(context, scope)
+            ShTab.FILES_EXTRA -> FilesExtraContent(context, scope)
         }
     }
 }
@@ -430,6 +438,319 @@ private fun AutoContent(context: Context, scope: kotlinx.coroutines.CoroutineSco
 private fun InfoRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, fontSize = 12.sp, color = TextSecondary); Text(value, fontSize = 12.sp, color = TextPrimary, fontFamily = FontFamily.Monospace) }
+}
+
+// ═══ Privacy ═══
+
+@Composable
+private fun PrivacyContent(context: Context, scope: kotlinx.coroutines.CoroutineScope) {
+    var apps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var query by remember { mutableStateOf("") }
+    var cameraUsage by remember { mutableStateOf<List<ShizukuManager.AppOpsEntry>>(emptyList()) }
+    var micUsage by remember { mutableStateOf<List<ShizukuManager.AppOpsEntry>>(emptyList()) }
+    var gpsUsage by remember { mutableStateOf<List<ShizukuManager.AppOpsEntry>>(emptyList()) }
+    var showUsage by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { apps = loadApps(context).filter { !it.isSystem }; loading = false } }
+
+    val filtered = remember(apps, query) {
+        if (query.isNotBlank()) apps.filter { it.name.contains(query, true) || it.packageName.contains(query, true) }
+        else apps.sortedBy { it.name.lowercase() }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        // Usage section toggle
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(if (showUsage) Strings.appManager else Strings.shRecentCameraUse,
+                if (showUsage) Blue else Color(0xFF5856D6), Modifier.weight(1f)) {
+                showUsage = !showUsage
+                if (showUsage) scope.launch {
+                    cameraUsage = ShizukuManager.getRecentCameraUsage()
+                    micUsage = ShizukuManager.getRecentMicUsage()
+                    gpsUsage = ShizukuManager.getRecentLocationUsage()
+                }
+            }
+        }
+
+        if (showUsage) {
+            // Usage report
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (cameraUsage.isNotEmpty()) {
+                    item { Label(Strings.shRecentCameraUse) }
+                    items(cameraUsage.take(15)) { e -> UsageRow(e) }
+                }
+                if (micUsage.isNotEmpty()) {
+                    item { Label(Strings.shRecentMicUse) }
+                    items(micUsage.take(15)) { e -> UsageRow(e) }
+                }
+                if (gpsUsage.isNotEmpty()) {
+                    item { Label(Strings.shRecentGpsUse) }
+                    items(gpsUsage.take(15)) { e -> UsageRow(e) }
+                }
+                if (cameraUsage.isEmpty() && micUsage.isEmpty() && gpsUsage.isEmpty()) {
+                    item { Text(Strings.shLoad, color = TextSecondary, fontSize = 14.sp, modifier = Modifier.padding(16.dp)) }
+                }
+                item { Spacer(Modifier.height(80.dp)) }
+            }
+        } else {
+            // App list with privacy controls
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                if (query.isEmpty()) Text(Strings.searchApps, color = TextTertiary, fontSize = 14.sp)
+                BasicTextField(query, { query = it }, textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp), singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+            if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+            else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 100.dp)) {
+                items(filtered, key = { it.packageName }) { app -> PrivacyAppRow(app, context, scope) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrivacyAppRow(app: AppItem, context: Context, scope: kotlinx.coroutines.CoroutineScope) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().clickable { expanded = !expanded }) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (app.icon != null) { val bmp = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }; Image(bmp, app.name, Modifier.size(36.dp).clip(RoundedCornerShape(8.dp))) }
+            else Box(Modifier.size(36.dp).background(Blue.copy(0.08f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Android, null, Modifier.size(20.dp), tint = Blue) }
+            Text(app.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        }
+        AnimatedVisibility(expanded, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Chip(Strings.shHideApp, Color(0xFF636366), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.hideApp(app.packageName), Strings.shAppHidden) } }
+                    Chip(Strings.shUnhideApp, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.unhideApp(app.packageName), Strings.shAppUnhidden) } }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Chip(Strings.shBlockCamera, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.blockCamera(app.packageName), Strings.shCameraBlocked) } }
+                    Chip(Strings.shAllowCamera, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.allowCamera(app.packageName), Strings.shCameraAllowed) } }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Chip(Strings.shBlockMic, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.blockMicrophone(app.packageName), Strings.shMicBlocked) } }
+                    Chip(Strings.shAllowMic, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.allowMicrophone(app.packageName), Strings.shMicAllowed) } }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Chip(Strings.shBlockGps, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.blockLocation(app.packageName), Strings.shGpsBlocked) } }
+                    Chip(Strings.shAllowGps, Color(0xFF34C759), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.allowLocation(app.packageName), Strings.shGpsAllowed) } }
+                }
+                Chip(Strings.shRevokeAll, Color(0xFFFF9F0A), Modifier.fillMaxWidth()) {
+                    scope.launch { val r = ShizukuManager.revokeAllPermissions(app.packageName); tst(context, true, "${Strings.shRevoked}: $r") } }
+            }
+        }
+        Box(Modifier.fillMaxWidth().padding(start = 64.dp).height(0.5.dp).background(SeparatorColor))
+    }
+}
+
+@Composable
+private fun UsageRow(entry: ShizukuManager.AppOpsEntry) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(entry.pkg.substringAfterLast("."), fontSize = 12.sp, color = TextPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(entry.mode, fontSize = 11.sp, color = when (entry.mode) { "allow" -> Color(0xFF34C759); "deny" -> Color(0xFFFF3B30); else -> TextSecondary }, fontWeight = FontWeight.Medium)
+    }
+}
+
+// ═══ Network ═══
+
+@Composable
+private fun NetworkContent(context: Context, scope: kotlinx.coroutines.CoroutineScope) {
+    var netstat by remember { mutableStateOf("") }
+    var networkInfo by remember { mutableStateOf("") }
+    var routes by remember { mutableStateOf("") }
+    var dns by remember { mutableStateOf("") }
+    var pingResult by remember { mutableStateOf("") }
+    var pingHost by remember { mutableStateOf("8.8.8.8") }
+    var dns1 by remember { mutableStateOf("8.8.8.8") }
+    var dns2 by remember { mutableStateOf("8.8.4.4") }
+    var fwApps by remember { mutableStateOf<List<AppItem>>(emptyList()) }
+    var showFw by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { dns = ShizukuManager.getDns() }
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Ping
+        item { Label(Strings.shPing) }
+        item { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(pingHost, { pingHost = it }, label = { Text(Strings.shHost) }, singleLine = true, modifier = Modifier.weight(1f))
+                Box(Modifier.align(Alignment.CenterVertically).clip(RoundedCornerShape(8.dp)).background(Blue).clickable {
+                    scope.launch { pingResult = ShizukuManager.ping(pingHost) }
+                }.padding(horizontal = 16.dp, vertical = 12.dp)) { Text("Ping", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
+            }
+            if (pingResult.isNotBlank()) Text(pingResult, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = TextPrimary, lineHeight = 14.sp)
+        } } }
+
+        // DNS
+        item { Label("${Strings.shCurrentDns}: $dns") }
+        item { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(dns1, { dns1 = it }, label = { Text("DNS 1") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(dns2, { dns2 = it }, label = { Text("DNS 2") }, singleLine = true, modifier = Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(Strings.shSetDns, Blue, Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.setDns(dns1, dns2), Strings.shDnsSet); dns = ShizukuManager.getDns() } }
+                Chip("Google", Color(0xFF34C759), Modifier.weight(1f)) { dns1 = "8.8.8.8"; dns2 = "8.8.4.4" }
+                Chip("Cloudflare", Color(0xFFFF9F0A), Modifier.weight(1f)) { dns1 = "1.1.1.1"; dns2 = "1.0.0.1" }
+            }
+        } } }
+
+        // Firewall
+        item { Label(Strings.shFirewall) }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(Strings.appManager, Blue, Modifier.weight(1f)) {
+                    showFw = !showFw; if (showFw && fwApps.isEmpty()) scope.launch(Dispatchers.IO) { fwApps = loadApps(context).filter { !it.isSystem } }
+                }
+                Chip(Strings.shFlushRules, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { tst(context, ShizukuManager.flushIptables(), Strings.shRulesFlushed) } }
+            }
+        }
+        if (showFw) {
+            items(fwApps.take(30)) { app ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(app.name, fontSize = 13.sp, color = TextPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Chip(Strings.shBlockInet, Color(0xFFFF3B30), Modifier) {
+                        scope.launch { val uid = ShizukuManager.getAppUid(app.packageName); tst(context, ShizukuManager.blockInternet(uid), Strings.shInetBlocked) } }
+                    Chip(Strings.shUnblockInet, Color(0xFF34C759), Modifier) {
+                        scope.launch { val uid = ShizukuManager.getAppUid(app.packageName); tst(context, ShizukuManager.unblockInternet(uid), Strings.shInetUnblocked) } }
+                }
+            }
+        }
+
+        // Netstat
+        item { Label(Strings.shNetstat) }
+        item { Chip(Strings.shLoad, Blue, Modifier.fillMaxWidth()) { scope.launch { netstat = ShizukuManager.getNetstat() } } }
+        if (netstat.isNotBlank()) { item { MonoBlock(netstat.take(2000)) } }
+
+        // Network info
+        item { Label(Strings.shNetworkInfo) }
+        item { Chip(Strings.shLoad, Blue, Modifier.fillMaxWidth()) { scope.launch { networkInfo = ShizukuManager.getNetworkInfo() } } }
+        if (networkInfo.isNotBlank()) { item { MonoBlock(networkInfo.take(1500)) } }
+
+        // Routes
+        item { Label(Strings.shRoutes) }
+        item { Chip(Strings.shLoad, Blue, Modifier.fillMaxWidth()) { scope.launch { routes = ShizukuManager.getRoutes() } } }
+        if (routes.isNotBlank()) { item { MonoBlock(routes) } }
+
+        item { Spacer(Modifier.height(80.dp)) }
+    }
+}
+
+// ═══ Battery ═══
+
+@Composable
+private fun BatteryContent(context: Context, scope: kotlinx.coroutines.CoroutineScope) {
+    var temp by remember { mutableStateOf("...") }
+    var health by remember { mutableStateOf("...") }
+    var cycles by remember { mutableStateOf("...") }
+    var wakelocks by remember { mutableStateOf("") }
+    var consumers by remember { mutableStateOf("") }
+    var dozeWhitelist by remember { mutableStateOf("") }
+    var dozeApp by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        temp = ShizukuManager.getBatteryTemp()
+        health = ShizukuManager.getBatteryHealth()
+        cycles = ShizukuManager.getBatteryCycles()
+    }
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // Battery info
+        item { Label(Strings.shBattery) }
+        item { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                InfoRow(Strings.shBatteryTemp, temp)
+                InfoRow(Strings.shBatteryHealth, health)
+                InfoRow(Strings.shBatteryCycles, cycles)
+            }
+        } }
+
+        // Kill background
+        item { Label(Strings.shProcesses) }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(Strings.shKillAll, Color(0xFFFF3B30), Modifier.weight(1f)) { scope.launch { ShizukuManager.killAllBackground(); tst(context, true, Strings.shKilled) } }
+        } }
+
+        // Doze
+        item { Label(Strings.shDoze) }
+        item { Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(dozeApp, { dozeApp = it }, label = { Text("Package name") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(Strings.shForceDoze, Color(0xFFFF9F0A), Modifier.weight(1f)) { if (dozeApp.isNotBlank()) scope.launch { tst(context, ShizukuManager.forceDoze(dozeApp), Strings.done) } }
+                Chip(Strings.shAddWhitelist, Color(0xFF34C759), Modifier.weight(1f)) { if (dozeApp.isNotBlank()) scope.launch { tst(context, ShizukuManager.addDozeWhitelist(dozeApp), Strings.done) } }
+                Chip(Strings.shRemoveWhitelist, Color(0xFFFF3B30), Modifier.weight(1f)) { if (dozeApp.isNotBlank()) scope.launch { tst(context, ShizukuManager.removeDozeWhitelist(dozeApp), Strings.done) } }
+            }
+        } } }
+
+        // Doze whitelist
+        item { Chip(Strings.shDozeWhitelist, Blue, Modifier.fillMaxWidth()) { scope.launch { dozeWhitelist = ShizukuManager.getDozeWhitelist() } } }
+        if (dozeWhitelist.isNotBlank()) { item { MonoBlock(dozeWhitelist.take(1500)) } }
+
+        // Consumers
+        item { Label(Strings.shConsumers) }
+        item { Chip(Strings.shLoad, Blue, Modifier.fillMaxWidth()) { scope.launch { consumers = ShizukuManager.getBatteryConsumers() } } }
+        if (consumers.isNotBlank()) { item { MonoBlock(consumers) } }
+
+        // Wakelocks
+        item { Label(Strings.shWakelocks) }
+        item { Chip(Strings.shLoad, Blue, Modifier.fillMaxWidth()) { scope.launch { wakelocks = ShizukuManager.getWakelocks() } } }
+        if (wakelocks.isNotBlank()) { item { MonoBlock(wakelocks.take(1500)) } }
+
+        item { Spacer(Modifier.height(80.dp)) }
+    }
+}
+
+// ═══ Files Extra ═══
+
+@Composable
+private fun FilesExtraContent(context: Context, scope: kotlinx.coroutines.CoroutineScope) {
+    var storageUsage by remember { mutableStateOf("") }
+    var largestFiles by remember { mutableStateOf("") }
+    var wifiPasswords by remember { mutableStateOf("") }
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        item { Label(Strings.tools) }
+        item { Card(Icons.Rounded.CleaningServices, Strings.shClearDalvik, "Dalvik/ART cache", Color(0xFFFF3B30)) {
+            scope.launch { tst(context, ShizukuManager.clearDalvikCache(), Strings.shDalvikCleared) }
+        } }
+        item { Card(Icons.Rounded.PhotoLibrary, Strings.shRescanMedia, "MediaScanner", Color(0xFF007AFF)) {
+            scope.launch { tst(context, ShizukuManager.rescanMedia(), Strings.shMediaRescanned) }
+        } }
+        item { Card(Icons.Rounded.DeleteSweep, Strings.shClearAllCaches, "pm trim-caches", Color(0xFFFF9F0A)) {
+            scope.launch { tst(context, ShizukuManager.clearAllCaches(), Strings.shAllCachesCleared) }
+        } }
+
+        // Storage usage
+        item { Label(Strings.shStorageUsage) }
+        item { Chip(Strings.shLoad, Blue, Modifier.fillMaxWidth()) { scope.launch { storageUsage = ShizukuManager.getStorageUsage() } } }
+        if (storageUsage.isNotBlank()) { item { MonoBlock(storageUsage) } }
+
+        // Largest files
+        item { Label(Strings.shLargestFiles) }
+        item { Chip(Strings.shLoad, Blue, Modifier.fillMaxWidth()) { scope.launch { largestFiles = ShizukuManager.getLargestFiles() } } }
+        if (largestFiles.isNotBlank()) { item { MonoBlock(largestFiles) } }
+
+        // Wi-Fi passwords
+        item { Label(Strings.shWifiPasswords) }
+        item { Card(Icons.Rounded.Wifi, Strings.shWifiPasswords, "wpa_supplicant.conf", Color(0xFF5856D6)) {
+            scope.launch {
+                wifiPasswords = ShizukuManager.getWifiPasswords()
+                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("wifi", wifiPasswords))
+                tst(context, true, Strings.shCopiedToClipboard)
+            }
+        } }
+        if (wifiPasswords.isNotBlank()) { item { MonoBlock(wifiPasswords.take(2000)) } }
+
+        item { Spacer(Modifier.height(80.dp)) }
+    }
+}
+
+@Composable
+private fun MonoBlock(text: String) {
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFF1C1C1E)).horizontalScroll(rememberScrollState()).padding(10.dp)) {
+        Text(text, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFE5E5EA), lineHeight = 14.sp)
+    }
 }
 
 // ═══ Dialogs ═══

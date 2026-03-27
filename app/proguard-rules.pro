@@ -37,6 +37,14 @@
 -keep class com.google.mlkit.** { *; }
 -dontwarn com.google.mlkit.**
 
+# Apache HTTP (Google API dependency)
+-dontwarn javax.naming.**
+-dontwarn javax.naming.directory.**
+-dontwarn javax.naming.ldap.**
+-dontwarn org.ietf.jgss.**
+-dontwarn org.apache.http.**
+-dontwarn com.sun.net.httpserver.**
+
 # Google Drive + Auth
 -keep class com.google.api.** { *; }
 -keep class com.google.auth.** { *; }
