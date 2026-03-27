@@ -1,35 +1,50 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/security/SecurityManager.kt",
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/AppSettings.kt",
       "selection": {
         "end": {
           "column": 0,
-          "index": 10555,
-          "line": 288
+          "index": 6982,
+          "line": 185
         },
         "start": {
           "column": 0,
-          "index": 10555,
-          "line": 288
+          "index": 6982,
+          "line": 185
         }
       }
     },
     {
-      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/MainActivity.kt",
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/ThemeScreen.kt",
       "selection": {
         "end": {
           "column": 0,
-          "index": 9745,
-          "line": 248
+          "index": 10332,
+          "line": 187
         },
         "start": {
           "column": 0,
-          "index": 9745,
-          "line": 248
+          "index": 10332,
+          "line": 187
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/SettingsScreen.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 12368,
+          "line": 239
+        },
+        "start": {
+          "column": 0,
+          "index": 12368,
+          "line": 239
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/MainActivity.kt"
+  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/SettingsScreen.kt"
 }

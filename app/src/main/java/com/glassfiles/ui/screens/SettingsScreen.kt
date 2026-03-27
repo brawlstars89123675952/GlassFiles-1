@@ -51,7 +51,7 @@ fun SettingsScreen(settings: AppSettings, onBack: () -> Unit) {
                         Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
                             .background(if (selected) Blue.copy(0.15f) else Color.Transparent)
                             .border(1.dp, if (selected) Blue.copy(0.4f) else SeparatorColor, RoundedCornerShape(10.dp))
-                            .clickable { settings.setTheme(mode) }.padding(vertical = 10.dp),
+                            .clickable { settings.changeTheme(mode) }.padding(vertical = 10.dp),
                             contentAlignment = Alignment.Center) {
                             Text(mode.label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                                 color = if (selected) Blue else TextSecondary)

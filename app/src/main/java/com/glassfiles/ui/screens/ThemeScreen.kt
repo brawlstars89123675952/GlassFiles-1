@@ -75,7 +75,7 @@ fun ThemeScreen(settings: AppSettings, onBack: () -> Unit) {
                 Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
                     .background(if (sel) Blue.copy(0.1f) else SurfaceWhite)
                     .border(1.5.dp, if (sel) Blue else SeparatorColor, RoundedCornerShape(12.dp))
-                    .clickable { settings.setTheme(mode) }
+                    .clickable { settings.changeTheme(mode) }
                     .padding(vertical = 14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(icon, null, Modifier.size(24.dp), tint = if (sel) Blue else TextSecondary)
@@ -93,7 +93,7 @@ fun ThemeScreen(settings: AppSettings, onBack: () -> Unit) {
             items(AccentColor.entries.toList()) { accent ->
                 val sel = settings.accentColor == accent
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.clickable { settings.setAccentColor(accent) }) {
+                    modifier = Modifier.clickable { settings.changeAccentColor(accent) }) {
                     Box(Modifier.size(44.dp).clip(CircleShape)
                         .background(accent.color)
                         .then(if (sel) Modifier.border(3.dp, TextPrimary, CircleShape) else Modifier),
@@ -127,7 +127,7 @@ fun ThemeScreen(settings: AppSettings, onBack: () -> Unit) {
                 Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
                     .background(if (sel) Blue.copy(0.1f) else SurfaceWhite)
                     .border(1.5.dp, if (sel) Blue else SeparatorColor, RoundedCornerShape(12.dp))
-                    .clickable { settings.setFolderIconStyle(style) }
+                    .clickable { settings.changeFolderIconStyle(style) }
                     .padding(vertical = 14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box(Modifier.size(36.dp).background(Blue.copy(0.1f), shape), contentAlignment = Alignment.Center) {

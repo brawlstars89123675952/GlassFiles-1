@@ -62,7 +62,7 @@ class AppSettings(context: Context) {
     )
         private set
 
-    fun setTheme(mode: AppThemeMode) {
+    fun changeTheme(mode: AppThemeMode) {
         themeMode = mode
         prefs.edit().putString("theme_mode", mode.name).apply()
     }
@@ -74,7 +74,7 @@ class AppSettings(context: Context) {
     )
         private set
 
-    fun setAccentColor(color: AccentColor) {
+    fun changeAccentColor(color: AccentColor) {
         accentColor = color
         prefs.edit().putString("accent_color", color.name).apply()
     }
@@ -86,7 +86,7 @@ class AppSettings(context: Context) {
     )
         private set
 
-    fun setFolderIconStyle(style: FolderIconStyle) {
+    fun changeFolderIconStyle(style: FolderIconStyle) {
         folderIconStyle = style
         prefs.edit().putString("folder_icon_style", style.name).apply()
     }
