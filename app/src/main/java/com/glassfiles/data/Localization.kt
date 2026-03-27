@@ -838,5 +838,4 @@ val ghNewFile get() = s("Новый файл", "New file")
 val ghFileName get() = s("Имя файла", "File name")
 val ghFileContent get() = s("Содержимое", "Content")
 val ghCommitMsg get() = s("Сообщение коммита", "Commit message")
-val copied get() = s("Скопировано", "Copied")
 }

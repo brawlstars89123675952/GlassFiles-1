@@ -5,12 +5,12 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 6982,
+          "index": 7282,
           "line": 185
         },
         "start": {
           "column": 0,
-          "index": 6982,
+          "index": 7282,
           "line": 185
         }
       }
@@ -44,7 +44,22 @@
           "line": 239
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/Localization.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 41263,
+          "line": 841
+        },
+        "start": {
+          "column": 0,
+          "index": 41263,
+          "line": 841
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/SettingsScreen.kt"
+  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/Localization.kt"
 }
