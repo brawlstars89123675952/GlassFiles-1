@@ -46,6 +46,7 @@ fun FileViewerScreen(filePath: String, onBack: () -> Unit) {
     when (fileType) {
         FileType.IMAGE -> ImageViewer(file, onBack)
         FileType.TEXT, FileType.CODE -> TextViewer(file, onBack)
+        FileType.VIDEO, FileType.AUDIO -> MediaPlayerScreen(filePath = filePath, onBack = onBack)
         else -> {
             // Try to open externally
             LaunchedEffect(Unit) { openFileExternal(context, file); onBack() }

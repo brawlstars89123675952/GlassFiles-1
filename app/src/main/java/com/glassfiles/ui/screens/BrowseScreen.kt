@@ -49,6 +49,8 @@ fun BrowseScreen(
     onContentSearch: () -> Unit = {},
     onShizuku: () -> Unit = {},
     onFtp: () -> Unit = {},
+    onDualPane: () -> Unit = {},
+    onTheme: () -> Unit = {},
     onTagClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -123,6 +125,8 @@ fun BrowseScreen(
                 Dv(); LRow(Icons.Rounded.ContentPasteSearch, Strings.contentSearch, Color(0xFF009688), subtitle = Strings.contentSearchSub) { onContentSearch() }
                 Dv(); LRow(Icons.Rounded.Security, Strings.shizuku, Color(0xFF673AB7), subtitle = Strings.shizukuSub) { onShizuku() }
                 Dv(); LRow(Icons.Rounded.Cloud, Strings.ftpClient, Color(0xFF00BCD4), subtitle = Strings.ftpClientSub) { onFtp() }
+                Dv(); LRow(Icons.Rounded.ViewColumn, Strings.dualPane, Color(0xFF607D8B), subtitle = Strings.dualPaneSub) { onDualPane() }
+                Dv(); LRow(Icons.Rounded.Palette, Strings.themeCustomize, Color(0xFFE91E63), subtitle = Strings.themeCustomizeSub) { onTheme() }
             } } }
         // Tags
         item { CHeader(Strings.tags, tagsExpanded) { tagsExpanded = !tagsExpanded } }

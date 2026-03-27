@@ -789,4 +789,30 @@ val shClearAllCaches get() = s("Очистить все кэши", "Clear all ca
 val shAllCachesCleared get() = s("Все кэши очищены", "All caches cleared")
 val shLoad get() = s("Загрузить", "Load")
 val shCopiedToClipboard get() = s("Скопировано в буфер", "Copied to clipboard")
+
+// ═══════════════════════════════════
+// v3.0 — Theme customization
+// ═══════════════════════════════════
+val themeCustomize get() = s("Оформление", "Appearance")
+val themeCustomizeSub get() = s("Темы, цвета, иконки", "Themes, colors, icons")
+val themeMode get() = s("Тема", "Theme")
+val accentColorLabel get() = s("Акцентный цвет", "Accent color")
+val folderStyle get() = s("Стиль папок", "Folder style")
+val defaultViewLabel get() = s("Вид по умолчанию", "Default view")
+val fontSize get() = s("Размер шрифта", "Font size")
+val previewTitle get() = s("Превью интерфейса", "Interface preview")
+val previewSubtitle get() = s("Так будут выглядеть элементы", "This is how elements will look")
+val previewButton get() = s("Кнопка", "Button")
+
+// ═══════════════════════════════════
+// v3.0 — Media player
+// ═══════════════════════════════════
+val mediaPlayer get() = s("Медиаплеер", "Media player")
+val mediaPlayerSub get() = s("Встроенный видео/аудио плеер", "Built-in video/audio player")
+
+// ═══════════════════════════════════
+// v3.0 — Dual pane
+// ═══════════════════════════════════
+val dualPane get() = s("Двойное окно", "Dual pane")
+val dualPaneSub get() = s("Два окна файлов рядом", "Two file panels side by side")
 }

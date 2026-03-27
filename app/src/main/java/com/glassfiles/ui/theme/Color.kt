@@ -8,11 +8,12 @@ import com.glassfiles.data.AppThemeMode
 
 object ThemeState {
     var mode by mutableStateOf(AppThemeMode.LIGHT)
+    var accent by mutableStateOf(Color(0xFF007AFF))
     val isDark: Boolean get() = mode == AppThemeMode.DARK || mode == AppThemeMode.AMOLED
     val isAmoled: Boolean get() = mode == AppThemeMode.AMOLED
 }
 
-val Blue = Color(0xFF007AFF)
+val Blue: Color get() = ThemeState.accent
 val Green = Color(0xFF34C759)
 val Orange = Color(0xFFFF9500)
 val Red = Color(0xFFFF3B30)

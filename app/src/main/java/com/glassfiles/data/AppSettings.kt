@@ -15,6 +15,24 @@ enum class AppThemeMode {
     ; val label: String get() = when (this) { LIGHT -> Strings.themeLight; DARK -> Strings.themeDark; AMOLED -> "AMOLED"; SYSTEM -> Strings.themeSystem }
 }
 
+enum class AccentColor(val color: androidx.compose.ui.graphics.Color, val label: String) {
+    BLUE(androidx.compose.ui.graphics.Color(0xFF007AFF), "Blue"),
+    GREEN(androidx.compose.ui.graphics.Color(0xFF34C759), "Green"),
+    ORANGE(androidx.compose.ui.graphics.Color(0xFFFF9500), "Orange"),
+    RED(androidx.compose.ui.graphics.Color(0xFFFF3B30), "Red"),
+    PURPLE(androidx.compose.ui.graphics.Color(0xFFAF52DE), "Purple"),
+    TEAL(androidx.compose.ui.graphics.Color(0xFF5AC8FA), "Teal"),
+    PINK(androidx.compose.ui.graphics.Color(0xFFFF2D55), "Pink"),
+    INDIGO(androidx.compose.ui.graphics.Color(0xFF5856D6), "Indigo"),
+    MINT(androidx.compose.ui.graphics.Color(0xFF00C7BE), "Mint"),
+    YELLOW(androidx.compose.ui.graphics.Color(0xFFFFCC00), "Yellow")
+}
+
+enum class FolderIconStyle {
+    DEFAULT, ROUNDED, SHARP, MINIMAL
+    ; val label: String get() = when (this) { DEFAULT -> "Default"; ROUNDED -> "Rounded"; SHARP -> "Sharp"; MINIMAL -> "Minimal" }
+}
+
 enum class DefaultView {
     GRID,
     LIST; val label: String get() = when (this) { GRID -> Strings.grid; LIST -> Strings.list }
@@ -47,6 +65,30 @@ class AppSettings(context: Context) {
     fun setTheme(mode: AppThemeMode) {
         themeMode = mode
         prefs.edit().putString("theme_mode", mode.name).apply()
+    }
+
+    // ═══ Акцентный цвет ═══
+    var accentColor by mutableStateOf(
+        try { AccentColor.valueOf(prefs.getString("accent_color", "BLUE") ?: "BLUE") }
+        catch (_: Exception) { AccentColor.BLUE }
+    )
+        private set
+
+    fun setAccentColor(color: AccentColor) {
+        accentColor = color
+        prefs.edit().putString("accent_color", color.name).apply()
+    }
+
+    // ═══ Стиль иконок папок ═══
+    var folderIconStyle by mutableStateOf(
+        try { FolderIconStyle.valueOf(prefs.getString("folder_icon_style", "DEFAULT") ?: "DEFAULT") }
+        catch (_: Exception) { FolderIconStyle.DEFAULT }
+    )
+        private set
+
+    fun setFolderIconStyle(style: FolderIconStyle) {
+        folderIconStyle = style
+        prefs.edit().putString("folder_icon_style", style.name).apply()
     }
 
     // ═══ Файловый менеджер ═══

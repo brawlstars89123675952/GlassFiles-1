@@ -62,7 +62,7 @@ val GlassTypography = Typography(
 )
 
 @Composable
-fun GlassFilesTheme(themeMode: AppThemeMode = AppThemeMode.LIGHT, content: @Composable () -> Unit) {
+fun GlassFilesTheme(themeMode: AppThemeMode = AppThemeMode.LIGHT, accentColor: androidx.compose.ui.graphics.Color? = null, content: @Composable () -> Unit) {
     val resolvedDark = when (themeMode) {
         AppThemeMode.LIGHT -> false
         AppThemeMode.DARK, AppThemeMode.AMOLED -> true
@@ -77,11 +77,12 @@ fun GlassFilesTheme(themeMode: AppThemeMode = AppThemeMode.LIGHT, content: @Comp
 
     // Update global ThemeState so Color.kt properties react
     ThemeState.mode = resolvedMode
+    if (accentColor != null) ThemeState.accent = accentColor
 
     val colorScheme = when (resolvedMode) {
-        AppThemeMode.AMOLED -> AmoledScheme
-        AppThemeMode.DARK -> DarkScheme
-        else -> LightScheme
+        AppThemeMode.AMOLED -> AmoledScheme.copy(primary = ThemeState.accent)
+        AppThemeMode.DARK -> DarkScheme.copy(primary = ThemeState.accent)
+        else -> LightScheme.copy(primary = ThemeState.accent)
     }
 
     val view = LocalView.current
