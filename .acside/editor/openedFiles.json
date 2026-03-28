@@ -80,13 +80,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 106895,
-          "line": 1171
+          "index": 106894,
+          "line": 1173
         },
         "start": {
           "column": 0,
-          "index": 106895,
-          "line": 1171
+          "index": 106894,
+          "line": 1173
         }
       }
     },
@@ -121,5 +121,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/Localization.kt"
+  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/GitHubScreen.kt"
 }

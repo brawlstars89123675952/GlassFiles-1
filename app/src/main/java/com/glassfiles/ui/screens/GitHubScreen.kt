@@ -47,10 +47,12 @@ fun GitHubScreen(onBack: () -> Unit, onMinimize: () -> Unit = {}, compact: Boole
     var selectedRepo by remember { mutableStateOf<GHRepo?>(null) }
     var showGists by remember { mutableStateOf(false) }
     LaunchedEffect(isLoggedIn) { if (isLoggedIn) user = GitHubManager.getUser(context) }
-    if (!isLoggedIn) { LoginScreen(onBack, onMinimize) { GitHubManager.saveToken(context, it); isLoggedIn = true }; return }
-    if (showGists) { GistsScreen({ showGists = false }, onMinimize); return }
-    if (selectedRepo != null) { RepoDetailScreen(selectedRepo!!, { selectedRepo = null }, onMinimize); return }
-    ReposScreen(user, onBack, onMinimize, { GitHubManager.logout(context); isLoggedIn = false; user = null }, { selectedRepo = it }, { showGists = true })
+    when {
+        !isLoggedIn -> LoginScreen(onBack, onMinimize) { GitHubManager.saveToken(context, it); isLoggedIn = true }
+        showGists -> GistsScreen({ showGists = false }, onMinimize)
+        selectedRepo != null -> RepoDetailScreen(selectedRepo!!, { selectedRepo = null }, onMinimize)
+        else -> ReposScreen(user, onBack, onMinimize, { GitHubManager.logout(context); isLoggedIn = false; user = null }, { selectedRepo = it }, { showGists = true })
+    }
     }
 }
 
