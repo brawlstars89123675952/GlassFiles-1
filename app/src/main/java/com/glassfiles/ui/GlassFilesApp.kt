@@ -295,27 +295,22 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                                 GlassFab(backdrop, Icons.Rounded.Terminal, iconTint = Color(0xFF00E676), tintColor = Color(0x441A1A2E))
                                 if (terminalWasOpened) Box(Modifier.align(Alignment.TopEnd).size(12.dp).background(Color(0xFF00E676), CircleShape))
                             }
-                            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 12.dp)) {
-                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                    // Left side — tab bar + settings
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 8.dp, bottom = 4.dp)) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    // Left — tab bar (constrained width)
+                                    Box(Modifier.weight(1f, fill = false)) {
                                         GlassBottomTabBar(backdrop, selectedTab, { selectedTab = it }, tabs)
-                                        Spacer(Modifier.width(8.dp))
-                                        Box(Modifier.size(44.dp).background(CardBackground.copy(0.85f), CircleShape)
-                                            .clickable { navigateTo(AppScreen.SETTINGS) },
-                                            contentAlignment = Alignment.Center) {
-                                            Icon(Icons.Rounded.Settings, null, Modifier.size(22.dp), tint = TextSecondary)
-                                        }
                                     }
-                                    // Right side — GitHub avatar
-                                    Box(Modifier.size(44.dp).clip(CircleShape)
-                                        .background(CardBackground.copy(0.85f), CircleShape)
+                                    Spacer(Modifier.width(8.dp))
+                                    // Right — GitHub avatar circle (same height as tab bar)
+                                    Box(Modifier.size(48.dp).clip(CircleShape)
+                                        .background(CardBackground.copy(0.85f))
                                         .clickable { navigateTo(AppScreen.GITHUB) },
                                         contentAlignment = Alignment.Center) {
                                         if (ghUser != null && ghUser.avatarUrl.isNotBlank()) {
-                                            AsyncImage(ghUser.avatarUrl, ghUser.login, Modifier.size(44.dp).clip(CircleShape))
+                                            AsyncImage(ghUser.avatarUrl, ghUser.login, Modifier.size(48.dp).clip(CircleShape))
                                         } else {
-                                            Icon(Icons.Rounded.Code, null, Modifier.size(22.dp), tint = TextSecondary)
+                                            Icon(Icons.Rounded.Code, null, Modifier.size(24.dp), tint = TextSecondary)
                                         }
                                     }
                                 }
@@ -340,3 +335,4 @@ private fun PermissionScreen(onRequest: () -> Unit) {
         }
     }
 }
+

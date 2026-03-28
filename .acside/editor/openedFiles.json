@@ -59,7 +59,22 @@
           "line": 841
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/GlassFilesApp.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 22241,
+          "line": 337
+        },
+        "start": {
+          "column": 0,
+          "index": 22241,
+          "line": 337
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/Localization.kt"
+  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/GlassFilesApp.kt"
 }
