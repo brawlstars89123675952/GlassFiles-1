@@ -89,7 +89,22 @@
           "line": 71
         }
       }
+    },
+    {
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/AppSettings.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 7407,
+          "line": 193
+        },
+        "start": {
+          "column": 0,
+          "index": 7407,
+          "line": 193
+        }
+      }
     }
   ],
-  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/theme/Color.kt"
+  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/AppSettings.kt"
 }

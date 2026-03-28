@@ -29,8 +29,8 @@ enum class AccentColor(val color: androidx.compose.ui.graphics.Color, val label:
 }
 
 enum class FolderIconStyle {
-    DEFAULT, ROUNDED, SHARP, MINIMAL
-    ; val label: String get() = when (this) { DEFAULT -> "Default"; ROUNDED -> "Rounded"; SHARP -> "Sharp"; MINIMAL -> "Minimal" }
+    DEFAULT, CIRCLE, GRADIENT, OUTLINED, FILLED
+    ; val label: String get() = when (this) { DEFAULT -> "Default"; CIRCLE -> "Circle"; GRADIENT -> "Gradient"; OUTLINED -> "Outlined"; FILLED -> "Filled" }
 }
 
 enum class DefaultView {
