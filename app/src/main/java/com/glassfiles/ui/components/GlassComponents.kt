@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -62,7 +63,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sign
 
-data class TabItem(val icon: ImageVector, val label: String)
+data class TabItem(val icon: ImageVector, val label: String, val imageUrl: String? = null)
 
 private val BarHeight = 76.dp
 private val CapsuleHeight = 66.dp
@@ -208,7 +209,16 @@ private fun RowScope.LiquidBottomTab(content: @Composable () -> Unit) {
 private fun NavItemContent(item: TabItem, isSelected: Boolean) {
     val color by animateColorAsState(if (isSelected) Blue else Color(0xFF999999), tween(200), label = "nc")
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Icon(item.icon, null, Modifier.size(26.dp), tint = color)
+        if (item.imageUrl != null) {
+            coil.compose.AsyncImage(
+                item.imageUrl, item.label,
+                modifier = Modifier.size(26.dp)
+                    .clip(CircleShape)
+                    .border(if (isSelected) 1.5.dp else 0.dp, if (isSelected) Blue else Color.Transparent, CircleShape)
+            )
+        } else {
+            Icon(item.icon, null, Modifier.size(26.dp), tint = color)
+        }
         Spacer(Modifier.height(2.dp))
         Text(item.label, color = color, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal)
     }

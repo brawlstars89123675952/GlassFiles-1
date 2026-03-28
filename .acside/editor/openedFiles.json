@@ -1,66 +1,6 @@
 {
   "allFiles": [
     {
-      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/GlassFilesApp.kt",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 40125,
-          "line": 746
-        },
-        "start": {
-          "column": 0,
-          "index": 40125,
-          "line": 746
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/components/FileContextMenu.kt",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 7626,
-          "line": 164
-        },
-        "start": {
-          "column": 0,
-          "index": 7626,
-          "line": 164
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/SharedAndFolderScreens.kt",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 31550,
-          "line": 480
-        },
-        "start": {
-          "column": 0,
-          "index": 31550,
-          "line": 480
-        }
-      }
-    },
-    {
-      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/Localization.kt",
-      "selection": {
-        "end": {
-          "column": 0,
-          "index": 46917,
-          "line": 960
-        },
-        "start": {
-          "column": 0,
-          "index": 46917,
-          "line": 960
-        }
-      }
-    },
-    {
       "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/github/GitHubManager.kt",
       "selection": {
         "end": {
@@ -80,13 +20,58 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 106894,
-          "line": 1173
+          "index": 115584,
+          "line": 1323
         },
         "start": {
           "column": 0,
-          "index": 106894,
-          "line": 1173
+          "index": 115584,
+          "line": 1323
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/BrowseScreen.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 14450,
+          "line": 205
+        },
+        "start": {
+          "column": 0,
+          "index": 14450,
+          "line": 205
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/GlassFilesApp.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 52644,
+          "line": 987
+        },
+        "start": {
+          "column": 0,
+          "index": 52644,
+          "line": 987
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/Localization.kt",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 48184,
+          "line": 981
+        },
+        "start": {
+          "column": 0,
+          "index": 48184,
+          "line": 981
         }
       }
     },
@@ -95,31 +80,31 @@
       "selection": {
         "end": {
           "column": 1,
-          "index": 17686,
-          "line": 328
+          "index": 18122,
+          "line": 338
         },
         "start": {
           "column": 1,
-          "index": 17686,
-          "line": 328
+          "index": 18122,
+          "line": 338
         }
       }
     },
     {
-      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/RecentsScreen.kt",
+      "file": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/SharedAndFolderScreens.kt",
       "selection": {
         "end": {
           "column": 0,
-          "index": 12308,
-          "line": 216
+          "index": 31933,
+          "line": 485
         },
         "start": {
           "column": 0,
-          "index": 12308,
-          "line": 216
+          "index": 31933,
+          "line": 485
         }
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/GitHubScreen.kt"
+  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/SharedAndFolderScreens.kt"
 }

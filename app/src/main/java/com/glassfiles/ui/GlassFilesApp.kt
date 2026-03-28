@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,6 +74,8 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
     var githubWasOpened by remember { mutableStateOf(false) }
     var githubMiniMode by remember { mutableStateOf(false) } // true = floating mini window
     var githubUploadFile by remember { mutableStateOf<FileItem?>(null) } // file pending upload to GitHub
+    var githubCommitFiles by remember { mutableStateOf<List<String>?>(null) } // files pending commit to GitHub
+    val githubAvatarUrl = remember { com.glassfiles.data.github.GitHubManager.getCachedUser(context)?.avatarUrl }
 
     fun navigateTo(screen: AppScreen) {
         if (screen == AppScreen.GITHUB) {
@@ -97,7 +100,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
         if (result.resultCode == Activity.RESULT_OK) GoogleSignIn.getSignedInAccountFromIntent(result.data).addOnSuccessListener { driveSignedIn = true }
     }
 
-    val tabs = listOf(TabItem(Icons.Outlined.Schedule, Strings.recents), TabItem(Icons.Outlined.People, Strings.shared), TabItem(Icons.Outlined.Folder, Strings.browse), TabItem(Icons.Outlined.Code, Strings.github))
+    val tabs = listOf(TabItem(Icons.Outlined.Schedule, Strings.recents), TabItem(Icons.Outlined.People, Strings.shared), TabItem(Icons.Outlined.Folder, Strings.browse), TabItem(Icons.Outlined.AccountCircle, Strings.github, imageUrl = githubAvatarUrl))
 
     fun openFileExternal(path: String) {
         try {
@@ -298,6 +301,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                                     onOpenTerminal = if (!isDrive && !isShizuku) {{ terminalDir = path; terminalWasOpened = true; navigateTo(AppScreen.TERMINAL) }} else null,
                                     onAiAction = { prompt, image -> aiInitialPrompt = prompt; aiInitialImage = image; navigateTo(AppScreen.AI_CHAT) },
                                     onGitHubUpload = { file -> githubUploadFile = file },
+                                    onGitHubCommit = { paths -> githubCommitFiles = paths },
                                     appSettings = settings)
                             } else {
                                 AnimatedContent(selectedTab, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) }, label = "tab") { tab ->
@@ -328,6 +332,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                                             onDualPane = { navigateTo(AppScreen.DUAL_PANE) },
                                             onTheme = { navigateTo(AppScreen.THEME) },
                                             onGitHub = { navigateTo(AppScreen.GITHUB) },
+                                            onSettings = { navigateTo(AppScreen.SETTINGS) },
                                             onTagClick = { tag -> selectedTagName = tag; navigateTo(AppScreen.TAGGED_FILES) })
                                         3 -> { LaunchedEffect(Unit) { navigateTo(AppScreen.GITHUB) }; Box(Modifier.fillMaxSize().background(SurfaceLight)) }
                                     }
@@ -377,6 +382,15 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                 file = githubUploadFile!!,
                 onDismiss = { githubUploadFile = null },
                 onDone = { githubUploadFile = null }
+            )
+        }
+
+        // GitHub commit multiple files dialog
+        if (githubCommitFiles != null) {
+            GitHubCommitDialog(
+                filePaths = githubCommitFiles!!,
+                onDismiss = { githubCommitFiles = null },
+                onDone = { githubCommitFiles = null }
             )
         }
     }
@@ -735,6 +749,233 @@ private fun GitHubUploadFromDeviceDialog(
             TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) }
         }
     )
+}
+
+// ═══════════════════════════════════
+// GitHub Commit Multiple Files
+// Select repo → branch → path → commit message → push
+// ═══════════════════════════════════
+
+@Composable
+private fun GitHubCommitDialog(
+    filePaths: List<String>,
+    onDismiss: () -> Unit,
+    onDone: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var repos by remember { mutableStateOf<List<com.glassfiles.data.github.GHRepo>>(emptyList()) }
+    var branches by remember { mutableStateOf<List<String>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var committing by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0) }
+    var total by remember { mutableStateOf(0) }
+
+    var selectedRepo by remember { mutableStateOf<com.glassfiles.data.github.GHRepo?>(null) }
+    var selectedBranch by remember { mutableStateOf("") }
+    var repoBasePath by remember { mutableStateOf("") }
+    var commitMsg by remember { mutableStateOf("Add ${filePaths.size} files") }
+    var step by remember { mutableIntStateOf(0) } // 0=pick repo, 1=configure
+
+    val files = remember { filePaths.map { java.io.File(it) }.filter { it.exists() } }
+    val totalSize = remember { files.sumOf { if (it.isFile) it.length() else 0L } }
+
+    LaunchedEffect(Unit) {
+        repos = com.glassfiles.data.github.GitHubManager.getRepos(context)
+        loading = false
+    }
+
+    LaunchedEffect(selectedRepo) {
+        if (selectedRepo != null) {
+            branches = com.glassfiles.data.github.GitHubManager.getBranches(context, selectedRepo!!.owner, selectedRepo!!.name)
+            selectedBranch = selectedRepo!!.defaultBranch
+            step = 1
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!committing) onDismiss() },
+        containerColor = SurfaceWhite,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Rounded.CloudUpload, null, Modifier.size(22.dp), tint = Color(0xFF238636))
+                Text(Strings.ghCommitToGitHub, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 18.sp)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Files info
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Rounded.Folder, null, Modifier.size(20.dp), tint = Blue)
+                    Column(Modifier.weight(1f)) {
+                        Text("${files.size} ${Strings.ghCommitFiles.lowercase()}", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
+                        Text(fmtUploadSize(totalSize), fontSize = 11.sp, color = TextTertiary)
+                    }
+                }
+
+                // File list preview (max 5 visible)
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SurfaceLight).padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    files.take(5).forEach { f ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (f.isDirectory) Icons.Rounded.Folder else Icons.Rounded.InsertDriveFile,
+                                null, Modifier.size(14.dp), tint = if (f.isDirectory) Blue else TextSecondary
+                            )
+                            Text(f.name, fontSize = 12.sp, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    if (files.size > 5) {
+                        Text("+${files.size - 5} more", fontSize = 11.sp, color = TextTertiary)
+                    }
+                }
+
+                if (loading) {
+                    Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    }
+                } else if (step == 0) {
+                    // Pick repo
+                    Text(Strings.ghSelectRepo, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
+                    Column(
+                        Modifier.fillMaxWidth().heightIn(max = 250.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        repos.forEach { repo ->
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                                    .background(if (selectedRepo == repo) Blue.copy(0.1f) else Color.Transparent)
+                                    .clickable { selectedRepo = repo }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    if (repo.isPrivate) Icons.Rounded.Lock else Icons.Rounded.FolderOpen,
+                                    null, Modifier.size(16.dp),
+                                    tint = if (repo.isPrivate) Color(0xFFFF9F0A) else Blue
+                                )
+                                Text(repo.name, fontSize = 13.sp, color = TextPrimary, maxLines = 1, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                } else {
+                    // Configure commit
+                    Text("→ ${selectedRepo!!.owner}/${selectedRepo!!.name}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Blue)
+
+                    // Branch
+                    Text(Strings.ghPickBranch, fontSize = 12.sp, color = TextSecondary)
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        branches.forEach { b ->
+                            Box(
+                                Modifier.clip(RoundedCornerShape(6.dp))
+                                    .background(if (b == selectedBranch) Blue.copy(0.15f) else SurfaceLight)
+                                    .clickable { selectedBranch = b }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) { Text(b, fontSize = 12.sp, color = if (b == selectedBranch) Blue else TextSecondary) }
+                        }
+                    }
+
+                    // Base path in repo
+                    OutlinedTextField(
+                        repoBasePath, { repoBasePath = it },
+                        label = { Text(Strings.ghRepoPath) },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("folder/subfolder") },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
+                    )
+
+                    // Commit message
+                    OutlinedTextField(
+                        commitMsg, { commitMsg = it },
+                        label = { Text(Strings.ghCommitMsg) },
+                        singleLine = false, maxLines = 3, modifier = Modifier.fillMaxWidth(),
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
+                    )
+
+                    // Progress
+                    if (committing) {
+                        Column(Modifier.fillMaxWidth()) {
+                            LinearProgressIndicator(
+                                progress = { if (total > 0) progress.toFloat() / total else 0f },
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)),
+                                color = Color(0xFF238636)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text("${Strings.ghCommitting} $progress / $total", fontSize = 12.sp, color = Blue)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (step == 1 && selectedRepo != null) {
+                TextButton(
+                    onClick = {
+                        if (commitMsg.isBlank() || committing) return@TextButton
+                        committing = true
+                        scope.launch {
+                            // Collect all files as pairs (repoPath -> bytes)
+                            val fileData = mutableListOf<Pair<String, ByteArray>>()
+                            files.forEach { f ->
+                                if (f.isDirectory) {
+                                    collectFilesRecursive(f, f, repoBasePath, fileData)
+                                } else {
+                                    val rp = if (repoBasePath.isNotBlank()) "$repoBasePath/${f.name}" else f.name
+                                    try { fileData.add(rp to f.readBytes()) } catch (_: Exception) {}
+                                }
+                            }
+                            total = fileData.size
+
+                            val ok = com.glassfiles.data.github.GitHubManager.uploadMultipleFiles(
+                                context, selectedRepo!!.owner, selectedRepo!!.name,
+                                selectedBranch, fileData, commitMsg
+                            ) { done, t -> progress = done; total = t }
+
+                            android.widget.Toast.makeText(
+                                context,
+                                if (ok) Strings.ghCommitSuccess else Strings.ghCommitFailed,
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                            committing = false
+                            if (ok) onDone()
+                        }
+                    },
+                    enabled = !committing
+                ) {
+                    Text(Strings.ghCommitToGitHub, color = if (committing) TextTertiary else Color(0xFF238636), fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            if (!committing) {
+                if (step == 1) {
+                    TextButton(onClick = { step = 0; selectedRepo = null }) {
+                        Text("← ${Strings.ghSelectRepo}", color = TextSecondary, fontSize = 12.sp)
+                    }
+                }
+                TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) }
+            }
+        }
+    )
+}
+
+private fun collectFilesRecursive(root: java.io.File, current: java.io.File, basePath: String, result: MutableList<Pair<String, ByteArray>>) {
+    current.listFiles()?.forEach { f ->
+        val rel = if (basePath.isNotBlank()) "$basePath/${f.relativeTo(root).path}" else f.relativeTo(root).path
+        if (f.isDirectory) collectFilesRecursive(root, f, basePath, result)
+        else if (f.length() < 50 * 1024 * 1024) {
+            try { result.add(rel to f.readBytes()) } catch (_: Exception) {}
+        }
+    }
 }
 
 private fun fmtUploadSize(b: Long): String = when {

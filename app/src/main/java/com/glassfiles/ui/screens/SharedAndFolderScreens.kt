@@ -72,6 +72,7 @@ fun FolderDetailScreen(
     onFileClick: (FileItem) -> Unit = {}, onBackClick: () -> Unit = {},
     onOpenTerminal: (() -> Unit)? = null, onAiAction: ((String, String?) -> Unit)? = null,
     onGitHubUpload: ((FileItem) -> Unit)? = null,
+    onGitHubCommit: ((List<String>) -> Unit)? = null,
     appSettings: com.glassfiles.data.AppSettings? = null,
     folderPath: String = "",
     modifier: Modifier = Modifier
@@ -331,6 +332,10 @@ fun FolderDetailScreen(
                     Icon(Icons.Rounded.DriveFileMove, null, tint = Blue) }
                 IconButton(onClick = { showBatchRename = true }) {
                     Icon(Icons.Rounded.DriveFileRenameOutline, null, tint = Blue) }
+                if (com.glassfiles.data.github.GitHubManager.isLoggedIn(context)) {
+                    IconButton(onClick = { onGitHubCommit?.invoke(selectedPaths.toList()); selectedPaths = emptySet(); selectMode = false }) {
+                        Icon(Icons.Rounded.Cloud, null, tint = Color(0xFF238636)) }
+                }
                 IconButton(onClick = { selectedPaths = emptySet(); selectMode = false }) {
                     Icon(Icons.Rounded.Close, null, tint = TextSecondary) }
             }

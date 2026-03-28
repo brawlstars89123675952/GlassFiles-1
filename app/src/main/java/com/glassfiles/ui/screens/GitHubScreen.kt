@@ -46,12 +46,14 @@ fun GitHubScreen(onBack: () -> Unit, onMinimize: () -> Unit = {}, compact: Boole
     var user by remember { mutableStateOf(GitHubManager.getCachedUser(context)) }
     var selectedRepo by remember { mutableStateOf<GHRepo?>(null) }
     var showGists by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     LaunchedEffect(isLoggedIn) { if (isLoggedIn) user = GitHubManager.getUser(context) }
     when {
         !isLoggedIn -> LoginScreen(onBack, onMinimize) { GitHubManager.saveToken(context, it); isLoggedIn = true }
+        showSettings -> GitHubSettingsScreen(onBack = { showSettings = false }, onLogout = { GitHubManager.logout(context); isLoggedIn = false; user = null; showSettings = false })
         showGists -> GistsScreen({ showGists = false }, onMinimize)
         selectedRepo != null -> RepoDetailScreen(selectedRepo!!, { selectedRepo = null }, onMinimize)
-        else -> ReposScreen(user, onBack, onMinimize, { GitHubManager.logout(context); isLoggedIn = false; user = null }, { selectedRepo = it }, { showGists = true })
+        else -> ReposScreen(user, onBack, onMinimize, { GitHubManager.logout(context); isLoggedIn = false; user = null }, { selectedRepo = it }, { showGists = true }, { showSettings = true })
     }
     }
 }
@@ -100,7 +102,7 @@ private fun LoginScreen(onBack: () -> Unit, onMinimize: () -> Unit, onLogin: (St
 }
 
 @Composable
-private fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Unit, onLogout: () -> Unit, onRepoClick: (GHRepo) -> Unit, onGists: () -> Unit) {
+private fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Unit, onLogout: () -> Unit, onRepoClick: (GHRepo) -> Unit, onGists: () -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current; val scope = rememberCoroutineScope()
     var repos by remember { mutableStateOf<List<GHRepo>>(emptyList()) }; var loading by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }; var showCreate by remember { mutableStateOf(false) }
@@ -123,7 +125,7 @@ private fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Uni
             IconButton(onClick = { showNotifications = true }) { Icon(Icons.Rounded.Notifications, null, Modifier.size(20.dp), tint = Blue) }
             IconButton(onClick = onGists) { Icon(Icons.Rounded.Description, null, Modifier.size(20.dp), tint = Blue) }
             IconButton(onClick = { showCreate = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue) }
-            IconButton(onClick = onLogout) { Icon(Icons.Rounded.Logout, null, Modifier.size(20.dp), tint = Color(0xFFFF3B30)) }
+            IconButton(onClick = onSettings) { Icon(Icons.Rounded.Settings, null, Modifier.size(20.dp), tint = TextSecondary) }
         }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             if (user != null) {
@@ -530,6 +532,154 @@ private fun DispatchWorkflowDialog(repo: GHRepo, workflows: List<GHWorkflow>, br
             }
         }, enabled = !dispatching) { Text(Strings.ghRunWorkflow, color = if (dispatching) TextTertiary else Color(0xFF34C759), fontWeight = FontWeight.Bold) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } })
+}
+
+// ═══════════════════════════════════
+// GitHub Settings Screen
+// ═══════════════════════════════════
+
+@Composable
+private fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit) {
+    val context = LocalContext.current; val scope = rememberCoroutineScope()
+    var user by remember { mutableStateOf(GitHubManager.getCachedUser(context)) }
+    val token = remember { GitHubManager.getToken(context) }
+    var showChangeToken by remember { mutableStateOf(false) }
+    var newToken by remember { mutableStateOf("") }
+
+    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+        GHTopBar(Strings.ghSettings, onBack = onBack)
+
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+            // Account section
+            item {
+                Text(Strings.ghAccount, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+            item {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceWhite)) {
+                    // User info
+                    if (user != null) {
+                        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            AsyncImage(user!!.avatarUrl, user!!.login, Modifier.size(48.dp).clip(CircleShape))
+                            Column(Modifier.weight(1f)) {
+                                Text(user!!.name.ifBlank { user!!.login }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text("@${user!!.login}", fontSize = 13.sp, color = TextSecondary)
+                            }
+                        }
+                        Box(Modifier.fillMaxWidth().padding(start = 16.dp).height(0.5.dp).background(SeparatorColor))
+                    }
+                    // Token
+                    SettingsRow(Icons.Rounded.Key, Strings.ghToken, Strings.ghTokenHidden) { showChangeToken = true }
+                    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
+                    // Logout
+                    SettingsRow(Icons.Rounded.Logout, Strings.ghSignIn.let { if (user != null) "Выйти / Sign out" else it }, color = Color(0xFFFF3B30)) { onLogout() }
+                }
+            }
+
+            // Storage section
+            item {
+                Spacer(Modifier.height(16.dp))
+                Text(Strings.ghClonePath, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+            item {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceWhite)) {
+                    SettingsRow(Icons.Rounded.Folder, "Downloads/GlassFiles_Git", Strings.ghClonePath)
+                    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
+                    SettingsRow(Icons.Rounded.DeleteSweep, Strings.ghClearCache) {
+                        context.getSharedPreferences("github_prefs", android.content.Context.MODE_PRIVATE).edit().remove("user_json").apply()
+                        Toast.makeText(context, Strings.ghCacheClearedMsg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+
+            // About section
+            item {
+                Spacer(Modifier.height(16.dp))
+                Text(Strings.ghAbout, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+            item {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceWhite)) {
+                    SettingsRow(Icons.Rounded.Info, Strings.ghAboutDesc)
+                    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
+                    SettingsRow(Icons.Rounded.Code, Strings.ghVersion, "1.0")
+                }
+            }
+
+            // Features list
+            item {
+                Spacer(Modifier.height(16.dp))
+                Text(Strings.tools, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+            item {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceWhite)) {
+                    FeatureRow("Repos", "Create, browse, star, fork, clone")
+                    FeatureRow("Files", "View, edit, upload, delete, download")
+                    FeatureRow("Issues & PR", "Create, comment, close, merge")
+                    FeatureRow("Actions", "Workflows, runs, artifacts, dispatch")
+                    FeatureRow("Releases", "Browse, download assets")
+                    FeatureRow("Gists", "Create, view, delete")
+                    FeatureRow("Notifications", "View, mark read")
+                    FeatureRow("Code Search", "Search inside repos")
+                    FeatureRow("Profiles", "View profiles, follow/unfollow")
+                    FeatureRow("Organizations", "Browse org repos")
+                    FeatureRow("Syntax Highlight", "Code viewer with colors")
+                }
+            }
+        }
+    }
+
+    // Change token dialog
+    if (showChangeToken) {
+        AlertDialog(
+            onDismissRequest = { showChangeToken = false }, containerColor = SurfaceWhite,
+            title = { Text(Strings.ghChangeToken, fontWeight = FontWeight.Bold, color = TextPrimary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(Strings.ghTokenHint, fontSize = 11.sp, color = TextTertiary)
+                    OutlinedTextField(newToken, { newToken = it }, label = { Text("Personal Access Token") },
+                        singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = { TextButton(onClick = {
+                if (newToken.isNotBlank()) {
+                    GitHubManager.saveToken(context, newToken)
+                    scope.launch { user = GitHubManager.getUser(context) }
+                    showChangeToken = false; newToken = ""
+                }
+            }) { Text(Strings.done, color = Blue) } },
+            dismissButton = { TextButton(onClick = { showChangeToken = false }) { Text(Strings.cancel, color = TextSecondary) } }
+        )
+    }
+}
+
+@Composable
+private fun SettingsRow(icon: ImageVector, title: String, subtitle: String? = null, color: Color = TextPrimary, onClick: (() -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(icon, null, Modifier.size(20.dp), tint = if (color == TextPrimary) TextSecondary else color)
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 15.sp, color = color)
+            if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = TextTertiary)
+        }
+        if (onClick != null) Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+    }
+}
+
+@Composable
+private fun FeatureRow(title: String, desc: String) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.Check, null, Modifier.size(16.dp), tint = Color(0xFF34C759))
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 14.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
+            Text(desc, fontSize = 11.sp, color = TextTertiary)
+        }
+    }
+    Box(Modifier.fillMaxWidth().padding(start = 42.dp).height(0.5.dp).background(SeparatorColor))
 }
 
 @Composable private fun QuickChip(icon: ImageVector, label: String, onClick: () -> Unit) {
