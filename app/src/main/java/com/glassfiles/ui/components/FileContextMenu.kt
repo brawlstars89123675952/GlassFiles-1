@@ -29,7 +29,8 @@ import kotlinx.coroutines.CoroutineScope
 enum class FileAction {
     OPEN, OPEN_WITH, COPY, MOVE, RENAME, DELETE, TRASH, SHARE,
     COMPRESS, DECOMPRESS, PROPERTIES, FAVORITE, INSTALL_APK,
-    OPEN_IN_TERMINAL, COPY_PATH, AI_SUMMARIZE, AI_DESCRIBE, CONVERT_IMAGE, TAG, ENCRYPT, BATCH_RENAME
+    OPEN_IN_TERMINAL, COPY_PATH, AI_SUMMARIZE, AI_DESCRIBE, CONVERT_IMAGE, TAG, ENCRYPT, BATCH_RENAME,
+    UPLOAD_GITHUB
 }
 
 @Composable
@@ -119,6 +120,11 @@ fun FileContextMenu(
                     val isEnc = file.name.endsWith(".enc")
                     MenuItem(if (isEnc) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
                         if (isEnc) Strings.decrypt else Strings.encrypt) { onAction(FileAction.ENCRYPT, file); onDismiss() }
+                }
+
+                // Upload to GitHub
+                if (com.glassfiles.data.github.GitHubManager.isLoggedIn(context)) {
+                    MenuItem(Icons.Rounded.Cloud, Strings.ghUploadToGitHub, Color(0xFF238636)) { onAction(FileAction.UPLOAD_GITHUB, file); onDismiss() }
                 }
 
                 Divider(divColor)

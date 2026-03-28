@@ -71,6 +71,7 @@ fun FolderDetailScreen(
     folderName: String, files: List<FileItem>, loading: Boolean = false, subtitle: String = "",
     onFileClick: (FileItem) -> Unit = {}, onBackClick: () -> Unit = {},
     onOpenTerminal: (() -> Unit)? = null, onAiAction: ((String, String?) -> Unit)? = null,
+    onGitHubUpload: ((FileItem) -> Unit)? = null,
     appSettings: com.glassfiles.data.AppSettings? = null,
     folderPath: String = "",
     modifier: Modifier = Modifier
@@ -211,6 +212,7 @@ fun FolderDetailScreen(
             FileAction.TAG -> tagFile = file
             FileAction.ENCRYPT -> encryptFile = file
             FileAction.BATCH_RENAME -> { /* triggered from multi-select bar */ }
+            FileAction.UPLOAD_GITHUB -> onGitHubUpload?.invoke(file)
             FileAction.AI_SUMMARIZE -> {
                 scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                     val content = com.glassfiles.data.ai.AiManager.readFileForAi(File(file.path))
@@ -316,24 +318,19 @@ fun FolderDetailScreen(
         if (showProgress) LinearProgressIndicator(progress = { progressVal }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), color = Blue)
 
         // Multi-select toolbar
-        if (selectMode) {
+        if (selectMode && selectedPaths.isNotEmpty()) {
             val selBg = if (ThemeState.isDark) Color(0xFF2C2C2E) else Color(0xFFF2F2F7)
             Row(Modifier.fillMaxWidth().background(selBg).padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("${selectedPaths.size} ${Strings.selected}", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                // Select All
-                IconButton(onClick = { selectedPaths = sorted.map { it.path }.toSet() }) {
-                    Icon(Icons.Rounded.SelectAll, null, tint = Blue) }
-                if (selectedPaths.isNotEmpty()) {
-                    IconButton(onClick = { selectedPaths.forEach { p -> scope.launch { trashMgr.moveToTrash(File(p)) } }; selectedPaths = emptySet(); selectMode = false; refreshKey++ }) {
-                        Icon(Icons.Rounded.Delete, null, tint = Red) }
-                    IconButton(onClick = { selectedPaths.firstOrNull()?.let { p -> clipFile = files.find { it.path == p }?.let { it to true } }; selectedPaths = emptySet(); selectMode = false }) {
-                        Icon(Icons.Rounded.ContentCopy, null, tint = Blue) }
-                    IconButton(onClick = { selectedPaths.firstOrNull()?.let { p -> clipFile = files.find { it.path == p }?.let { it to false } }; selectedPaths = emptySet(); selectMode = false }) {
-                        Icon(Icons.Rounded.DriveFileMove, null, tint = Blue) }
-                    IconButton(onClick = { showBatchRename = true }) {
-                        Icon(Icons.Rounded.DriveFileRenameOutline, null, tint = Blue) }
-                }
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("${selectedPaths.size} выбрано", color = TextPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                IconButton(onClick = { selectedPaths.forEach { p -> scope.launch { trashMgr.moveToTrash(File(p)) } }; selectedPaths = emptySet(); selectMode = false; refreshKey++ }) {
+                    Icon(Icons.Rounded.Delete, null, tint = Red) }
+                IconButton(onClick = { /* copy first selected */ selectedPaths.firstOrNull()?.let { p -> clipFile = files.find { it.path == p }?.let { it to true } }; selectedPaths = emptySet(); selectMode = false }) {
+                    Icon(Icons.Rounded.ContentCopy, null, tint = Blue) }
+                IconButton(onClick = { selectedPaths.firstOrNull()?.let { p -> clipFile = files.find { it.path == p }?.let { it to false } }; selectedPaths = emptySet(); selectMode = false }) {
+                    Icon(Icons.Rounded.DriveFileMove, null, tint = Blue) }
+                IconButton(onClick = { showBatchRename = true }) {
+                    Icon(Icons.Rounded.DriveFileRenameOutline, null, tint = Blue) }
                 IconButton(onClick = { selectedPaths = emptySet(); selectMode = false }) {
                     Icon(Icons.Rounded.Close, null, tint = TextSecondary) }
             }
