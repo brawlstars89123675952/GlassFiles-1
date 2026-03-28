@@ -103,13 +103,22 @@ private fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Uni
     var repos by remember { mutableStateOf<List<GHRepo>>(emptyList()) }; var loading by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }; var showCreate by remember { mutableStateOf(false) }
     var searchPublic by remember { mutableStateOf(false) }; var publicResults by remember { mutableStateOf<List<GHRepo>>(emptyList()) }
+    var showNotifications by remember { mutableStateOf(false) }
+    var showStarred by remember { mutableStateOf(false) }
+    var showOrgs by remember { mutableStateOf(false) }
+    var viewProfile by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { repos = GitHubManager.getRepos(context); loading = false }
     LaunchedEffect(query, searchPublic) { if (searchPublic && query.length >= 2) publicResults = GitHubManager.searchRepos(context, query) }
     val filtered = remember(repos, query, searchPublic) {
         if (searchPublic) publicResults else if (query.isNotBlank()) repos.filter { it.name.contains(query, true) || it.description.contains(query, true) } else repos
     }
+    if (showNotifications) { NotificationsScreen(onBack = { showNotifications = false }); return }
+    if (showStarred) { StarredScreen(onBack = { showStarred = false }, onRepoClick = { showStarred = false; onRepoClick(it) }); return }
+    if (showOrgs) { OrgsScreen(onBack = { showOrgs = false }, onRepoClick = { showOrgs = false; onRepoClick(it) }); return }
+    if (viewProfile != null) { ProfileScreen(username = viewProfile!!, onBack = { viewProfile = null }, onRepoClick = { viewProfile = null; onRepoClick(it) }); return }
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         GHTopBar("GitHub", onBack = onBack, onMinimize = onMinimize) {
+            IconButton(onClick = { showNotifications = true }) { Icon(Icons.Rounded.Notifications, null, Modifier.size(20.dp), tint = Blue) }
             IconButton(onClick = onGists) { Icon(Icons.Rounded.Description, null, Modifier.size(20.dp), tint = Blue) }
             IconButton(onClick = { showCreate = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue) }
             IconButton(onClick = onLogout) { Icon(Icons.Rounded.Logout, null, Modifier.size(20.dp), tint = Color(0xFFFF3B30)) }
@@ -125,6 +134,14 @@ private fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Uni
                 item { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     StatBox(Strings.ghRepos, "${user.publicRepos + user.privateRepos}", Modifier.weight(1f)); StatBox(Strings.ghFollowers, "${user.followers}", Modifier.weight(1f)); StatBox(Strings.ghFollowing, "${user.following}", Modifier.weight(1f))
                 } }
+            }
+            // Quick actions row
+            item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    QuickChip(Icons.Rounded.Star, Strings.ghStarredRepos) { showStarred = true }
+                    QuickChip(Icons.Rounded.Business, Strings.ghOrganizations) { showOrgs = true }
+                    QuickChip(Icons.Rounded.Person, Strings.ghProfile) { if (user != null) viewProfile = user.login }
+                }
             }
             item { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).padding(horizontal = 12.dp, vertical = 10.dp)) {
@@ -163,7 +180,7 @@ private fun RepoCard(repo: GHRepo, onClick: () -> Unit) {
     }
 }
 
-private enum class RepoTab { FILES, COMMITS, ISSUES, PULLS, RELEASES, README }
+private enum class RepoTab { FILES, COMMITS, ISSUES, PULLS, RELEASES, ACTIONS, README, CODE_SEARCH }
 
 @Composable
 private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -> Unit = {}) {
@@ -172,9 +189,12 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
     var currentPath by remember { mutableStateOf("") }; var commits by remember { mutableStateOf<List<GHCommit>>(emptyList()) }
     var issues by remember { mutableStateOf<List<GHIssue>>(emptyList()) }; var pulls by remember { mutableStateOf<List<GHPullRequest>>(emptyList()) }
     var releases by remember { mutableStateOf<List<GHRelease>>(emptyList()) }; var readme by remember { mutableStateOf<String?>(null) }
+    var workflowRuns by remember { mutableStateOf<List<GHWorkflowRun>>(emptyList()) }; var selectedRunId by remember { mutableStateOf<Long?>(null) }
+    var workflows by remember { mutableStateOf<List<GHWorkflow>>(emptyList()) }; var showDispatch by remember { mutableStateOf(false) }
     var branches by remember { mutableStateOf<List<String>>(emptyList()) }; var loading by remember { mutableStateOf(true) }
     var fileContent by remember { mutableStateOf<String?>(null) }; var editingFile by remember { mutableStateOf<GHContent?>(null) }
     var cloneProgress by remember { mutableStateOf<String?>(null) }; var isStarred by remember { mutableStateOf(false) }
+    var isWatching by remember { mutableStateOf(false) }
     var selectedBranch by remember { mutableStateOf(repo.defaultBranch) }
     var showUpload by remember { mutableStateOf(false) }; var showCreateFile by remember { mutableStateOf(false) }
     var showCreateBranch by remember { mutableStateOf(false) }; var showCreateIssue by remember { mutableStateOf(false) }
@@ -183,24 +203,30 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
     var showBranchPicker by remember { mutableStateOf(false) }
     var languages by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }; var contributors by remember { mutableStateOf<List<GHContributor>>(emptyList()) }
 
-    LaunchedEffect(Unit) { isStarred = GitHubManager.isStarred(context, repo.owner, repo.name); branches = GitHubManager.getBranches(context, repo.owner, repo.name) }
+    LaunchedEffect(Unit) { isStarred = GitHubManager.isStarred(context, repo.owner, repo.name); isWatching = GitHubManager.isWatching(context, repo.owner, repo.name); branches = GitHubManager.getBranches(context, repo.owner, repo.name) }
     LaunchedEffect(selectedTab, currentPath, selectedBranch) { loading = true; when (selectedTab) {
         RepoTab.FILES -> contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath)
         RepoTab.COMMITS -> commits = GitHubManager.getCommits(context, repo.owner, repo.name)
         RepoTab.ISSUES -> issues = GitHubManager.getIssues(context, repo.owner, repo.name)
         RepoTab.PULLS -> pulls = GitHubManager.getPullRequests(context, repo.owner, repo.name)
         RepoTab.RELEASES -> releases = GitHubManager.getReleases(context, repo.owner, repo.name)
+        RepoTab.ACTIONS -> { workflowRuns = GitHubManager.getWorkflowRuns(context, repo.owner, repo.name); workflows = GitHubManager.getWorkflows(context, repo.owner, repo.name) }
         RepoTab.README -> { readme = GitHubManager.getReadme(context, repo.owner, repo.name); languages = GitHubManager.getLanguages(context, repo.owner, repo.name); contributors = GitHubManager.getContributors(context, repo.owner, repo.name) }
+        RepoTab.CODE_SEARCH -> { /* searches on demand */ }
     }; loading = false }
 
     if (selectedIssue != null) { IssueDetailScreen(repo, selectedIssue!!.number) { selectedIssue = null }; return }
     if (selectedCommitSha != null) { CommitDiffScreen(repo, selectedCommitSha!!) { selectedCommitSha = null }; return }
+    if (selectedRunId != null) { WorkflowRunDetailScreen(repo, selectedRunId!!) { selectedRunId = null }; return }
     if (fileContent != null) {
         Column(Modifier.fillMaxSize().background(Color(0xFF1C1C1E))) {
             GHTopBar(currentPath.substringAfterLast("/"), onBack = { fileContent = null }) {
                 IconButton(onClick = { scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${currentPath.substringAfterLast("/")}"); val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, currentPath, dest); Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show() } }) { Icon(Icons.Rounded.Download, null, Modifier.size(20.dp), tint = Blue) }
             }
-            Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(10.dp)) { Text(fileContent!!, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFD4D4D4), lineHeight = 18.sp) }
+            val ext = currentPath.substringAfterLast(".", "")
+            Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(10.dp)) {
+                SyntaxHighlightedText(fileContent!!, ext)
+            }
         }; return
     }
     if (editingFile != null) { EditFileScreen(repo, editingFile!!, selectedBranch, { editingFile = null }) { editingFile = null; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath) } }; return }
@@ -209,6 +235,7 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
         GHTopBar(repo.name, subtitle = if (currentPath.isNotBlank()) currentPath else repo.owner, onBack = { if (currentPath.isNotBlank() && selectedTab == RepoTab.FILES) currentPath = currentPath.substringBeforeLast("/", "") else onBack() }, onMinimize = onMinimize) {
             val ic = if (LocalGHCompact.current) 16.dp else 20.dp
             IconButton(onClick = { scope.launch { if (isStarred) GitHubManager.unstarRepo(context, repo.owner, repo.name) else GitHubManager.starRepo(context, repo.owner, repo.name); isStarred = !isStarred } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isStarred) Icons.Rounded.Star else Icons.Rounded.StarBorder, null, Modifier.size(ic), tint = Color(0xFFFFCC00)) }
+            IconButton(onClick = { scope.launch { if (isWatching) GitHubManager.unwatchRepo(context, repo.owner, repo.name) else GitHubManager.watchRepo(context, repo.owner, repo.name); isWatching = !isWatching } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isWatching) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, Modifier.size(ic), tint = if (isWatching) Blue else TextSecondary) }
             IconButton(onClick = { scope.launch { val ok = GitHubManager.forkRepo(context, repo.owner, repo.name); Toast.makeText(context, if (ok) Strings.ghForked else Strings.error, Toast.LENGTH_SHORT).show() } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.CallSplit, null, Modifier.size(ic), tint = Blue) }
             IconButton(onClick = { cloneProgress = "Starting..."; scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git"); val ok = GitHubManager.cloneRepo(context, repo.owner, repo.name, dest) { cloneProgress = it }; Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show(); cloneProgress = null } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.Download, null, Modifier.size(ic), tint = Blue) }
         }
@@ -220,11 +247,11 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(Icons.Rounded.AccountTree, null, Modifier.size(if (cmp) 12.dp else 14.dp), tint = Blue); Text(selectedBranch, fontSize = if (cmp) 10.sp else 12.sp, color = Blue, fontWeight = FontWeight.Medium); Icon(Icons.Rounded.ArrowDropDown, null, Modifier.size(if (cmp) 12.dp else 14.dp), tint = Blue) }
             }
             Spacer(Modifier.weight(1f))
-            when (selectedTab) { RepoTab.FILES -> { SmallAction(Icons.Rounded.NoteAdd, Strings.ghCreateFile) { showCreateFile = true }; SmallAction(Icons.Rounded.Upload, Strings.ghUpload) { showUpload = true } }; RepoTab.ISSUES -> SmallAction(Icons.Rounded.Add, Strings.ghNewIssue) { showCreateIssue = true }; RepoTab.PULLS -> SmallAction(Icons.Rounded.Add, Strings.ghNewPR) { showCreatePR = true }; else -> {} }
+            when (selectedTab) { RepoTab.FILES -> { SmallAction(Icons.Rounded.NoteAdd, Strings.ghCreateFile) { showCreateFile = true }; SmallAction(Icons.Rounded.Upload, Strings.ghUpload) { showUpload = true } }; RepoTab.ISSUES -> SmallAction(Icons.Rounded.Add, Strings.ghNewIssue) { showCreateIssue = true }; RepoTab.PULLS -> SmallAction(Icons.Rounded.Add, Strings.ghNewPR) { showCreatePR = true }; RepoTab.ACTIONS -> SmallAction(Icons.Rounded.PlayArrow, Strings.ghRunWorkflow) { showDispatch = true }; else -> {} }
         }
         // Tabs
         Row(Modifier.fillMaxWidth().background(SurfaceWhite).horizontalScroll(rememberScrollState()).padding(horizontal = if (cmp) 6.dp else 12.dp, vertical = if (cmp) 3.dp else 6.dp), horizontalArrangement = Arrangement.spacedBy(if (cmp) 4.dp else 6.dp)) {
-            RepoTab.entries.forEach { tab -> val sel = selectedTab == tab; val label = when (tab) { RepoTab.FILES -> Strings.ghGistFiles; RepoTab.COMMITS -> Strings.ghCommits; RepoTab.ISSUES -> "Issues"; RepoTab.PULLS -> Strings.ghPulls; RepoTab.RELEASES -> Strings.ghReleases; RepoTab.README -> Strings.ghReadme }
+            RepoTab.entries.forEach { tab -> val sel = selectedTab == tab; val label = when (tab) { RepoTab.FILES -> Strings.ghGistFiles; RepoTab.COMMITS -> Strings.ghCommits; RepoTab.ISSUES -> "Issues"; RepoTab.PULLS -> Strings.ghPulls; RepoTab.RELEASES -> Strings.ghReleases; RepoTab.ACTIONS -> Strings.ghActions; RepoTab.README -> Strings.ghReadme; RepoTab.CODE_SEARCH -> Strings.ghSearchCode }
                 Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (sel) Blue.copy(0.12f) else Color.Transparent).border(1.dp, if (sel) Blue.copy(0.3f) else SeparatorColor, RoundedCornerShape(6.dp)).clickable { selectedTab = tab }.padding(horizontal = if (cmp) 6.dp else 10.dp, vertical = if (cmp) 3.dp else 6.dp)) { Text(label, fontSize = if (cmp) 10.sp else 12.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal, color = if (sel) Blue else TextSecondary) }
             }
         }
@@ -236,7 +263,9 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
             RepoTab.ISSUES -> IssuesTab(issues) { selectedIssue = it }
             RepoTab.PULLS -> PullsTab(pulls, repo) { scope.launch { pulls = GitHubManager.getPullRequests(context, repo.owner, repo.name) } }
             RepoTab.RELEASES -> ReleasesTab(releases, repo)
+            RepoTab.ACTIONS -> ActionsTab(workflowRuns, repo) { selectedRunId = it.id }
             RepoTab.README -> ReadmeTab(readme, languages, contributors)
+            RepoTab.CODE_SEARCH -> CodeSearchTab(repo)
         }
     }
     if (showUpload) UploadDialog(repo, currentPath, selectedBranch, { showUpload = false }) { showUpload = false; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath) } }
@@ -246,6 +275,7 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
     if (showCreatePR) CreatePRDialog(repo, branches, { showCreatePR = false }) { showCreatePR = false; scope.launch { pulls = GitHubManager.getPullRequests(context, repo.owner, repo.name) } }
     if (deleteTarget != null) DeleteFileDialog(repo, deleteTarget!!, selectedBranch, { deleteTarget = null }) { deleteTarget = null; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath) } }
     if (showBranchPicker) BranchPickerDialog(branches, selectedBranch, { selectedBranch = it; showBranchPicker = false }, { showBranchPicker = false }) { showBranchPicker = false; showCreateBranch = true }
+    if (showDispatch && workflows.isNotEmpty()) DispatchWorkflowDialog(repo, workflows, branches, { showDispatch = false }) { showDispatch = false; scope.launch { workflowRuns = GitHubManager.getWorkflowRuns(context, repo.owner, repo.name) } }
 }
 
 @Composable private fun SmallAction(icon: ImageVector, label: String, onClick: () -> Unit) { val c = LocalGHCompact.current; Row(Modifier.clip(RoundedCornerShape(if (c) 6.dp else 8.dp)).background(SurfaceWhite).border(0.5.dp, SeparatorColor, RoundedCornerShape(if (c) 6.dp else 8.dp)).clickable(onClick = onClick).padding(horizontal = if (c) 5.dp else 8.dp, vertical = if (c) 3.dp else 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (c) 2.dp else 4.dp)) { Icon(icon, null, Modifier.size(if (c) 11.dp else 14.dp), tint = Blue); Text(label, fontSize = if (c) 9.sp else 11.sp, color = Blue) } }
@@ -444,5 +474,698 @@ private fun GistsScreen(onBack: () -> Unit, onMinimize: () -> Unit) { val contex
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(d, { d = it }, label = { Text(Strings.ghRepoDesc) }, singleLine = true, modifier = Modifier.fillMaxWidth()); OutlinedTextField(fn, { fn = it }, label = { Text(Strings.ghFilePath) }, singleLine = true, modifier = Modifier.fillMaxWidth()); OutlinedTextField(ct, { ct = it }, label = { Text(Strings.ghFileContent) }, modifier = Modifier.fillMaxWidth().height(120.dp), maxLines = 8); Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { Switch(checked = pub, onCheckedChange = { pub = it }, colors = SwitchDefaults.colors(checkedTrackColor = Blue)); Text(Strings.ghPublic, fontSize = 14.sp, color = TextPrimary) } } },
         confirmButton = { TextButton(onClick = { if (fn.isBlank()) return@TextButton; s.launch { val ok = GitHubManager.createGist(ctx, d, pub, mapOf(fn to ct)); Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show(); if (ok) onDone() } }) { Text(Strings.create, color = Blue) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }) }
 
+@Composable
+private fun DispatchWorkflowDialog(repo: GHRepo, workflows: List<GHWorkflow>, branches: List<String>, onDismiss: () -> Unit, onDone: () -> Unit) {
+    var selectedWf by remember { mutableStateOf(workflows.firstOrNull()) }
+    var selectedBranch by remember { mutableStateOf(repo.defaultBranch) }
+    var dispatching by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current; val s = rememberCoroutineScope()
+
+    AlertDialog(onDismissRequest = onDismiss, containerColor = SurfaceWhite,
+        title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Rounded.PlayArrow, null, Modifier.size(22.dp), tint = Color(0xFF34C759))
+            Text(Strings.ghRunWorkflow, fontWeight = FontWeight.Bold, color = TextPrimary)
+        } },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Workflow picker
+            Text(Strings.ghWorkflows, fontSize = 12.sp, color = TextSecondary)
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                workflows.forEach { wf ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        .background(if (selectedWf == wf) Blue.copy(0.1f) else Color.Transparent)
+                        .clickable { selectedWf = wf }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Rounded.Settings, null, Modifier.size(16.dp), tint = if (selectedWf == wf) Blue else TextSecondary)
+                        Column(Modifier.weight(1f)) {
+                            Text(wf.name, fontSize = 13.sp, color = if (selectedWf == wf) Blue else TextPrimary, fontWeight = FontWeight.Medium)
+                            Text(wf.path, fontSize = 10.sp, color = TextTertiary)
+                        }
+                        if (selectedWf == wf) Icon(Icons.Rounded.Check, null, Modifier.size(14.dp), tint = Blue)
+                    }
+                }
+            }
+            // Branch picker
+            Text(Strings.ghPickBranch, fontSize = 12.sp, color = TextSecondary)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                branches.forEach { b -> BC(b, b == selectedBranch) { selectedBranch = b } }
+            }
+            if (dispatching) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
+                    Text(Strings.ghRunning, fontSize = 12.sp, color = Blue)
+                }
+            }
+        } },
+        confirmButton = { TextButton(onClick = {
+            if (selectedWf == null || dispatching) return@TextButton
+            dispatching = true
+            s.launch {
+                val ok = GitHubManager.dispatchWorkflow(ctx, repo.owner, repo.name, selectedWf!!.id, selectedBranch)
+                Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                dispatching = false
+                if (ok) onDone()
+            }
+        }, enabled = !dispatching) { Text(Strings.ghRunWorkflow, color = if (dispatching) TextTertiary else Color(0xFF34C759), fontWeight = FontWeight.Bold) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } })
+}
+
+@Composable private fun QuickChip(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(Modifier.clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).border(0.5.dp, SeparatorColor, RoundedCornerShape(10.dp))
+        .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Icon(icon, null, Modifier.size(16.dp), tint = Blue)
+        Text(label, fontSize = 13.sp, color = TextPrimary)
+    }
+}
+
+// ═══════════════════════════════════
+// Code Search Tab
+// ═══════════════════════════════════
+
+@Composable
+private fun CodeSearchTab(repo: GHRepo) {
+    val context = LocalContext.current; val scope = rememberCoroutineScope()
+    var query by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<GHCodeResult>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    var searched by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxSize()) {
+        // Search bar
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                if (query.isEmpty()) Text(Strings.ghSearchCodeHint, color = TextTertiary, fontSize = 14.sp)
+                BasicTextField(query, { query = it }, textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp), singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+            Box(Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(Blue).clickable {
+                if (query.length >= 2 && !searching) { searching = true; searched = true
+                    scope.launch { results = GitHubManager.searchCode(context, query, repo.owner, repo.name); searching = false }
+                }
+            }, contentAlignment = Alignment.Center) {
+                if (searching) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                else Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = Color.White)
+            }
+        }
+
+        if (searching) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+        } else if (searched && results.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(Strings.ghNoResults, fontSize = 14.sp, color = TextTertiary) }
+        } else {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                items(results) { r ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Code, null, Modifier.size(18.dp), tint = Blue)
+                        Column(Modifier.weight(1f)) {
+                            Text(r.name, fontSize = 14.sp, color = TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(r.path, fontSize = 11.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().padding(start = 44.dp).height(0.5.dp).background(SeparatorColor))
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════
+// Starred Repos Screen
+// ═══════════════════════════════════
+
+@Composable
+private fun StarredScreen(onBack: () -> Unit, onRepoClick: (GHRepo) -> Unit) {
+    val context = LocalContext.current
+    var repos by remember { mutableStateOf<List<GHRepo>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) { repos = GitHubManager.getStarredRepos(context); loading = false }
+
+    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+        GHTopBar(Strings.ghStarredRepos, onBack = onBack)
+        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+        else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+            items(repos) { repo -> RepoCard(repo) { onRepoClick(repo) } }
+        }
+    }
+}
+
+// ═══════════════════════════════════
+// Organizations Screen
+// ═══════════════════════════════════
+
+@Composable
+private fun OrgsScreen(onBack: () -> Unit, onRepoClick: (GHRepo) -> Unit) {
+    val context = LocalContext.current; val scope = rememberCoroutineScope()
+    var orgs by remember { mutableStateOf<List<GHOrg>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var selectedOrg by remember { mutableStateOf<GHOrg?>(null) }
+    var orgRepos by remember { mutableStateOf<List<GHRepo>>(emptyList()) }
+    var loadingRepos by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { orgs = GitHubManager.getOrganizations(context); loading = false }
+    LaunchedEffect(selectedOrg) {
+        if (selectedOrg != null) { loadingRepos = true; orgRepos = GitHubManager.getOrgRepos(context, selectedOrg!!.login); loadingRepos = false }
+    }
+
+    // Org repos view
+    if (selectedOrg != null) {
+        Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+            GHTopBar(selectedOrg!!.login, onBack = { selectedOrg = null; orgRepos = emptyList() })
+            if (loadingRepos) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+            else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                items(orgRepos) { repo -> RepoCard(repo) { onRepoClick(repo) } }
+            }
+        }
+        return
+    }
+
+    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+        GHTopBar(Strings.ghOrganizations, onBack = onBack)
+        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+        else if (orgs.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(Strings.ghNoResults, fontSize = 14.sp, color = TextTertiary) }
+        else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+            items(orgs) { org ->
+                Row(Modifier.fillMaxWidth().clickable { selectedOrg = org }.padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(org.avatarUrl, org.login, Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)))
+                    Column(Modifier.weight(1f)) {
+                        Text(org.login, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
+                        if (org.description.isNotBlank()) Text(org.description, fontSize = 12.sp, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+                }
+                Box(Modifier.fillMaxWidth().padding(start = 68.dp).height(0.5.dp).background(SeparatorColor))
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════
+// User Profile Screen
+// ═══════════════════════════════════
+
+@Composable
+private fun ProfileScreen(username: String, onBack: () -> Unit, onRepoClick: (GHRepo) -> Unit) {
+    val context = LocalContext.current; val scope = rememberCoroutineScope()
+    var profile by remember { mutableStateOf<GHUserProfile?>(null) }
+    var repos by remember { mutableStateOf<List<GHRepo>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var isFollowing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(username) {
+        profile = GitHubManager.getUserProfile(context, username)
+        repos = GitHubManager.getUserRepos(context, username)
+        isFollowing = GitHubManager.isFollowing(context, username)
+        loading = false
+    }
+
+    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+        GHTopBar(username, onBack = onBack) {
+            // Follow/Unfollow
+            Box(Modifier.clip(RoundedCornerShape(8.dp))
+                .background(if (isFollowing) Blue.copy(0.12f) else Blue)
+                .clickable { scope.launch {
+                    if (isFollowing) GitHubManager.unfollowUser(context, username) else GitHubManager.followUser(context, username)
+                    isFollowing = !isFollowing
+                } }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Text(if (isFollowing) Strings.ghUnfollow else Strings.ghFollow,
+                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    color = if (isFollowing) Blue else Color.White)
+            }
+        }
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+        } else {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                // Profile card
+                if (profile != null) {
+                    item {
+                        Column(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(16.dp)).background(SurfaceWhite).padding(16.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                AsyncImage(profile!!.avatarUrl, username, Modifier.size(64.dp).clip(CircleShape))
+                                Column {
+                                    Text(profile!!.name.ifBlank { username }, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                    Text("@$username", fontSize = 13.sp, color = TextSecondary)
+                                    if (profile!!.bio.isNotBlank()) Text(profile!!.bio, fontSize = 12.sp, color = TextTertiary, modifier = Modifier.padding(top = 4.dp))
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            // Info rows
+                            if (profile!!.company.isNotBlank()) InfoRow(Icons.Rounded.Business, profile!!.company)
+                            if (profile!!.location.isNotBlank()) InfoRow(Icons.Rounded.LocationOn, profile!!.location)
+                            if (profile!!.blog.isNotBlank()) InfoRow(Icons.Rounded.Link, profile!!.blog)
+                            InfoRow(Icons.Rounded.CalendarToday, "${Strings.ghJoined} ${profile!!.createdAt.take(10)}")
+                        }
+                    }
+                    // Stats
+                    item {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StatBox(Strings.ghRepos, "${profile!!.publicRepos}", Modifier.weight(1f))
+                            StatBox(Strings.ghFollowers, "${profile!!.followers}", Modifier.weight(1f))
+                            StatBox(Strings.ghFollowing, "${profile!!.following}", Modifier.weight(1f))
+                        }
+                    }
+                }
+                // Repos
+                item { Text(Strings.ghRepos, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+                items(repos) { repo -> RepoCard(repo) { onRepoClick(repo) } }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(icon: ImageVector, text: String) {
+    Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(icon, null, Modifier.size(14.dp), tint = TextSecondary)
+        Text(text, fontSize = 12.sp, color = TextSecondary)
+    }
+}
+
 private fun langColor(lang: String): Color = when (lang.lowercase()) { "kotlin" -> Color(0xFFA97BFF); "java" -> Color(0xFFB07219); "python" -> Color(0xFF3572A5); "javascript" -> Color(0xFFF1E05A); "typescript" -> Color(0xFF3178C6); "c" -> Color(0xFF555555); "c++" -> Color(0xFFF34B7D); "swift" -> Color(0xFFFFAC45); "go" -> Color(0xFF00ADD8); "rust" -> Color(0xFFDEA584); "dart" -> Color(0xFF00B4AB); "ruby" -> Color(0xFF701516); "php" -> Color(0xFF4F5D95); "c#" -> Color(0xFF178600); "shell" -> Color(0xFF89E051); "html" -> Color(0xFFE34C26); "css" -> Color(0xFF563D7C); "vue" -> Color(0xFF41B883); else -> Color(0xFF8E8E93) }
 private fun fmtSize(b: Long): String = when { b < 1024 -> "$b B"; b < 1024L * 1024 -> "%.1f KB".format(b / 1024.0); else -> "%.1f MB".format(b / (1024.0 * 1024)) }
+
+// ═══════════════════════════════════
+// GitHub Actions Tab
+// ═══════════════════════════════════
+
+@Composable
+private fun ActionsTab(runs: List<GHWorkflowRun>, repo: GHRepo, onRunClick: (GHWorkflowRun) -> Unit) {
+    val context = LocalContext.current; val scope = rememberCoroutineScope()
+    if (runs.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(Strings.ghNoWorkflows, fontSize = 14.sp, color = TextTertiary) }
+    } else {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+            items(runs) { run ->
+                Row(Modifier.fillMaxWidth().clickable { onRunClick(run) }.padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                    // Status icon
+                    val (statusIcon, statusColor) = when {
+                        run.status == "in_progress" -> Icons.Rounded.Refresh to Color(0xFFFF9500)
+                        run.conclusion == "success" -> Icons.Rounded.CheckCircle to Color(0xFF34C759)
+                        run.conclusion == "failure" -> Icons.Rounded.Cancel to Color(0xFFFF3B30)
+                        run.conclusion == "cancelled" -> Icons.Rounded.RemoveCircle to Color(0xFF8E8E93)
+                        run.status == "queued" -> Icons.Rounded.Schedule to Color(0xFFFF9500)
+                        else -> Icons.Rounded.Circle to TextTertiary
+                    }
+                    Icon(statusIcon, null, Modifier.size(20.dp), tint = statusColor)
+                    Column(Modifier.weight(1f)) {
+                        Text(run.name, fontSize = 14.sp, color = TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("#${run.runNumber}", fontSize = 11.sp, color = TextTertiary)
+                            Text(run.branch, fontSize = 11.sp, color = Blue)
+                            Text(run.event, fontSize = 11.sp, color = TextTertiary)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 2.dp)) {
+                            Text(run.actor, fontSize = 10.sp, color = TextSecondary)
+                            Text(run.createdAt.take(10), fontSize = 10.sp, color = TextTertiary)
+                        }
+                        // Rerun / Cancel for in_progress
+                        if (run.status == "in_progress" || run.conclusion == "failure") {
+                            Spacer(Modifier.height(4.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Chip(Icons.Rounded.Refresh, Strings.ghRerun) {
+                                    scope.launch {
+                                        val ok = GitHubManager.rerunWorkflow(context, repo.owner, repo.name, run.id)
+                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                if (run.status == "in_progress") {
+                                    Chip(Icons.Rounded.Cancel, Strings.cancel, Color(0xFFFF3B30)) {
+                                        scope.launch {
+                                            val ok = GitHubManager.cancelWorkflowRun(context, repo.owner, repo.name, run.id)
+                                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+                }
+                Box(Modifier.fillMaxWidth().padding(start = 46.dp).height(0.5.dp).background(SeparatorColor))
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════
+// Workflow Run Detail — jobs + steps
+// ═══════════════════════════════════
+
+@Composable
+private fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Unit) {
+    val context = LocalContext.current; val scope = rememberCoroutineScope()
+    var jobs by remember { mutableStateOf<List<GHJob>>(emptyList()) }
+    var artifacts by remember { mutableStateOf<List<GHArtifact>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var logsText by remember { mutableStateOf<String?>(null) }
+    var downloading by remember { mutableStateOf<Long?>(null) } // artifact id being downloaded
+
+    LaunchedEffect(runId) {
+        jobs = GitHubManager.getWorkflowRunJobs(context, repo.owner, repo.name, runId)
+        artifacts = GitHubManager.getRunArtifacts(context, repo.owner, repo.name, runId)
+        loading = false
+    }
+
+    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+        GHTopBar("Run #$runId", onBack = onBack) {
+            IconButton(onClick = {
+                scope.launch {
+                    logsText = GitHubManager.getWorkflowRunLogs(context, repo.owner, repo.name, runId)
+                }
+            }) { Icon(Icons.Rounded.Article, null, Modifier.size(20.dp), tint = Blue) }
+            IconButton(onClick = {
+                scope.launch {
+                    val ok = GitHubManager.rerunWorkflow(context, repo.owner, repo.name, runId)
+                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                }
+            }) { Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue) }
+        }
+
+        // Logs overlay
+        if (logsText != null) {
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF1E1E22)).clickable { logsText = null }.padding(10.dp)) {
+                Text(logsText!!, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFD4D4D4), maxLines = 5)
+            }
+        }
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+        } else {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+                items(jobs) { job ->
+                    // Job header
+                    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val jColor = when (job.conclusion) { "success" -> Color(0xFF34C759); "failure" -> Color(0xFFFF3B30); else -> Color(0xFFFF9500) }
+                            Icon(when (job.conclusion) { "success" -> Icons.Rounded.CheckCircle; "failure" -> Icons.Rounded.Cancel; else -> Icons.Rounded.Refresh }, null, Modifier.size(18.dp), tint = jColor)
+                            Text(job.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        }
+                        // Duration
+                        if (job.startedAt.isNotBlank() && job.completedAt.isNotBlank()) {
+                            Text("${job.startedAt.take(19)} → ${job.completedAt.take(19)}", fontSize = 10.sp, color = TextTertiary, modifier = Modifier.padding(start = 26.dp))
+                        }
+
+                        // Steps
+                        Spacer(Modifier.height(6.dp))
+                        job.steps.forEach { step ->
+                            Row(Modifier.fillMaxWidth().padding(start = 26.dp, top = 3.dp, bottom = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val sColor = when (step.conclusion) { "success" -> Color(0xFF34C759); "failure" -> Color(0xFFFF3B30); "skipped" -> Color(0xFF8E8E93); else -> Color(0xFFFF9500) }
+                                val sIcon = when (step.conclusion) { "success" -> Icons.Rounded.Check; "failure" -> Icons.Rounded.Close; "skipped" -> Icons.Rounded.Remove; else -> Icons.Rounded.Refresh }
+                                Icon(sIcon, null, Modifier.size(14.dp), tint = sColor)
+                                Text(step.name, fontSize = 12.sp, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+                        Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor))
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+
+                // ─── Artifacts section ───
+                if (artifacts.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                        Text(Strings.ghArtifacts, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    items(artifacts) { artifact ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceWhite)
+                                .clickable(enabled = !artifact.expired && downloading != artifact.id) {
+                                    downloading = artifact.id
+                                    scope.launch {
+                                        val dest = File(
+                                            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                                            "GlassFiles_Git/${artifact.name}.zip"
+                                        )
+                                        val ok = GitHubManager.downloadArtifact(context, repo.owner, repo.name, artifact.id, dest)
+                                        Toast.makeText(context, if (ok) "${Strings.done}: ${dest.name}" else Strings.error, Toast.LENGTH_SHORT).show()
+                                        downloading = null
+                                    }
+                                }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.Archive, null, Modifier.size(24.dp),
+                                tint = if (artifact.expired) TextTertiary else Blue
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(artifact.name, fontSize = 14.sp, color = if (artifact.expired) TextTertiary else TextPrimary,
+                                    fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(fmtSize(artifact.sizeInBytes), fontSize = 11.sp, color = TextSecondary)
+                                    if (artifact.expired) {
+                                        Text(Strings.ghExpired, fontSize = 11.sp, color = Color(0xFFFF3B30))
+                                    } else {
+                                        Text(artifact.createdAt.take(10), fontSize = 11.sp, color = TextTertiary)
+                                    }
+                                }
+                            }
+                            if (downloading == artifact.id) {
+                                CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
+                            } else if (!artifact.expired) {
+                                Icon(Icons.Rounded.Download, null, Modifier.size(18.dp), tint = Blue)
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════
+// Notifications Screen
+// ═══════════════════════════════════
+
+@Composable
+private fun NotificationsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current; val scope = rememberCoroutineScope()
+    var notifications by remember { mutableStateOf<List<GHNotification>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var showAll by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showAll) {
+        loading = true
+        notifications = GitHubManager.getNotifications(context, all = showAll)
+        loading = false
+    }
+
+    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+        GHTopBar(Strings.ghNotifications, onBack = onBack) {
+            // Toggle all/unread
+            Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (showAll) Blue.copy(0.15f) else SurfaceLight)
+                .clickable { showAll = !showAll }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Text(if (showAll) "All" else Strings.ghUnread, fontSize = 11.sp, color = if (showAll) Blue else TextSecondary)
+            }
+            // Mark all read
+            IconButton(onClick = {
+                scope.launch {
+                    GitHubManager.markAllNotificationsRead(context)
+                    notifications = GitHubManager.getNotifications(context, all = showAll)
+                }
+            }) { Icon(Icons.Rounded.DoneAll, null, Modifier.size(20.dp), tint = Blue) }
+        }
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+        } else if (notifications.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Rounded.NotificationsNone, null, Modifier.size(48.dp), tint = TextTertiary)
+                    Spacer(Modifier.height(8.dp))
+                    Text(Strings.ghNoNotifications, fontSize = 14.sp, color = TextTertiary)
+                }
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                items(notifications) { n ->
+                    Row(Modifier.fillMaxWidth()
+                        .background(if (n.unread) Blue.copy(0.04f) else Color.Transparent)
+                        .clickable {
+                            if (n.unread) scope.launch {
+                                GitHubManager.markNotificationRead(context, n.id)
+                                notifications = GitHubManager.getNotifications(context, all = showAll)
+                            }
+                        }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                        // Type icon
+                        val (icon, iconColor) = when (n.type) {
+                            "Issue" -> Icons.Rounded.RadioButtonUnchecked to Color(0xFF34C759)
+                            "PullRequest" -> Icons.Rounded.CallMerge to Color(0xFF8957E5)
+                            "Release" -> Icons.Rounded.NewReleases to Blue
+                            else -> Icons.Rounded.Notifications to TextSecondary
+                        }
+                        Icon(icon, null, Modifier.size(20.dp), tint = iconColor)
+                        Column(Modifier.weight(1f)) {
+                            Text(n.title, fontSize = 14.sp, color = TextPrimary, maxLines = 2,
+                                fontWeight = if (n.unread) FontWeight.SemiBold else FontWeight.Normal)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(n.repoName.substringAfter("/"), fontSize = 11.sp, color = Blue, maxLines = 1)
+                                Text(n.reason, fontSize = 10.sp, color = TextTertiary)
+                                Text(n.updatedAt.take(10), fontSize = 10.sp, color = TextTertiary)
+                            }
+                        }
+                        if (n.unread) Box(Modifier.size(8.dp).clip(CircleShape).background(Blue))
+                    }
+                    Box(Modifier.fillMaxWidth().padding(start = 46.dp).height(0.5.dp).background(SeparatorColor))
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════
+// Syntax Highlighted Text
+// ═══════════════════════════════════
+
+@Composable
+private fun SyntaxHighlightedText(code: String, extension: String) {
+    val lines = code.lines()
+    val isCode = extension.lowercase() in listOf(
+        "kt", "java", "py", "js", "ts", "tsx", "jsx", "c", "cpp", "h", "hpp", "cs",
+        "go", "rs", "swift", "rb", "php", "dart", "scala", "sh", "bash", "lua", "r",
+        "html", "xml", "css", "scss", "json", "yaml", "yml", "toml", "sql", "gradle"
+    )
+    if (!isCode) {
+        Text(code, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFD4D4D4), lineHeight = 18.sp)
+        return
+    }
+
+    // Keyword sets
+    val keywords = setOf(
+        "fun", "val", "var", "class", "object", "interface", "enum", "data", "sealed", "abstract",
+        "override", "private", "public", "protected", "internal", "open", "final", "companion",
+        "import", "package", "return", "if", "else", "when", "for", "while", "do", "break", "continue",
+        "try", "catch", "finally", "throw", "is", "as", "in", "by", "init", "constructor", "suspend",
+        "function", "const", "let", "def", "self", "this", "super", "new", "delete", "typeof", "instanceof",
+        "static", "void", "int", "long", "float", "double", "boolean", "char", "string", "byte",
+        "true", "false", "null", "nil", "None", "True", "False",
+        "struct", "impl", "trait", "pub", "fn", "mut", "use", "mod", "crate", "extern",
+        "from", "with", "yield", "async", "await", "lambda", "raise", "except", "pass",
+        "switch", "case", "default", "goto", "volatile", "register", "typedef", "sizeof",
+        "#include", "#define", "#ifdef", "#endif", "#import"
+    )
+
+    val kwColor = Color(0xFFC586C0)       // purple — keywords
+    val strColor = Color(0xFFCE9178)      // orange — strings
+    val commentColor = Color(0xFF6A9955)  // green — comments
+    val numColor = Color(0xFFB5CEA8)      // light green — numbers
+    val typeColor = Color(0xFF4EC9B0)     // teal — types
+    val defaultColor = Color(0xFFD4D4D4)
+    val lineNumColor = Color(0xFF5A5A5A)
+
+    Column {
+        lines.forEachIndexed { idx, line ->
+            Row {
+                // Line number
+                Text(
+                    "${idx + 1}".padStart(4),
+                    fontSize = 11.sp, fontFamily = FontFamily.Monospace,
+                    color = lineNumColor, modifier = Modifier.padding(end = 12.dp)
+                )
+                // Highlighted line
+                Text(
+                    highlightLine(line, keywords, kwColor, strColor, commentColor, numColor, typeColor, defaultColor),
+                    fontSize = 12.sp, fontFamily = FontFamily.Monospace, lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+private fun highlightLine(
+    line: String, keywords: Set<String>,
+    kwColor: Color, strColor: Color, commentColor: Color, numColor: Color, typeColor: Color, defaultColor: Color
+): androidx.compose.ui.text.AnnotatedString {
+    return androidx.compose.ui.text.buildAnnotatedString {
+        var i = 0
+        val len = line.length
+
+        // Check for line comment
+        val commentIdx = findCommentStart(line)
+        val commentStart = commentIdx
+
+        while (i < len) {
+            // Comment from this point
+            if (commentStart >= 0 && i >= commentStart) {
+                pushStyle(androidx.compose.ui.text.SpanStyle(color = commentColor))
+                append(line.substring(i))
+                pop()
+                break
+            }
+            // String literal
+            if (line[i] == '"' || line[i] == '\'') {
+                val quote = line[i]
+                val start = i; i++
+                while (i < len && line[i] != quote) { if (line[i] == '\\') i++; i++ }
+                if (i < len) i++ // closing quote
+                pushStyle(androidx.compose.ui.text.SpanStyle(color = strColor))
+                append(line.substring(start, i))
+                pop()
+                continue
+            }
+            // Number
+            if (line[i].isDigit() && (i == 0 || !line[i - 1].isLetterOrDigit())) {
+                val start = i
+                while (i < len && (line[i].isDigit() || line[i] == '.' || line[i] == 'x' || line[i] == 'f' || line[i] == 'L')) i++
+                pushStyle(androidx.compose.ui.text.SpanStyle(color = numColor))
+                append(line.substring(start, i))
+                pop()
+                continue
+            }
+            // Word
+            if (line[i].isLetter() || line[i] == '_' || line[i] == '#' || line[i] == '@') {
+                val start = i
+                while (i < len && (line[i].isLetterOrDigit() || line[i] == '_')) i++
+                val word = line.substring(start, i)
+                val color = when {
+                    word in keywords -> kwColor
+                    word.first().isUpperCase() && word.length > 1 -> typeColor
+                    word.startsWith("@") -> Color(0xFFDCDCAA) // annotation
+                    else -> defaultColor
+                }
+                pushStyle(androidx.compose.ui.text.SpanStyle(color = color))
+                append(word)
+                pop()
+                continue
+            }
+            // Other chars
+            pushStyle(androidx.compose.ui.text.SpanStyle(color = defaultColor))
+            append(line[i])
+            pop()
+            i++
+        }
+    }
+}
+
+private fun findCommentStart(line: String): Int {
+    val trimmed = line.trimStart()
+    val offset = line.length - trimmed.length
+    return when {
+        trimmed.startsWith("//") -> offset
+        trimmed.startsWith("#") && !trimmed.startsWith("#include") && !trimmed.startsWith("#define") && !trimmed.startsWith("#import") -> offset
+        trimmed.startsWith("--") -> offset
+        else -> {
+            // Find // not inside string
+            var i = 0; var inStr = false; var q = ' '
+            while (i < line.length - 1) {
+                if (!inStr && (line[i] == '"' || line[i] == '\'')) { inStr = true; q = line[i] }
+                else if (inStr && line[i] == q && (i == 0 || line[i-1] != '\\')) inStr = false
+                else if (!inStr && line[i] == '/' && line[i+1] == '/') return i
+                i++
+            }
+            -1
+        }
+    }
+}

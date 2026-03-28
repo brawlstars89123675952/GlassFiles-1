@@ -910,6 +910,10 @@ val ghSuccess get() = s("Успешно", "Success")
 val ghFailed get() = s("Ошибка", "Failed")
 val ghCancelled get() = s("Отменён", "Cancelled")
 val ghRerun get() = s("Перезапустить", "Rerun")
+val ghRunWorkflow get() = s("Запустить сборку", "Run workflow")
+val ghArtifacts get() = s("Артефакты", "Artifacts")
+val ghExpired get() = s("Истёк", "Expired")
+val ghDownloadArtifact get() = s("Скачать артефакт", "Download artifact")
 val ghViewLogs get() = s("Логи", "Logs")
 val ghTriggeredBy get() = s("Запустил", "Triggered by")
 val ghDuration get() = s("Длительность", "Duration")
@@ -926,4 +930,31 @@ val ghUploadToGitHub get() = s("Загрузить в GitHub", "Upload to GitHub
 val ghSelectRepo get() = s("Выберите репозиторий", "Select repository")
 val ghUploadingFile get() = s("Загрузка файла...", "Uploading file...")
 val ghUploadSuccess get() = s("Файл загружен в GitHub", "File uploaded to GitHub")
+// Watch
+val ghWatch get() = s("Отслеживать", "Watch")
+val ghUnwatch get() = s("Не отслеживать", "Unwatch")
+// Code search
+val ghSearchCode get() = s("Поиск по коду", "Search code")
+val ghSearchCodeHint get() = s("Искать в коде...", "Search in code...")
+val ghNoResults get() = s("Нет результатов", "No results")
+// Profiles
+val ghProfile get() = s("Профиль", "Profile")
+val ghFollow get() = s("Подписаться", "Follow")
+val ghUnfollow get() = s("Отписаться", "Unfollow")
+val ghJoined get() = s("Присоединился", "Joined")
+val ghCompany get() = s("Компания", "Company")
+val ghLocation get() = s("Местоположение", "Location")
+val ghBlog get() = s("Блог", "Blog")
+// Starred & Orgs
+val ghStarredRepos get() = s("Избранные", "Starred")
+val ghOrganizations get() = s("Организации", "Organizations")
+// Labels & Milestones
+val ghManageLabels get() = s("Метки", "Labels")
+val ghNewLabel get() = s("Новая метка", "New label")
+val ghLabelColor get() = s("Цвет (hex)", "Color (hex)")
+val ghMilestones get() = s("Вехи", "Milestones")
+val ghNewMilestone get() = s("Новая веха", "New milestone")
+val ghDueDate get() = s("Срок", "Due date")
+// Batch
+val ghBatchUpload get() = s("Загрузить папку", "Upload folder")
 }

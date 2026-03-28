@@ -686,6 +686,376 @@ object GitHubManager {
     }
 
     // ═══════════════════════════════════
+    // GitHub Actions (Workflows & Runs)
+    // ═══════════════════════════════════
+
+    suspend fun getWorkflows(context: Context, owner: String, repo: String): List<GHWorkflow> {
+        val r = request(context, "/repos/$owner/$repo/actions/workflows?per_page=30")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).getJSONArray("workflows")
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHWorkflow(id = j.optLong("id"), name = j.optString("name"), state = j.optString("state"), path = j.optString("path"))
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getWorkflowRuns(context: Context, owner: String, repo: String, workflowId: Long? = null, perPage: Int = 20): List<GHWorkflowRun> {
+        val endpoint = if (workflowId != null) "/repos/$owner/$repo/actions/workflows/$workflowId/runs?per_page=$perPage"
+            else "/repos/$owner/$repo/actions/runs?per_page=$perPage"
+        val r = request(context, endpoint)
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).getJSONArray("workflow_runs")
+            (0 until arr.length()).map { i -> parseWorkflowRun(arr.getJSONObject(i)) }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getWorkflowRunJobs(context: Context, owner: String, repo: String, runId: Long): List<GHJob> {
+        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/jobs")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).getJSONArray("jobs")
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                val steps = mutableListOf<GHStep>()
+                val stepsArr = j.optJSONArray("steps")
+                if (stepsArr != null) for (s in 0 until stepsArr.length()) {
+                    val sj = stepsArr.getJSONObject(s)
+                    steps.add(GHStep(name = sj.optString("name"), status = sj.optString("status"), conclusion = sj.optString("conclusion", ""), number = sj.optInt("number")))
+                }
+                GHJob(id = j.optLong("id"), name = j.optString("name"), status = j.optString("status"),
+                    conclusion = j.optString("conclusion", ""), startedAt = j.optString("started_at", ""),
+                    completedAt = j.optString("completed_at", ""), steps = steps)
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getWorkflowRunLogs(context: Context, owner: String, repo: String, runId: Long): String =
+        withContext(Dispatchers.IO) {
+            try {
+                val token = getToken(context)
+                val url = "$API/repos/$owner/$repo/actions/runs/$runId/logs"
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    setRequestProperty("Authorization", "Bearer $token")
+                    setRequestProperty("Accept", "application/vnd.github.v3+json")
+                    instanceFollowRedirects = false; connectTimeout = 15000; readTimeout = 15000
+                }
+                // GitHub returns 302 redirect to the zip URL
+                val code = conn.responseCode
+                if (code == 302) {
+                    val location = conn.getHeaderField("Location")
+                    conn.disconnect()
+                    if (location != null) "Logs URL: $location" else "No logs available"
+                } else {
+                    conn.disconnect()
+                    "Logs: HTTP $code"
+                }
+            } catch (e: Exception) { "Error: ${e.message}" }
+        }
+
+    suspend fun rerunWorkflow(context: Context, owner: String, repo: String, runId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/runs/$runId/rerun", "POST", "{}").success
+
+    suspend fun cancelWorkflowRun(context: Context, owner: String, repo: String, runId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/runs/$runId/cancel", "POST", "{}").success
+
+    /** Trigger a workflow manually (requires workflow_dispatch in .yml) */
+    suspend fun dispatchWorkflow(context: Context, owner: String, repo: String, workflowId: Long, branch: String, inputs: Map<String, String> = emptyMap()): Boolean {
+        val body = JSONObject().apply {
+            put("ref", branch)
+            if (inputs.isNotEmpty()) {
+                val inputsObj = JSONObject()
+                inputs.forEach { (k, v) -> inputsObj.put(k, v) }
+                put("inputs", inputsObj)
+            }
+        }.toString()
+        return request(context, "/repos/$owner/$repo/actions/workflows/$workflowId/dispatches", "POST", body).let { it.code == 204 || it.success }
+    }
+
+    // ═══════════════════════════════════
+    // Build Artifacts
+    // ═══════════════════════════════════
+
+    suspend fun getRunArtifacts(context: Context, owner: String, repo: String, runId: Long): List<GHArtifact> {
+        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/artifacts")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).getJSONArray("artifacts")
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHArtifact(
+                    id = j.optLong("id"), name = j.optString("name"),
+                    sizeInBytes = j.optLong("size_in_bytes", 0),
+                    expired = j.optBoolean("expired", false),
+                    createdAt = j.optString("created_at", ""),
+                    expiresAt = j.optString("expires_at", "")
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /** Download artifact zip to device */
+    suspend fun downloadArtifact(context: Context, owner: String, repo: String, artifactId: Long, destFile: java.io.File): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val token = getToken(context)
+                val url = "$API/repos/$owner/$repo/actions/artifacts/$artifactId/zip"
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    setRequestProperty("Authorization", "Bearer $token")
+                    setRequestProperty("Accept", "application/vnd.github.v3+json")
+                    instanceFollowRedirects = true
+                    connectTimeout = 15000; readTimeout = 60000
+                }
+                val code = conn.responseCode
+                if (code != 200) { conn.disconnect(); return@withContext false }
+                destFile.parentFile?.mkdirs()
+                conn.inputStream.use { input -> destFile.outputStream().use { out -> input.copyTo(out) } }
+                conn.disconnect()
+                true
+            } catch (e: Exception) { Log.e(TAG, "Download artifact: ${e.message}"); false }
+        }
+
+    private fun parseWorkflowRun(j: JSONObject) = GHWorkflowRun(
+        id = j.optLong("id"), name = j.optString("name"), status = j.optString("status"),
+        conclusion = j.optString("conclusion", ""), branch = j.optString("head_branch", ""),
+        event = j.optString("event", ""), createdAt = j.optString("created_at", ""),
+        updatedAt = j.optString("updated_at", ""), runNumber = j.optInt("run_number"),
+        actor = j.optJSONObject("actor")?.optString("login") ?: "",
+        actorAvatar = j.optJSONObject("actor")?.optString("avatar_url") ?: "",
+        workflowId = j.optLong("workflow_id")
+    )
+
+    // ═══════════════════════════════════
+    // Notifications
+    // ═══════════════════════════════════
+
+    suspend fun getNotifications(context: Context, all: Boolean = false): List<GHNotification> {
+        val r = request(context, "/notifications?all=$all&per_page=50")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                val sub = j.optJSONObject("subject")
+                val repo = j.optJSONObject("repository")
+                GHNotification(
+                    id = j.optString("id"), unread = j.optBoolean("unread", false),
+                    reason = j.optString("reason", ""),
+                    title = sub?.optString("title") ?: "", type = sub?.optString("type") ?: "",
+                    repoName = repo?.optString("full_name") ?: "",
+                    updatedAt = j.optString("updated_at", ""),
+                    url = sub?.optString("url") ?: ""
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun markNotificationRead(context: Context, threadId: String): Boolean =
+        request(context, "/notifications/threads/$threadId", "PATCH").let { it.code == 205 || it.success }
+
+    suspend fun markAllNotificationsRead(context: Context): Boolean =
+        request(context, "/notifications", "PUT", "{\"read\":true}").let { it.code == 205 || it.success }
+
+    // ═══════════════════════════════════
+    // Watch / Unwatch
+    // ═══════════════════════════════════
+
+    suspend fun isWatching(context: Context, owner: String, repo: String): Boolean {
+        val r = request(context, "/repos/$owner/$repo/subscription")
+        return r.success && JSONObject(r.body).optBoolean("subscribed", false)
+    }
+
+    suspend fun watchRepo(context: Context, owner: String, repo: String): Boolean =
+        request(context, "/repos/$owner/$repo/subscription", "PUT", "{\"subscribed\":true}").success
+
+    suspend fun unwatchRepo(context: Context, owner: String, repo: String): Boolean =
+        request(context, "/repos/$owner/$repo/subscription", "DELETE").let { it.code == 204 || it.success }
+
+    // ═══════════════════════════════════
+    // Code Search
+    // ═══════════════════════════════════
+
+    suspend fun searchCode(context: Context, query: String, owner: String, repo: String): List<GHCodeResult> {
+        val q = java.net.URLEncoder.encode("$query repo:$owner/$repo", "UTF-8")
+        val r = request(context, "/search/code?q=$q&per_page=20")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).getJSONArray("items")
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHCodeResult(
+                    name = j.optString("name"), path = j.optString("path"),
+                    sha = j.optString("sha"), htmlUrl = j.optString("html_url", ""),
+                    score = j.optDouble("score", 0.0)
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    // ═══════════════════════════════════
+    // User Profiles & Follow
+    // ═══════════════════════════════════
+
+    suspend fun getUserProfile(context: Context, username: String): GHUserProfile? {
+        val r = request(context, "/users/$username")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            GHUserProfile(
+                login = j.optString("login"), name = j.optString("name", ""),
+                avatarUrl = j.optString("avatar_url", ""), bio = j.optString("bio", ""),
+                company = j.optString("company", ""), location = j.optString("location", ""),
+                blog = j.optString("blog", ""), publicRepos = j.optInt("public_repos", 0),
+                followers = j.optInt("followers", 0), following = j.optInt("following", 0),
+                createdAt = j.optString("created_at", "")
+            )
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun getUserRepos(context: Context, username: String): List<GHRepo> {
+        val r = request(context, "/users/$username/repos?sort=updated&per_page=30")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { parseRepo(arr.getJSONObject(it)) }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun isFollowing(context: Context, username: String): Boolean =
+        request(context, "/user/following/$username").code == 204
+
+    suspend fun followUser(context: Context, username: String): Boolean =
+        request(context, "/user/following/$username", "PUT").let { it.code == 204 || it.success }
+
+    suspend fun unfollowUser(context: Context, username: String): Boolean =
+        request(context, "/user/following/$username", "DELETE").let { it.code == 204 || it.success }
+
+    // ═══════════════════════════════════
+    // Starred Repos
+    // ═══════════════════════════════════
+
+    suspend fun getStarredRepos(context: Context, page: Int = 1): List<GHRepo> {
+        val r = request(context, "/user/starred?sort=created&per_page=30&page=$page")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { parseRepo(arr.getJSONObject(it)) }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    // ═══════════════════════════════════
+    // Organizations
+    // ═══════════════════════════════════
+
+    suspend fun getOrganizations(context: Context): List<GHOrg> {
+        val r = request(context, "/user/orgs?per_page=30")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHOrg(login = j.optString("login"), avatarUrl = j.optString("avatar_url", ""),
+                    description = j.optString("description", ""))
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getOrgRepos(context: Context, org: String): List<GHRepo> {
+        val r = request(context, "/orgs/$org/repos?sort=updated&per_page=30")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { parseRepo(arr.getJSONObject(it)) }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    // ═══════════════════════════════════
+    // Labels
+    // ═══════════════════════════════════
+
+    suspend fun getLabels(context: Context, owner: String, repo: String): List<GHLabel> {
+        val r = request(context, "/repos/$owner/$repo/labels?per_page=50")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHLabel(name = j.optString("name"), color = j.optString("color", ""), description = j.optString("description", ""))
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun createLabel(context: Context, owner: String, repo: String, name: String, color: String, description: String = ""): Boolean {
+        val body = JSONObject().apply { put("name", name); put("color", color.removePrefix("#")); put("description", description) }.toString()
+        return request(context, "/repos/$owner/$repo/labels", "POST", body).success
+    }
+
+    suspend fun deleteLabel(context: Context, owner: String, repo: String, name: String): Boolean =
+        request(context, "/repos/$owner/$repo/labels/${java.net.URLEncoder.encode(name, "UTF-8")}", "DELETE").let { it.code == 204 || it.success }
+
+    suspend fun addLabelsToIssue(context: Context, owner: String, repo: String, issueNumber: Int, labels: List<String>): Boolean {
+        val body = JSONObject().apply { put("labels", JSONArray(labels)) }.toString()
+        return request(context, "/repos/$owner/$repo/issues/$issueNumber/labels", "POST", body).success
+    }
+
+    // ═══════════════════════════════════
+    // Milestones
+    // ═══════════════════════════════════
+
+    suspend fun getMilestones(context: Context, owner: String, repo: String): List<GHMilestone> {
+        val r = request(context, "/repos/$owner/$repo/milestones?per_page=30")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHMilestone(
+                    number = j.optInt("number"), title = j.optString("title"),
+                    description = j.optString("description", ""), state = j.optString("state"),
+                    openIssues = j.optInt("open_issues"), closedIssues = j.optInt("closed_issues"),
+                    dueOn = j.optString("due_on", "")
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun createMilestone(context: Context, owner: String, repo: String, title: String, description: String = "", dueOn: String? = null): Boolean {
+        val body = JSONObject().apply {
+            put("title", title); put("description", description)
+            if (dueOn != null) put("due_on", dueOn)
+        }.toString()
+        return request(context, "/repos/$owner/$repo/milestones", "POST", body).success
+    }
+
+    // ═══════════════════════════════════
+    // Batch Upload (folder → repo)
+    // ═══════════════════════════════════
+
+    /** Upload all files from a local directory as a single commit */
+    suspend fun uploadDirectory(
+        context: Context, owner: String, repo: String, branch: String,
+        localDir: java.io.File, repoBasePath: String = "", message: String,
+        onProgress: (Int, Int) -> Unit = { _, _ -> }
+    ): Boolean {
+        val allFiles = mutableListOf<Pair<String, ByteArray>>()
+        collectFiles(localDir, localDir, repoBasePath, allFiles)
+        if (allFiles.isEmpty()) return false
+        return uploadMultipleFiles(context, owner, repo, branch, allFiles, message, onProgress)
+    }
+
+    private fun collectFiles(root: java.io.File, current: java.io.File, basePath: String, result: MutableList<Pair<String, ByteArray>>) {
+        current.listFiles()?.forEach { f ->
+            val rel = if (basePath.isNotBlank()) "$basePath/${f.name}" else f.name
+            if (f.isDirectory) collectFiles(root, f, rel, result)
+            else if (f.length() < 50 * 1024 * 1024) { // skip files > 50MB (GitHub limit)
+                try { result.add(rel to f.readBytes()) } catch (_: Exception) {}
+            }
+        }
+    }
+
+    // ═══════════════════════════════════
     // Helpers
     // ═══════════════════════════════════
 
@@ -750,3 +1120,33 @@ data class GHCommitDetail(val sha: String, val message: String, val author: Stri
     val files: List<GHDiffFile>, val totalAdditions: Int, val totalDeletions: Int)
 
 data class GHDiffFile(val filename: String, val status: String, val additions: Int, val deletions: Int, val patch: String)
+
+data class GHWorkflow(val id: Long, val name: String, val state: String, val path: String)
+
+data class GHWorkflowRun(val id: Long, val name: String, val status: String, val conclusion: String,
+    val branch: String, val event: String, val createdAt: String, val updatedAt: String,
+    val runNumber: Int, val actor: String, val actorAvatar: String, val workflowId: Long)
+
+data class GHJob(val id: Long, val name: String, val status: String, val conclusion: String,
+    val startedAt: String, val completedAt: String, val steps: List<GHStep>)
+
+data class GHStep(val name: String, val status: String, val conclusion: String, val number: Int)
+
+data class GHNotification(val id: String, val unread: Boolean, val reason: String,
+    val title: String, val type: String, val repoName: String, val updatedAt: String, val url: String)
+
+data class GHArtifact(val id: Long, val name: String, val sizeInBytes: Long,
+    val expired: Boolean, val createdAt: String, val expiresAt: String)
+
+data class GHCodeResult(val name: String, val path: String, val sha: String, val htmlUrl: String, val score: Double)
+
+data class GHUserProfile(val login: String, val name: String, val avatarUrl: String, val bio: String,
+    val company: String, val location: String, val blog: String,
+    val publicRepos: Int, val followers: Int, val following: Int, val createdAt: String)
+
+data class GHOrg(val login: String, val avatarUrl: String, val description: String)
+
+data class GHLabel(val name: String, val color: String, val description: String)
+
+data class GHMilestone(val number: Int, val title: String, val description: String, val state: String,
+    val openIssues: Int, val closedIssues: Int, val dueOn: String)

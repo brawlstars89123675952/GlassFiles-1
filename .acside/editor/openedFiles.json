@@ -50,13 +50,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 45485,
-          "line": 929
+          "index": 46917,
+          "line": 960
         },
         "start": {
           "column": 0,
-          "index": 45485,
-          "line": 929
+          "index": 46917,
+          "line": 960
         }
       }
     },
@@ -65,13 +65,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 35301,
-          "line": 752
+          "index": 55339,
+          "line": 1152
         },
         "start": {
           "column": 0,
-          "index": 35301,
-          "line": 752
+          "index": 55339,
+          "line": 1152
         }
       }
     },
@@ -80,13 +80,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 64078,
-          "line": 448
+          "index": 106895,
+          "line": 1171
         },
         "start": {
           "column": 0,
-          "index": 64078,
-          "line": 448
+          "index": 106895,
+          "line": 1171
         }
       }
     },
@@ -121,5 +121,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/screens/GitHubScreen.kt"
+  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/Localization.kt"
 }
