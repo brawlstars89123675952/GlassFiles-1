@@ -9,9 +9,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.*
@@ -22,11 +25,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -60,7 +68,15 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
     var aiInitialImage by remember { mutableStateOf<String?>(null) }
     var selectedTagName by remember { mutableStateOf("") }
 
+    // GitHub persistent state — like terminal, stays alive when minimized
+    var githubWasOpened by remember { mutableStateOf(false) }
+    var githubMiniMode by remember { mutableStateOf(false) } // true = floating mini window
+
     fun navigateTo(screen: AppScreen) {
+        if (screen == AppScreen.GITHUB) {
+            githubWasOpened = true
+            githubMiniMode = false
+        }
         previousScreen = activeScreen
         activeScreen = screen
     }
@@ -78,12 +94,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
         if (result.resultCode == Activity.RESULT_OK) GoogleSignIn.getSignedInAccountFromIntent(result.data).addOnSuccessListener { driveSignedIn = true }
     }
 
-    val tabs = listOf(
-        TabItem(Icons.Outlined.Schedule, Strings.recents),
-        TabItem(Icons.Outlined.People, Strings.shared),
-        TabItem(Icons.Outlined.Folder, Strings.browse),
-        TabItem(Icons.Rounded.Code, "GitHub")
-    )
+    val tabs = listOf(TabItem(Icons.Outlined.Schedule, Strings.recents), TabItem(Icons.Outlined.People, Strings.shared), TabItem(Icons.Outlined.Folder, Strings.browse))
 
     fun openFileExternal(path: String) {
         try {
@@ -95,6 +106,13 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
     }
 
     fun goBack() {
+        // When leaving GitHub fullscreen, minimize to mini-window instead of destroying
+        if (activeScreen == AppScreen.GITHUB && githubWasOpened) {
+            githubMiniMode = true
+            activeScreen = previousScreen
+            previousScreen = AppScreen.MAIN
+            return
+        }
         val prev = previousScreen
         previousScreen = AppScreen.MAIN
         activeScreen = prev
@@ -102,6 +120,11 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
 
     BackHandler(enabled = true) {
         when {
+            activeScreen == AppScreen.GITHUB && githubWasOpened -> {
+                githubMiniMode = true
+                activeScreen = previousScreen
+                previousScreen = AppScreen.MAIN
+            }
             activeScreen != AppScreen.MAIN -> goBack()
             folderStack.isNotEmpty() -> {
                 folderStack = folderStack.dropLast(1)
@@ -122,6 +145,30 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                 }
             ) {
                 TerminalScreen(initialDir = terminalDir, onBackClick = { goBack() }, onOpenFile = { openFileExternal(it) })
+            }
+        }
+
+        // GitHub layer — persistent, always alive when opened (like terminal)
+        if (githubWasOpened) {
+            Box(Modifier.fillMaxSize()
+                .graphicsLayer {
+                    alpha = if (activeScreen == AppScreen.GITHUB && !githubMiniMode) 1f else 0f
+                }
+            ) {
+                GitHubScreen(
+                    onBack = {
+                        githubMiniMode = true
+                        val prev = previousScreen
+                        activeScreen = prev
+                        previousScreen = AppScreen.MAIN
+                    },
+                    onMinimize = {
+                        githubMiniMode = true
+                        val prev = previousScreen
+                        activeScreen = prev
+                        previousScreen = AppScreen.MAIN
+                    }
+                )
             }
         }
 
@@ -181,7 +228,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                 AppScreen.FTP -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { FtpScreen(onBack = { goBack() }) }
                 AppScreen.DUAL_PANE -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { DualPaneScreen(onBack = { goBack() }, appSettings = settings) }
                 AppScreen.THEME -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { ThemeScreen(settings = settings, onBack = { goBack() }) }
-                AppScreen.GITHUB -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { GitHubScreen(onBack = { goBack() }) }
+                AppScreen.GITHUB -> Box(Modifier.fillMaxSize()) // Content in persistent layer above
                 AppScreen.MAIN -> {
                     Box(Modifier.fillMaxSize().background(SurfaceLight).layerBackdrop(backdrop)) {
                         AnimatedContent(
@@ -278,9 +325,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                                             onDualPane = { navigateTo(AppScreen.DUAL_PANE) },
                                             onTheme = { navigateTo(AppScreen.THEME) },
                                             onGitHub = { navigateTo(AppScreen.GITHUB) },
-                                            onSettings = { navigateTo(AppScreen.SETTINGS) },
                                             onTagClick = { tag -> selectedTagName = tag; navigateTo(AppScreen.TAGGED_FILES) })
-                                        3 -> GitHubScreen(onBack = { selectedTab = 2 })
                                     }
                                 }
                             }
@@ -294,7 +339,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                             Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 168.dp).clickable { navigateTo(AppScreen.AI_CHAT) }) {
                                 GlassFab(backdrop, Icons.Rounded.AutoAwesome, iconTint = Color.White, tintColor = Color(0x66238636))
                             }
-                            Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 110.dp).clickable { terminalWasOpened = true; navigateTo(AppScreen.TERMINAL) }) {
+                            Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 112.dp).clickable { terminalWasOpened = true; navigateTo(AppScreen.TERMINAL) }) {
                                 GlassFab(backdrop, Icons.Rounded.Terminal, iconTint = Color(0xFF00E676), tintColor = Color(0x441A1A2E))
                                 if (terminalWasOpened) Box(Modifier.align(Alignment.TopEnd).size(12.dp).background(Color(0xFF00E676), CircleShape))
                             }
@@ -305,6 +350,23 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                     }
                 }
             }
+        }
+
+        // ═══════════════════════════════════
+        // GitHub floating mini-window
+        // ═══════════════════════════════════
+        if (githubWasOpened && githubMiniMode) {
+            GitHubMiniWindow(
+                onExpand = {
+                    githubMiniMode = false
+                    previousScreen = activeScreen
+                    activeScreen = AppScreen.GITHUB
+                },
+                onClose = {
+                    githubMiniMode = false
+                    githubWasOpened = false
+                }
+            )
         }
     }
 }
@@ -321,3 +383,104 @@ private fun PermissionScreen(onRequest: () -> Unit) {
         }
     }
 }
+
+// ═══════════════════════════════════
+// GitHub Floating Mini-Window
+// Draggable, shows GitHub indicator
+// Tap to expand, X to close
+// ═══════════════════════════════════
+
+@Composable
+private fun GitHubMiniWindow(
+    onExpand: () -> Unit,
+    onClose: () -> Unit
+) {
+    val density = LocalDensity.current
+    var offsetX by remember { mutableFloatStateOf(0f) }
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    var isDragging by remember { mutableStateOf(false) }
+
+    // Initial position — bottom-start area, above where bottom bar would be
+    var initialized by remember { mutableStateOf(false) }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val maxW = constraints.maxWidth.toFloat()
+        val maxH = constraints.maxHeight.toFloat()
+        val miniW = with(density) { 200.dp.toPx() }
+        val miniH = with(density) { 72.dp.toPx() }
+
+        if (!initialized) {
+            offsetX = with(density) { 16.dp.toPx() }
+            offsetY = maxH - miniH - with(density) { 100.dp.toPx() }
+            initialized = true
+        }
+
+        Box(
+            Modifier
+                .offset { IntOffset(offsetX.toInt(), offsetY.toInt()) }
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragStart = { isDragging = true },
+                        onDragEnd = { isDragging = false },
+                        onDragCancel = { isDragging = false }
+                    ) { change, dragAmount ->
+                        change.consume()
+                        offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxW - miniW)
+                        offsetY = (offsetY + dragAmount.y).coerceIn(0f, maxH - miniH)
+                    }
+                }
+                .width(200.dp)
+                .shadow(
+                    elevation = if (isDragging) 16.dp else 8.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    ambientColor = Color.Black.copy(0.3f),
+                    spotColor = Color.Black.copy(0.3f)
+                )
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = if (ThemeState.isDark) listOf(Color(0xFF2A2A2E), Color(0xFF1E1E22))
+                        else listOf(Color(0xFFFFFFFF), Color(0xFFF5F5FA))
+                    )
+                )
+                .border(1.dp, if (ThemeState.isDark) Color(0x33FFFFFF) else Color(0x22000000), RoundedCornerShape(16.dp))
+                .clickable { onExpand() }
+                .padding(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // GitHub icon
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .background(Blue.copy(0.12f), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Rounded.Code, null, Modifier.size(22.dp), tint = Blue)
+                }
+
+                // Text
+                Column(Modifier.weight(1f)) {
+                    Text("GitHub", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1)
+                    Text(Strings.ghDropHint, fontSize = 10.sp, color = TextSecondary, maxLines = 1)
+                }
+
+                // Close button
+                Box(
+                    Modifier
+                        .size(24.dp)
+                        .background(Color(0xFFFF3B30).copy(0.12f), CircleShape)
+                        .clickable { onClose() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Rounded.Close, null, Modifier.size(14.dp), tint = Color(0xFFFF3B30))
+                }
+            }
+        }
+    }
+}
+
+

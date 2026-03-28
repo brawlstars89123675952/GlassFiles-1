@@ -64,8 +64,8 @@ import kotlin.math.sign
 
 data class TabItem(val icon: ImageVector, val label: String)
 
-private val BarHeight = 64.dp
-private val CapsuleHeight = 56.dp
+private val BarHeight = 76.dp
+private val CapsuleHeight = 66.dp
 
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 // Glass Bottom Tab Bar (blur=2, \u0431\u043e\u043b\u044c\u0448\u0435 lens)
@@ -85,8 +85,8 @@ fun GlassBottomTabBar(
     val containerColor = if (isLightTheme) Color(0x22F8F8FA) else Color(0x22000000)
     val tabsBackdrop = rememberLayerBackdrop()
 
-    Box(modifier.fillMaxWidth().padding(bottom = 20.dp), contentAlignment = Alignment.BottomCenter) {
-        BoxWithConstraints(Modifier.fillMaxWidth(0.72f), contentAlignment = Alignment.CenterStart) {
+    Box(modifier.fillMaxWidth().padding(bottom = 24.dp), contentAlignment = Alignment.BottomCenter) {
+        BoxWithConstraints(Modifier.fillMaxWidth(0.76f), contentAlignment = Alignment.CenterStart) {
             val density = LocalDensity.current
             val tabWidth = with(density) { (constraints.maxWidth.toFloat() - 8f.dp.toPx()) / tabs.size }
             val offsetAnimation = remember { Animatable(0f) }
@@ -208,9 +208,9 @@ private fun RowScope.LiquidBottomTab(content: @Composable () -> Unit) {
 private fun NavItemContent(item: TabItem, isSelected: Boolean) {
     val color by animateColorAsState(if (isSelected) Blue else Color(0xFF999999), tween(200), label = "nc")
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Icon(item.icon, null, Modifier.size(24.dp), tint = color)
+        Icon(item.icon, null, Modifier.size(26.dp), tint = color)
         Spacer(Modifier.height(2.dp))
-        Text(item.label, color = color, fontSize = 10.sp, fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal)
+        Text(item.label, color = color, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal)
     }
 }
 
