@@ -141,19 +141,12 @@ class AppSettings(context: Context) {
     var fileFontSize by mutableIntStateOf(prefs.getInt("file_font_size", 15))
         private set
 
-    var folderIconStyle by mutableStateOf(
-        try { FolderIconStyle.valueOf(prefs.getString("folder_style", "DEFAULT") ?: "DEFAULT") }
-        catch (_: Exception) { FolderIconStyle.DEFAULT }
-    )
-        private set
-
     fun changeShowHidden(v: Boolean) { showHiddenFiles = v; prefs.edit().putBoolean("show_hidden", v).apply() }
     fun changeDefaultView(v: DefaultView) { defaultView = v; prefs.edit().putString("default_view", v.name).apply() }
     fun changeDefaultSort(v: DefaultSort) { defaultSort = v; prefs.edit().putString("default_sort", v.name).apply() }
     fun changeConfirmDelete(v: Boolean) { confirmDelete = v; prefs.edit().putBoolean("confirm_delete", v).apply() }
     fun changeStartFolder(v: StartFolder) { startFolder = v; prefs.edit().putString("start_folder", v.name).apply() }
     fun changeFileFontSize(v: Int) { fileFontSize = v.coerceIn(12, 20); prefs.edit().putInt("file_font_size", fileFontSize).apply() }
-    fun changeFolderIconStyle(v: FolderIconStyle) { folderIconStyle = v; prefs.edit().putString("folder_style", v.name).apply() }
 
     // ═══ AI ═══
     var aiDefaultModel by mutableStateOf(prefs.getString("ai_default_model", "GEMINI_FLASH") ?: "GEMINI_FLASH")

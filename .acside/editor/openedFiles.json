@@ -80,13 +80,13 @@
       "selection": {
         "end": {
           "column": 0,
-          "index": 9052,
-          "line": 215
+          "index": 8698,
+          "line": 208
         },
         "start": {
           "column": 0,
-          "index": 9052,
-          "line": 215
+          "index": 8698,
+          "line": 208
         }
       }
     },
@@ -106,5 +106,5 @@
       }
     }
   ],
-  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/ui/theme/Color.kt"
+  "selectedFile": "/storage/emulated/0/Download/GlassFiles/GlassFiles/app/src/main/java/com/glassfiles/data/AppSettings.kt"
 }
