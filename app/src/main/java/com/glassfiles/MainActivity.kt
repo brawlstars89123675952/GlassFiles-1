@@ -1,371 +1,336 @@
-package com.glassfiles.data.security
+package com.glassfiles
 
-import android.annotation.SuppressLint
-import android.content.Context
-import android.content.SharedPreferences
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
+import android.os.Bundle
+import android.os.Environment
+import android.os.PowerManager
 import android.provider.Settings
-import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import java.security.MessageDigest
-import java.security.cert.X509Certificate
-import javax.net.ssl.HttpsURLConnection
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
+import android.view.WindowManager
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.glassfiles.BuildConfig
+import com.glassfiles.data.AppSettings
+import com.glassfiles.data.security.LicenseManager
+import com.glassfiles.security.SecurityManager
+import com.glassfiles.ui.GlassFilesApp
+import com.glassfiles.ui.screens.OnboardingScreen
+import com.glassfiles.ui.theme.*
 
-/**
- * GlassFiles Server License Manager — Hardened
- *
- * Security layers:
- * 1. Certificate pinning (Cloudflare)
- * 2. HMAC token verification
- * 3. APK signature check
- * 4. Device fingerprint
- * 5. Multiple scattered check points
- * 6. Anti-tamper: integrity check of this class
- * 7. Root/hook detection
- */
-object LicenseManager {
+class MainActivity : ComponentActivity() {
 
-    private const val TAG = "LM"
+    val hasPermission = mutableStateOf(false)
+    private var wakeLock: PowerManager.WakeLock? = null
+    private lateinit var appSettings: AppSettings
 
-    // ═══ CONFIGURE ═══
-    private const val SERVER_URL = "https://glassfiles-license.brawlstars89123675952.workers.dev"
-    // ═══════════════════
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { checkAndUpdatePermission() }
 
-    private const val PREFS_NAME = "lp"
-    private const val KEY_TOKEN = "t"
-    private const val KEY_TIER = "r"
-    private const val KEY_FEATURES = "f"
-    private const val KEY_LAST_VERIFY = "lv"
-    private const val KEY_DEVICE_ID = "d"
-    private const val KEY_SERVER_MESSAGE = "m"
-    private const val KEY_SIG_HASH = "sh"
+    private val manageStorageLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { checkAndUpdatePermission() }
 
-    private const val TOKEN_TTL_MS = 24 * 60 * 60 * 1000L
-    private const val VERIFY_INTERVAL_MS = 12 * 60 * 60 * 1000L
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
-    // ═══ Certificate Pinning ═══
-    // Cloudflare public key SHA-256 pins (multiple for rotation)
-    private val CERT_PINS = setOf(
-        "3a43e220fe795114e8e91b5afee1b79dfa4ce9c3e28f9b4a7ebb94b189c5be01",
-        "cb3ccbb76031e5e0138f8dd39a23f9de47ffc35e43c1144cea27d46a5ab1cb5f",
-        "16af57a9f676b0ab126095aa5ebadef22ab31119d644ac95cd4b93dbf3f26aeb"
-    )
+        // Keep screen on while app is active
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-    // ═══ State ═══
-    @Volatile var isVerified = false; private set
-    @Volatile var currentTier = "free"; private set
-    @Volatile var features = listOf<String>(); private set
-    @Volatile var serverMessage: String? = null; private set
-    @Volatile private var checksum = 0L
-    private var integrityToken = 0L
+        checkAndUpdatePermission()
+        if (!hasPermission.value) requestStoragePermission()
 
-    // ═══════════════════════════════════
-    // Main verify
-    // ═══════════════════════════════════
+        // Request battery optimization exemption
+        requestBatteryOptimization()
 
-    data class VerifyResult(
-        val valid: Boolean,
-        val reason: String = "",
-        val message: String? = null,
-        val tier: String = "free",
-        val features: List<String> = emptyList()
-    )
+        appSettings = AppSettings(this)
 
-    suspend fun verify(context: Context): VerifyResult = withContext(Dispatchers.IO) {
-        if (detectHooks()) {
-            return@withContext VerifyResult(valid = false, reason = "environment_compromised")
+        // ── Security checks ──
+        val updateTime = try { packageManager.getPackageInfo(packageName, 0).lastUpdateTime } catch (_: Exception) { 0L }
+        val prefs = getSharedPreferences("gf_sec", MODE_PRIVATE)
+        val storedUpdateTime = prefs.getLong("ut", 0L)
+        if (updateTime != storedUpdateTime) {
+            SecurityManager.resetHashes(this)
+            prefs.edit().putLong("ut", updateTime).apply()
         }
 
-        val prefs = getPrefs(context)
-        if (integrityToken == 0L) integrityToken = computeIntegrity(context)
+        val securityResult = SecurityManager.performChecks(this)
 
-        val cachedToken = prefs.getString(KEY_TOKEN, null)
-        val lastVerify = prefs.getLong(KEY_LAST_VERIFY, 0)
-        val now = System.currentTimeMillis()
+        setContent {
+            GlassFilesTheme(themeMode = appSettings.themeMode, accentColor = appSettings.accentColor.color) {
+                var showSplash by remember { mutableStateOf(true) }
+                var showOnboarding by remember { mutableStateOf(!appSettings.onboardingDone) }
+                val isTampered = remember { !securityResult.isSecure && !BuildConfig.DEBUG }
 
-        if (cachedToken != null && (now - lastVerify) < TOKEN_TTL_MS) {
-            loadCachedState(prefs)
-            if ((now - lastVerify) > VERIFY_INTERVAL_MS) {
-                return@withContext doServerVerify(context, prefs)
-            }
-            return@withContext VerifyResult(valid = true, tier = currentTier, features = features, message = serverMessage)
-        }
+                // ── Server license check ──
+                var serverBlocked by remember { mutableStateOf(false) }
+                var serverMessage by remember { mutableStateOf<String?>(null) }
+                var licenseChecked by remember { mutableStateOf(false) }
+                var resumeCounter by remember { mutableIntStateOf(0) }
 
-        val result = doServerVerify(context, prefs)
+                // Track app resume — triggers re-check
+                val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+                DisposableEffect(lifecycle) {
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                            resumeCounter++
+                        }
+                    }
+                    lifecycle.addObserver(observer)
+                    onDispose { lifecycle.removeObserver(observer) }
+                }
 
-        if (!result.valid && result.reason == "network_error" && cachedToken != null) {
-            loadCachedState(prefs)
-            return@withContext VerifyResult(valid = true, tier = currentTier, features = features, message = "Offline mode")
-        }
+                LaunchedEffect(Unit) {
+                    delay(1500)
+                    showSplash = false
 
-        result
-    }
-
-    // ═══════════════════════════════════
-    // Server call with certificate pinning
-    // ═══════════════════════════════════
-
-    private suspend fun doServerVerify(context: Context, prefs: SharedPreferences): VerifyResult {
-        return try {
-            val deviceId = getDeviceId(context, prefs)
-            val sigHash = getSignatureHash(context)
-            prefs.edit().putString(KEY_SIG_HASH, sigHash).apply()
-
-            val body = JSONObject().apply {
-                put("deviceId", deviceId)
-                put("signatureHash", sigHash)
-                put("packageName", context.packageName)
-                put("version", getAppVersion(context))
-                put("model", "${Build.MANUFACTURER} ${Build.MODEL}")
-                put("android", Build.VERSION.SDK_INT)
-                put("integrity", integrityToken.toString(16))
-            }
-
-            val conn = createPinnedConnection("$SERVER_URL/api/verify")
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.connectTimeout = 10000
-            conn.readTimeout = 10000
-            conn.doOutput = true
-
-            conn.outputStream.use { it.write(body.toString().toByteArray()) }
-            val code = conn.responseCode
-            val response = (if (code in 200..299) conn.inputStream else conn.errorStream)
-                .bufferedReader().use { it.readText() }
-            conn.disconnect()
-
-            val json = JSONObject(response)
-            val valid = json.optBoolean("valid", false)
-
-            if (valid) {
-                val token = json.optString("token", "")
-                val tier = json.optString("tier", "free")
-                val featuresArr = json.optJSONArray("features") ?: JSONArray()
-                val featuresList = (0 until featuresArr.length()).map { featuresArr.getString(it) }
-                val msg = json.optString("message", null)
-
-                prefs.edit()
-                    .putString(KEY_TOKEN, token).putString(KEY_TIER, tier)
-                    .putString(KEY_FEATURES, featuresList.joinToString(","))
-                    .putLong(KEY_LAST_VERIFY, System.currentTimeMillis())
-                    .putString(KEY_SERVER_MESSAGE, msg).apply()
-
-                isVerified = true; currentTier = tier; features = featuresList; serverMessage = msg
-                checksum = computeChecksum(token, tier)
-                VerifyResult(valid = true, tier = tier, features = featuresList, message = msg)
-            } else {
-                val reason = json.optString("reason", "unknown")
-                val msg = json.optString("message", null)
-                if (reason != "network_error") prefs.edit().remove(KEY_TOKEN).remove(KEY_LAST_VERIFY).apply()
-                isVerified = false
-                VerifyResult(valid = false, reason = reason, message = msg)
-            }
-        } catch (e: javax.net.ssl.SSLException) {
-            Log.e(TAG, "SSL pin fail: ${e.message}")
-            isVerified = false
-            VerifyResult(valid = false, reason = "ssl_pinning_failed", message = "Connection security error")
-        } catch (e: Exception) {
-            Log.e(TAG, "Verify: ${e.message}")
-            VerifyResult(valid = false, reason = "network_error", message = e.message)
-        }
-    }
-
-    // ═══════════════════════════════════
-    // Certificate Pinning
-    // ═══════════════════════════════════
-
-    private fun createPinnedConnection(urlStr: String): HttpURLConnection {
-        val url = URL(urlStr)
-        val conn = url.openConnection() as HttpsURLConnection
-
-        val tm = object : X509TrustManager {
-            private val defaultTM: X509TrustManager by lazy {
-                val factory = javax.net.ssl.TrustManagerFactory.getInstance(
-                    javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm()
-                )
-                factory.init(null as java.security.KeyStore?)
-                factory.trustManagers.first { it is X509TrustManager } as X509TrustManager
-            }
-
-            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) =
-                defaultTM.checkClientTrusted(chain, authType)
-
-            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-                defaultTM.checkServerTrusted(chain, authType)
-                if (chain == null || chain.isEmpty()) throw javax.net.ssl.SSLException("Empty chain")
-
-                var pinMatched = false
-                for (cert in chain) {
-                    if (sha256Hex(cert.encoded) in CERT_PINS || sha256Hex(cert.publicKey.encoded) in CERT_PINS) {
-                        pinMatched = true; break
+                    val result = LicenseManager.verify(applicationContext)
+                    licenseChecked = true
+                    if (!result.valid && result.reason != "network_error") {
+                        serverBlocked = true
+                        serverMessage = result.message
                     }
                 }
-                if (!pinMatched) {
-                    Log.w(TAG, "Cert pin mismatch — possible MITM or rotation")
-                    // Soft pinning: log but don't block (prevents breakage on cert rotation)
-                    // For hard pinning uncomment: throw javax.net.ssl.SSLException("Pin failed")
+
+                // Re-check on every app resume (when user switches back to app)
+                LaunchedEffect(resumeCounter) {
+                    if (resumeCounter > 0 && licenseChecked) {
+                        val ok = LicenseManager.heartbeat(applicationContext)
+                        if (!ok) {
+                            serverBlocked = true
+                            serverMessage = "License revoked"
+                        }
+                        // Also check for server message updates
+                        if (!serverBlocked) {
+                            val result = LicenseManager.verify(applicationContext)
+                            if (!result.valid && result.reason != "network_error") {
+                                serverBlocked = true
+                                serverMessage = result.message
+                            } else {
+                                serverMessage = result.message
+                            }
+                        }
+                    }
+                }
+
+                // Periodic heartbeat — every 5 minutes
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        delay(5 * 60 * 1000L)
+                        val ok = LicenseManager.heartbeat(applicationContext)
+                        if (!ok) {
+                            serverBlocked = true
+                            serverMessage = "License expired"
+                        }
+                    }
+                }
+
+                val permState = hasPermission.value
+
+                AnimatedContent(
+                    targetState = when {
+                        showSplash -> "splash"
+                        isTampered -> "blocked"
+                        serverBlocked -> "server_blocked"
+                        showOnboarding -> "onboarding"
+                        else -> "app"
+                    }, label = "main",
+                    transitionSpec = {
+                        fadeIn(tween(600)) togetherWith fadeOut(tween(400))
+                    }
+                ) { state ->
+                    when (state) {
+                        "splash" -> SplashScreen()
+                        "blocked" -> TamperedScreen { finish() }
+                        "server_blocked" -> ServerBlockedScreen(serverMessage) { finish() }
+                        "onboarding" -> OnboardingScreen(
+                            appSettings = appSettings,
+                            hasPermission = permState,
+                            onRequestPermission = { requestStoragePermission() },
+                            onComplete = { showOnboarding = false }
+                        )
+                        else -> GlassFilesApp(
+                            hasPermission = permState,
+                            onRequestPermission = { requestStoragePermission() },
+                            appSettings = appSettings
+                        )
+                    }
                 }
             }
-
-            override fun getAcceptedIssuers(): Array<X509Certificate> = defaultTM.acceptedIssuers
         }
-
-        val ctx = SSLContext.getInstance("TLS")
-        ctx.init(null, arrayOf<TrustManager>(tm), java.security.SecureRandom())
-        conn.sslSocketFactory = ctx.socketFactory
-        return conn
     }
 
-    // ═══════════════════════════════════
-    // Heartbeat
-    // ═══════════════════════════════════
+    override fun onResume() {
+        super.onResume()
+        checkAndUpdatePermission()
+        acquireWakeLock()
+    }
 
-    suspend fun heartbeat(context: Context): Boolean = withContext(Dispatchers.IO) {
-        try {
-            if (integrityToken != 0L && integrityToken != computeIntegrity(context)) {
-                isVerified = false; return@withContext false
+    override fun onPause() {
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        releaseWakeLock()
+        super.onDestroy()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+    }
+
+    private fun checkAndUpdatePermission() {
+        hasPermission.value = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                manageStorageLauncher.launch(intent)
             }
-            val prefs = getPrefs(context)
-            val deviceId = getDeviceId(context, prefs)
-            val token = prefs.getString(KEY_TOKEN, null) ?: return@withContext false
-
-            val body = JSONObject().apply { put("deviceId", deviceId); put("token", token) }
-            val conn = createPinnedConnection("$SERVER_URL/api/heartbeat")
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.connectTimeout = 8000; conn.readTimeout = 8000; conn.doOutput = true
-            conn.outputStream.use { it.write(body.toString().toByteArray()) }
-            val response = conn.inputStream.bufferedReader().use { it.readText() }
-            conn.disconnect()
-
-            val valid = JSONObject(response).optBoolean("valid", false)
-            if (!valid) { isVerified = false; prefs.edit().remove(KEY_TOKEN).remove(KEY_LAST_VERIFY).apply() }
-            valid
-        } catch (e: Exception) { Log.e(TAG, "HB: ${e.message}"); true }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissionLauncher.launch(arrayOf(
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO,
+                Manifest.permission.READ_MEDIA_AUDIO
+            ))
+        } else {
+            permissionLauncher.launch(arrayOf(
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ))
+        }
     }
 
-    // ═══════════════════════════════════
-    // Scattered Check Points
-    // ═══════════════════════════════════
-
-    /** Quick inline check — call from critical features */
-    fun c(): Boolean = isVerified && checksum != 0L
-
-    /** Check with context — verifies signature */
-    fun validate(context: Context): Boolean {
-        if (!isVerified) return false
-        val prefs = getPrefs(context)
-        val storedSig = prefs.getString(KEY_SIG_HASH, null) ?: return false
-        if (storedSig != getSignatureHash(context)) { isVerified = false; return false }
-        return true
-    }
-
-    /** Deep check — call occasionally from random places */
-    suspend fun deepCheck(context: Context): Boolean = withContext(Dispatchers.IO) {
-        if (!isVerified) return@withContext false
-        if (!validate(context)) return@withContext false
-        if (integrityToken != 0L && integrityToken != computeIntegrity(context)) { isVerified = false; return@withContext false }
-        if (detectHooks()) { isVerified = false; return@withContext false }
-        val prefs = getPrefs(context)
-        val lastVerify = prefs.getLong(KEY_LAST_VERIFY, 0)
-        if (System.currentTimeMillis() - lastVerify > TOKEN_TTL_MS * 2) { isVerified = false; return@withContext false }
-        true
-    }
-
-    // ═══════════════════════════════════
-    // Feature check
-    // ═══════════════════════════════════
-
-    fun hasFeature(feature: String): Boolean = isVerified && features.contains(feature)
-    fun isPro(): Boolean = isVerified && (currentTier == "pro" || currentTier == "beta")
-
-    // ═══════════════════════════════════
-    // Anti-Hook / Root Detection
-    // ═══════════════════════════════════
-
-    private fun detectHooks(): Boolean {
+    private fun requestBatteryOptimization() {
         try {
-            // Frida ports
-            for (port in listOf(27042, 27043)) {
-                try {
-                    val s = java.net.Socket(); s.connect(java.net.InetSocketAddress("127.0.0.1", port), 100); s.close(); return true
-                } catch (_: Exception) {}
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
             }
-            // Xposed
-            try { Class.forName("de.robv.android.xposed.XposedBridge"); return true } catch (_: ClassNotFoundException) {}
-            // Substrate
-            try { Class.forName("com.saurik.substrate.MS"); return true } catch (_: ClassNotFoundException) {}
-            // Debugger
-            if (android.os.Debug.isDebuggerConnected()) return true
         } catch (_: Exception) {}
-        return false
     }
 
-    // ═══════════════════════════════════
-    // Integrity
-    // ═══════════════════════════════════
-
-    private fun computeIntegrity(context: Context): Long = try {
-        val info = context.packageManager.getApplicationInfo(context.packageName, 0)
-        val f = java.io.File(info.sourceDir)
-        (f.length() xor f.lastModified()) xor (Build.VERSION.SDK_INT.toLong() shl 32) xor context.packageName.hashCode().toLong()
-    } catch (_: Exception) { -1L }
-
-    private fun computeChecksum(token: String, tier: String): Long =
-        (token.hashCode().toLong() shl 32) or (tier.hashCode().toLong() and 0xFFFFFFFFL)
-
-    // ═══════════════════════════════════
-    // Device ID & Signature
-    // ═══════════════════════════════════
-
-    @SuppressLint("HardwareIds")
-    private fun getDeviceId(context: Context, prefs: SharedPreferences): String {
-        val cached = prefs.getString(KEY_DEVICE_ID, null)
-        if (cached != null) return cached
-        val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
-        val deviceId = "gf_${androidId}_${Build.FINGERPRINT.hashCode().toString(16)}"
-        prefs.edit().putString(KEY_DEVICE_ID, deviceId).apply()
-        return deviceId
+    private fun acquireWakeLock() {
+        if (wakeLock == null) {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "GlassFiles:TerminalWakeLock"
+            )
+        }
+        if (wakeLock?.isHeld == false) {
+            wakeLock?.acquire(4 * 60 * 60 * 1000L)
+        }
     }
 
-    @Suppress("DEPRECATION")
-    private fun getSignatureHash(context: Context): String = try {
-        val pm = context.packageManager
-        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-            pm.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
-        else pm.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNATURES)
-        val sigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.signingInfo?.apkContentsSigners
-        else @Suppress("DEPRECATION") info.signatures
-        if (sigs.isNullOrEmpty()) "no_sig" else sha256Hex(sigs[0].toByteArray())
-    } catch (e: Exception) { "error" }
-
-    private fun sha256Hex(data: ByteArray): String =
-        MessageDigest.getInstance("SHA-256").digest(data).joinToString("") { "%02x".format(it) }
-
-    private fun getPrefs(context: Context): SharedPreferences =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-    private fun getAppVersion(context: Context): String = try {
-        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
-    } catch (_: Exception) { "unknown" }
-
-    private fun loadCachedState(prefs: SharedPreferences) {
-        isVerified = true
-        currentTier = prefs.getString(KEY_TIER, "free") ?: "free"
-        features = (prefs.getString(KEY_FEATURES, "") ?: "").split(",").filter { it.isNotBlank() }
-        serverMessage = prefs.getString(KEY_SERVER_MESSAGE, null)
+    private fun releaseWakeLock() {
+        try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Exception) {}
+        wakeLock = null
     }
+}
 
-    fun clearCache(context: Context) {
-        getPrefs(context).edit().clear().apply()
-        isVerified = false; currentTier = "free"; features = emptyList(); serverMessage = null; checksum = 0L
+@Composable
+private fun SplashScreen() {
+    Box(Modifier.fillMaxSize().background(SurfaceLight), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(Icons.Rounded.Folder, null, Modifier.size(80.dp), tint = Blue)
+            Text("Glass Files", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(com.glassfiles.data.Strings.splashSubtitle, fontSize = 14.sp, color = TextSecondary)
+        }
+    }
+}
+
+@Composable
+private fun TamperedScreen(onExit: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(SurfaceLight), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Icon(Icons.Rounded.Shield, null, Modifier.size(72.dp), tint = androidx.compose.ui.graphics.Color(0xFFFF3B30))
+            Text("Glass Files", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(
+                com.glassfiles.data.Strings.securityViolation,
+                fontSize = 15.sp,
+                color = TextSecondary,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.Button(
+                onClick = onExit,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = androidx.compose.ui.graphics.Color(0xFFFF3B30)
+                )
+            ) {
+                Text(com.glassfiles.data.Strings.close, color = androidx.compose.ui.graphics.Color.White, fontSize = 16.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ServerBlockedScreen(message: String?, onExit: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(SurfaceLight), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Icon(Icons.Rounded.CloudOff, null, Modifier.size(72.dp), tint = androidx.compose.ui.graphics.Color(0xFFFF9500))
+            Text("Glass Files", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(
+                message ?: "This app has been disabled remotely.",
+                fontSize = 15.sp,
+                color = TextSecondary,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.material3.Button(
+                onClick = onExit,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = androidx.compose.ui.graphics.Color(0xFFFF9500)
+                )
+            ) {
+                Text(com.glassfiles.data.Strings.close, color = androidx.compose.ui.graphics.Color.White, fontSize = 16.sp)
+            }
+        }
     }
 }
