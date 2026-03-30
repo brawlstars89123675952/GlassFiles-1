@@ -230,15 +230,17 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
     if (selectedIssue != null) { IssueDetailScreen(repo, selectedIssue!!.number) { selectedIssue = null }; return }
     if (selectedCommitSha != null) { CommitDiffScreen(repo, selectedCommitSha!!) { selectedCommitSha = null }; return }
     if (selectedRunId != null) { WorkflowRunDetailScreen(repo, selectedRunId!!) { selectedRunId = null }; return }
-    if (fileContent != null) {
+    val safeFileContent = fileContent
+    if (safeFileContent != null) {
         val ext = currentPath.substringAfterLast(".", "").lowercase()
         val isImage = ext in listOf("png", "jpg", "jpeg", "gif", "webp", "svg", "ico")
         val isMd = ext in listOf("md", "markdown")
+        val cachedLines = remember(safeFileContent) { safeFileContent.lines() }
         Column(Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
             GHTopBar(currentPath.substringAfterLast("/"), onBack = { fileContent = null }) {
                 // Copy all
                 IconButton(onClick = {
-                    val clip = android.content.ClipData.newPlainText("code", fileContent)
+                    val clip = android.content.ClipData.newPlainText("code", safeFileContent)
                     (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
                     Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
                 }) { Icon(Icons.Rounded.ContentCopy, null, Modifier.size(20.dp), tint = Blue) }
@@ -249,8 +251,8 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
             }
             // File info bar
             Row(Modifier.fillMaxWidth().background(Color(0xFF161B22)).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("${fileContent!!.lines().size} lines", fontSize = 11.sp, color = Color(0xFF8B949E))
-                Text("${fileContent!!.length} chars", fontSize = 11.sp, color = Color(0xFF8B949E))
+                Text("${cachedLines.size} lines", fontSize = 11.sp, color = Color(0xFF8B949E))
+                Text("${safeFileContent.length} chars", fontSize = 11.sp, color = Color(0xFF8B949E))
                 Text(ext.uppercase(), fontSize = 11.sp, color = Color(0xFF58A6FF), fontWeight = FontWeight.SemiBold)
             }
             // Content
@@ -260,15 +262,14 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
                 }
             } else if (isMd) {
                 LazyColumn(Modifier.fillMaxSize().padding(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-                    items(fileContent!!.lines()) { line ->
-                        MarkdownLine(line)
+                    items(cachedLines.size) { idx ->
+                        MarkdownLine(cachedLines[idx])
                     }
                 }
             } else {
-                // Code with syntax highlighting — LazyColumn for performance
-                val lines = remember(fileContent) { fileContent!!.lines() }
+                // Code with syntax highlighting
                 LazyColumn(Modifier.fillMaxSize().padding(start = 4.dp, end = 4.dp, top = 4.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-                    items(lines.size) { idx ->
+                    items(cachedLines.size) { idx ->
                         Row(Modifier.fillMaxWidth()) {
                             Text(
                                 "${idx + 1}".padStart(4),
@@ -276,7 +277,7 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
                                 color = Color(0xFF484F58), modifier = Modifier.padding(end = 10.dp)
                             )
                             Text(
-                                highlightLine(lines[idx], ext),
+                                highlightLine(cachedLines[idx], ext),
                                 fontSize = 12.sp, fontFamily = FontFamily.Monospace, lineHeight = 18.sp
                             )
                         }
@@ -1458,6 +1459,28 @@ private val htmlKeywords = setOf(
 )
 
 private fun highlightLine(line: String, ext: String): androidx.compose.ui.text.AnnotatedString {
+    val defColor = Color(0xFFD4D4D4)
+
+    // Safety: very long lines → no highlighting (prevents OOM on minified files)
+    if (line.length > 500) {
+        return androidx.compose.ui.text.buildAnnotatedString {
+            pushStyle(androidx.compose.ui.text.SpanStyle(color = defColor))
+            append(line.take(500) + "...")
+            pop()
+        }
+    }
+
+    return try {
+        doHighlightLine(line, ext)
+    } catch (_: Exception) {
+        // Fallback: plain text if highlighting crashes
+        androidx.compose.ui.text.buildAnnotatedString {
+            pushStyle(androidx.compose.ui.text.SpanStyle(color = defColor)); append(line); pop()
+        }
+    }
+}
+
+private fun doHighlightLine(line: String, ext: String): androidx.compose.ui.text.AnnotatedString {
     val kwColor = Color(0xFFC586C0)
     val strColor = Color(0xFFCE9178)
     val commentColor = Color(0xFF6A9955)
@@ -1475,11 +1498,9 @@ private fun highlightLine(line: String, ext: String): androidx.compose.ui.text.A
 
     return androidx.compose.ui.text.buildAnnotatedString {
         var i = 0; val len = line.length
-
-        // Quick: empty line
         if (len == 0) return@buildAnnotatedString
 
-        // For JSON/YAML: simple key:value coloring
+        // JSON/YAML
         if (isJson || isYaml) {
             val colonIdx = line.indexOf(':')
             if (colonIdx > 0 && (line.trimStart().startsWith("\"") || isYaml)) {
@@ -1487,41 +1508,36 @@ private fun highlightLine(line: String, ext: String): androidx.compose.ui.text.A
                 pushStyle(androidx.compose.ui.text.SpanStyle(color = defColor)); append(":"); pop()
                 val rest = line.substring(colonIdx + 1)
                 val trimRest = rest.trimStart()
-                if (trimRest.startsWith("\"")) {
-                    pushStyle(androidx.compose.ui.text.SpanStyle(color = strColor)); append(rest); pop()
-                } else if (trimRest.matches(Regex("-?\\d+\\.?\\d*.*"))) {
-                    pushStyle(androidx.compose.ui.text.SpanStyle(color = numColor)); append(rest); pop()
-                } else if (trimRest in listOf("true", "false", "null", "true,", "false,", "null,")) {
-                    pushStyle(androidx.compose.ui.text.SpanStyle(color = kwColor)); append(rest); pop()
-                } else {
-                    pushStyle(androidx.compose.ui.text.SpanStyle(color = defColor)); append(rest); pop()
+                val c = when {
+                    trimRest.startsWith("\"") -> strColor
+                    trimRest.firstOrNull()?.isDigit() == true || trimRest.startsWith("-") -> numColor
+                    trimRest.startsWith("true") || trimRest.startsWith("false") || trimRest.startsWith("null") -> kwColor
+                    else -> defColor
                 }
+                pushStyle(androidx.compose.ui.text.SpanStyle(color = c)); append(rest); pop()
                 return@buildAnnotatedString
             }
         }
 
-        // HTML/XML: tag-based coloring
+        // HTML/XML
         if (isHtml) {
             while (i < len) {
                 when {
-                    // Comment <!-- -->
-                    i + 3 < len && line.substring(i).startsWith("<!--") -> {
+                    i + 3 < len && line[i] == '<' && line[i + 1] == '!' && line[i + 2] == '-' && line[i + 3] == '-' -> {
                         val end = line.indexOf("-->", i)
-                        val to = if (end >= 0) end + 3 else len
+                        val to = if (end >= 0) minOf(end + 3, len) else len
                         pushStyle(androidx.compose.ui.text.SpanStyle(color = commentColor)); append(line.substring(i, to)); pop(); i = to
                     }
-                    // Tag
                     line[i] == '<' -> {
                         val end = line.indexOf('>', i)
-                        val to = if (end >= 0) end + 1 else len
-                        val tag = line.substring(i, to)
-                        pushStyle(androidx.compose.ui.text.SpanStyle(color = tagColor)); append(tag); pop(); i = to
+                        val to = if (end >= 0) minOf(end + 1, len) else len
+                        pushStyle(androidx.compose.ui.text.SpanStyle(color = tagColor)); append(line.substring(i, to)); pop(); i = to
                     }
-                    // String
                     line[i] == '"' || line[i] == '\'' -> {
                         val q = line[i]; val start = i; i++
-                        while (i < len && line[i] != q) i++; if (i < len) i++
-                        pushStyle(androidx.compose.ui.text.SpanStyle(color = strColor)); append(line.substring(start, i)); pop()
+                        while (i < len && line[i] != q) i++
+                        if (i < len) i++
+                        pushStyle(androidx.compose.ui.text.SpanStyle(color = strColor)); append(line.substring(start, minOf(i, len))); pop()
                     }
                     else -> { pushStyle(androidx.compose.ui.text.SpanStyle(color = defColor)); append(line[i]); pop(); i++ }
                 }
@@ -1541,44 +1557,54 @@ private fun highlightLine(line: String, ext: String): androidx.compose.ui.text.A
                 }
                 trimmed.contains(":") && trimmed.contains(";") -> {
                     val colon = line.indexOf(':')
-                    pushStyle(androidx.compose.ui.text.SpanStyle(color = attrColor)); append(line.substring(0, colon)); pop()
-                    pushStyle(androidx.compose.ui.text.SpanStyle(color = defColor)); append(":"); pop()
-                    pushStyle(androidx.compose.ui.text.SpanStyle(color = numColor)); append(line.substring(colon + 1)); pop()
+                    if (colon in 0 until len) {
+                        pushStyle(androidx.compose.ui.text.SpanStyle(color = attrColor)); append(line.substring(0, colon)); pop()
+                        pushStyle(androidx.compose.ui.text.SpanStyle(color = defColor)); append(":"); pop()
+                        pushStyle(androidx.compose.ui.text.SpanStyle(color = numColor)); append(line.substring(colon + 1)); pop()
+                    } else { pushStyle(androidx.compose.ui.text.SpanStyle(color = defColor)); append(line); pop() }
                 }
                 else -> { pushStyle(androidx.compose.ui.text.SpanStyle(color = tagColor)); append(line); pop() }
             }
             return@buildAnnotatedString
         }
 
-        // General code: keywords, strings, comments, numbers
+        // General code
         val commentStart = findSafeCommentStart(line, isPy)
 
         while (i < len) {
             if (commentStart >= 0 && i >= commentStart) {
-                pushStyle(androidx.compose.ui.text.SpanStyle(color = commentColor)); append(line.substring(i)); pop(); break
+                pushStyle(androidx.compose.ui.text.SpanStyle(color = commentColor)); append(line.substring(i, len)); pop(); break
             }
             when {
                 line[i] == '"' || line[i] == '\'' -> {
                     val q = line[i]; val start = i; i++
-                    while (i < len && line[i] != q) { if (line[i] == '\\') i++; i++ }; if (i < len) i++
-                    pushStyle(androidx.compose.ui.text.SpanStyle(color = strColor)); append(line.substring(start, i)); pop()
+                    while (i < len && line[i] != q) {
+                        if (line[i] == '\\' && i + 1 < len) i++ // skip escaped char safely
+                        i++
+                    }
+                    if (i < len) i++ // closing quote
+                    pushStyle(androidx.compose.ui.text.SpanStyle(color = strColor)); append(line.substring(start, minOf(i, len))); pop()
                 }
                 line[i].isDigit() && (i == 0 || !line[i - 1].isLetterOrDigit()) -> {
                     val start = i
                     while (i < len && (line[i].isDigit() || line[i] == '.' || line[i] == 'x' || line[i] == 'f' || line[i] == 'L')) i++
-                    pushStyle(androidx.compose.ui.text.SpanStyle(color = numColor)); append(line.substring(start, i)); pop()
+                    pushStyle(androidx.compose.ui.text.SpanStyle(color = numColor)); append(line.substring(start, minOf(i, len))); pop()
                 }
-                line[i].isLetter() || line[i] == '_' || line[i] == '@' -> {
+                line[i].isLetter() || line[i] == '_' -> {
                     val start = i
                     while (i < len && (line[i].isLetterOrDigit() || line[i] == '_')) i++
-                    val word = line.substring(start, i)
+                    val word = line.substring(start, minOf(i, len))
                     val color = when {
                         word in defaultKeywords -> kwColor
-                        word.first().isUpperCase() && word.length > 1 -> typeColor
-                        word.startsWith("@") -> Color(0xFFDCDCAA)
+                        word.firstOrNull()?.isUpperCase() == true && word.length > 1 -> typeColor
                         else -> defColor
                     }
                     pushStyle(androidx.compose.ui.text.SpanStyle(color = color)); append(word); pop()
+                }
+                line[i] == '@' -> {
+                    val start = i; i++
+                    while (i < len && (line[i].isLetterOrDigit() || line[i] == '_')) i++
+                    pushStyle(androidx.compose.ui.text.SpanStyle(color = Color(0xFFDCDCAA))); append(line.substring(start, minOf(i, len))); pop()
                 }
                 else -> { pushStyle(androidx.compose.ui.text.SpanStyle(color = defColor)); append(line[i]); pop(); i++ }
             }
@@ -1588,12 +1614,13 @@ private fun highlightLine(line: String, ext: String): androidx.compose.ui.text.A
 
 private fun findSafeCommentStart(line: String, isPython: Boolean): Int {
     var i = 0; var inStr = false; var q = ' '
-    while (i < line.length) {
+    val len = line.length
+    while (i < len) {
         val c = line[i]
         if (!inStr && (c == '"' || c == '\'')) { inStr = true; q = c }
         else if (inStr && c == q && (i == 0 || line[i - 1] != '\\')) inStr = false
         else if (!inStr) {
-            if (i + 1 < line.length && c == '/' && line[i + 1] == '/') return i
+            if (i + 1 < len && c == '/' && line[i + 1] == '/') return i
             if (isPython && c == '#') return i
         }
         i++
