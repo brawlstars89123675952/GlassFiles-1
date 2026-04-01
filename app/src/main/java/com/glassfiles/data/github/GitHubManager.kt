@@ -11,6 +11,7 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 object GitHubManager {
 
@@ -19,10 +20,6 @@ object GitHubManager {
     private const val PREFS = "github_prefs"
     private const val KEY_TOKEN = "token"
     private const val KEY_USER = "user_json"
-
-    // ═══════════════════════════════════
-    // Auth
-    // ═══════════════════════════════════
 
     fun saveToken(context: Context, token: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_TOKEN, token).apply()
@@ -36,10 +33,6 @@ object GitHubManager {
     fun logout(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
     }
-
-    // ═══════════════════════════════════
-    // HTTP helper
-    // ═══════════════════════════════════
 
     private suspend fun request(context: Context, endpoint: String, method: String = "GET", body: String? = null): ApiResult =
         withContext(Dispatchers.IO) {
@@ -73,10 +66,6 @@ object GitHubManager {
             }
         }
 
-    // ═══════════════════════════════════
-    // User
-    // ═══════════════════════════════════
-
     suspend fun getUser(context: Context): GHUser? {
         val r = request(context, "/user")
         if (!r.success) return null
@@ -107,10 +96,6 @@ object GitHubManager {
         } catch (_: Exception) { null }
     }
 
-    // ═══════════════════════════════════
-    // Repos
-    // ═══════════════════════════════════
-
     suspend fun getRepos(context: Context, page: Int = 1, perPage: Int = 30): List<GHRepo> {
         val r = request(context, "/user/repos?sort=updated&per_page=$perPage&page=$page&type=all")
         if (!r.success) return emptyList()
@@ -139,8 +124,13 @@ object GitHubManager {
     suspend fun deleteRepo(context: Context, owner: String, repo: String): Boolean =
         request(context, "/repos/$owner/$repo", "DELETE").success
 
-    suspend fun getRepoContents(context: Context, owner: String, repo: String, path: String = ""): List<GHContent> {
-        val r = request(context, "/repos/$owner/$repo/contents/$path")
+    private fun refQuery(branch: String?): String {
+        val ref = branch?.takeIf { it.isNotBlank() } ?: return ""
+        return "?ref=${URLEncoder.encode(ref, "UTF-8")}"
+    }
+
+    suspend fun getRepoContents(context: Context, owner: String, repo: String, path: String = "", branch: String? = null): List<GHContent> {
+        val r = request(context, "/repos/$owner/$repo/contents/$path${refQuery(branch)}")
         if (!r.success) return emptyList()
         return try {
             val arr = JSONArray(r.body)
@@ -152,8 +142,8 @@ object GitHubManager {
         } catch (e: Exception) { emptyList() }
     }
 
-    suspend fun getFileContent(context: Context, owner: String, repo: String, path: String): String {
-        val r = request(context, "/repos/$owner/$repo/contents/$path")
+    suspend fun getFileContent(context: Context, owner: String, repo: String, path: String, branch: String? = null): String {
+        val r = request(context, "/repos/$owner/$repo/contents/$path${refQuery(branch)}")
         if (!r.success) return ""
         return try {
             val j = JSONObject(r.body)
@@ -161,10 +151,6 @@ object GitHubManager {
             String(android.util.Base64.decode(content.replace("\n", ""), android.util.Base64.DEFAULT))
         } catch (e: Exception) { "" }
     }
-
-    // ═══════════════════════════════════
-    // Commits
-    // ═══════════════════════════════════
 
     suspend fun getCommits(context: Context, owner: String, repo: String, page: Int = 1): List<GHCommit> {
         val r = request(context, "/repos/$owner/$repo/commits?per_page=30&page=$page")
@@ -186,10 +172,6 @@ object GitHubManager {
         } catch (e: Exception) { emptyList() }
     }
 
-    // ═══════════════════════════════════
-    // Issues
-    // ═══════════════════════════════════
-
     suspend fun getIssues(context: Context, owner: String, repo: String, state: String = "open", page: Int = 1): List<GHIssue> {
         val r = request(context, "/repos/$owner/$repo/issues?state=$state&per_page=30&page=$page")
         if (!r.success) return emptyList()
@@ -209,10 +191,6 @@ object GitHubManager {
         return request(context, "/repos/$owner/$repo/issues", "POST", json).success
     }
 
-    // ═══════════════════════════════════
-    // Branches
-    // ═══════════════════════════════════
-
     suspend fun getBranches(context: Context, owner: String, repo: String): List<String> {
         val r = request(context, "/repos/$owner/$repo/branches?per_page=50")
         if (!r.success) return emptyList()
@@ -221,10 +199,6 @@ object GitHubManager {
             (0 until arr.length()).map { arr.getJSONObject(it).optString("name") }
         } catch (e: Exception) { emptyList() }
     }
-
-    // ═══════════════════════════════════
-    // Clone (download as zip)
-    // ═══════════════════════════════════
 
     suspend fun cloneRepo(context: Context, owner: String, repo: String, destDir: java.io.File, onProgress: (String) -> Unit): Boolean =
         withContext(Dispatchers.IO) {
@@ -246,12 +220,10 @@ object GitHubManager {
                 conn.disconnect()
 
                 onProgress("Extracting...")
-                // Extract zip
                 val outDir = java.io.File(destDir, repo)
                 outDir.mkdirs()
                 val zip = java.util.zip.ZipInputStream(java.io.BufferedInputStream(java.io.FileInputStream(zipFile)))
                 var entry = zip.nextEntry
-                // GitHub zip has a root folder like "owner-repo-sha/"
                 val rootPrefix = entry?.name?.substringBefore("/", "") ?: ""
                 while (entry != null) {
                     val name = entry.name.removePrefix("$rootPrefix/")
@@ -274,11 +246,6 @@ object GitHubManager {
             }
         }
 
-    // ═══════════════════════════════════
-    // File operations (upload/edit/delete)
-    // ═══════════════════════════════════
-
-    /** Upload or update a file in repo. If sha is provided — updates existing file */
     suspend fun uploadFile(
         context: Context, owner: String, repo: String, path: String,
         content: ByteArray, message: String, branch: String? = null, sha: String? = null
@@ -293,7 +260,6 @@ object GitHubManager {
         return request(context, "/repos/$owner/$repo/contents/$path", "PUT", body).success
     }
 
-    /** Upload file from device path */
     suspend fun uploadFileFromPath(
         context: Context, owner: String, repo: String, repoPath: String,
         localPath: String, message: String, branch: String? = null
@@ -309,24 +275,20 @@ object GitHubManager {
         }
     }
 
-    /** Upload multiple files as a single commit via Git Trees API */
     suspend fun uploadMultipleFiles(
         context: Context, owner: String, repo: String, branch: String,
         files: List<Pair<String, ByteArray>>, message: String,
         onProgress: (Int, Int) -> Unit = { _, _ -> }
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            // 1. Get latest commit SHA on branch
             val refR = request(context, "/repos/$owner/$repo/git/ref/heads/$branch")
             if (!refR.success) return@withContext false
             val latestSha = JSONObject(refR.body).getJSONObject("object").getString("sha")
 
-            // 2. Get base tree
             val commitR = request(context, "/repos/$owner/$repo/git/commits/$latestSha")
             if (!commitR.success) return@withContext false
             val baseTree = JSONObject(commitR.body).getJSONObject("tree").getString("sha")
 
-            // 3. Create blobs for each file
             val treeItems = JSONArray()
             files.forEachIndexed { index, (path, content) ->
                 onProgress(index + 1, files.size)
@@ -340,13 +302,11 @@ object GitHubManager {
                 })
             }
 
-            // 4. Create tree
             val treeBody = JSONObject().apply { put("base_tree", baseTree); put("tree", treeItems) }.toString()
             val treeR = request(context, "/repos/$owner/$repo/git/trees", "POST", treeBody)
             if (!treeR.success) return@withContext false
             val newTree = JSONObject(treeR.body).getString("sha")
 
-            // 5. Create commit
             val commitBody = JSONObject().apply {
                 put("message", message); put("tree", newTree)
                 put("parents", JSONArray().put(latestSha))
@@ -355,7 +315,6 @@ object GitHubManager {
             if (!newCommitR.success) return@withContext false
             val newCommitSha = JSONObject(newCommitR.body).getString("sha")
 
-            // 6. Update ref
             val refBody = JSONObject().apply { put("sha", newCommitSha) }.toString()
             request(context, "/repos/$owner/$repo/git/refs/heads/$branch", "PATCH", refBody).success
         } catch (e: Exception) {
@@ -364,7 +323,6 @@ object GitHubManager {
         }
     }
 
-    /** Delete a file from repo (requires sha) */
     suspend fun deleteFile(
         context: Context, owner: String, repo: String, path: String,
         sha: String, message: String, branch: String? = null
@@ -376,11 +334,10 @@ object GitHubManager {
         return request(context, "/repos/$owner/$repo/contents/$path", "DELETE", body).success
     }
 
-    /** Download a single file to device */
-    suspend fun downloadFile(context: Context, owner: String, repo: String, path: String, destFile: java.io.File): Boolean =
+    suspend fun downloadFile(context: Context, owner: String, repo: String, path: String, destFile: java.io.File, branch: String? = null): Boolean =
         withContext(Dispatchers.IO) {
             try {
-                val r = request(context, "/repos/$owner/$repo/contents/$path")
+                val r = request(context, "/repos/$owner/$repo/contents/$path${refQuery(branch)}")
                 if (!r.success) return@withContext false
                 val j = JSONObject(r.body)
                 val downloadUrl = j.optString("download_url", "")
@@ -398,12 +355,7 @@ object GitHubManager {
             } catch (e: Exception) { Log.e(TAG, "Download: ${e.message}"); false }
         }
 
-    // ═══════════════════════════════════
-    // Branches (extended)
-    // ═══════════════════════════════════
-
     suspend fun createBranch(context: Context, owner: String, repo: String, branchName: String, fromBranch: String): Boolean {
-        // Get SHA of source branch
         val refR = request(context, "/repos/$owner/$repo/git/ref/heads/$fromBranch")
         if (!refR.success) return false
         val sha = JSONObject(refR.body).getJSONObject("object").getString("sha")
@@ -413,10 +365,6 @@ object GitHubManager {
 
     suspend fun deleteBranch(context: Context, owner: String, repo: String, branch: String): Boolean =
         request(context, "/repos/$owner/$repo/git/refs/heads/$branch", "DELETE").success
-
-    // ═══════════════════════════════════
-    // Pull Requests
-    // ═══════════════════════════════════
 
     suspend fun getPullRequests(context: Context, owner: String, repo: String, state: String = "open", page: Int = 1): List<GHPullRequest> {
         val r = request(context, "/repos/$owner/$repo/pulls?state=$state&per_page=30&page=$page")
@@ -452,10 +400,6 @@ object GitHubManager {
         val body = if (message.isNotBlank()) JSONObject().apply { put("commit_message", message) }.toString() else null
         return request(context, "/repos/$owner/$repo/pulls/$number/merge", "PUT", body ?: "{}").success
     }
-
-    // ═══════════════════════════════════
-    // Issues (extended)
-    // ═══════════════════════════════════
 
     suspend fun getIssueComments(context: Context, owner: String, repo: String, number: Int): List<GHComment> {
         val r = request(context, "/repos/$owner/$repo/issues/$number/comments?per_page=50")
@@ -509,10 +453,6 @@ object GitHubManager {
         } catch (e: Exception) { null }
     }
 
-    // ═══════════════════════════════════
-    // Star / Fork / Repo actions
-    // ═══════════════════════════════════
-
     suspend fun isStarred(context: Context, owner: String, repo: String): Boolean =
         request(context, "/user/starred/$owner/$repo").code == 204
 
@@ -525,10 +465,6 @@ object GitHubManager {
     suspend fun forkRepo(context: Context, owner: String, repo: String): Boolean =
         request(context, "/repos/$owner/$repo/forks", "POST", "{}").success
 
-    // ═══════════════════════════════════
-    // README
-    // ═══════════════════════════════════
-
     suspend fun getReadme(context: Context, owner: String, repo: String): String {
         val r = request(context, "/repos/$owner/$repo/readme")
         if (!r.success) return ""
@@ -538,10 +474,6 @@ object GitHubManager {
             String(android.util.Base64.decode(content.replace("\n", ""), android.util.Base64.DEFAULT))
         } catch (e: Exception) { "" }
     }
-
-    // ═══════════════════════════════════
-    // Repo stats
-    // ═══════════════════════════════════
 
     suspend fun getLanguages(context: Context, owner: String, repo: String): Map<String, Long> {
         val r = request(context, "/repos/$owner/$repo/languages")
@@ -566,10 +498,6 @@ object GitHubManager {
         } catch (e: Exception) { emptyList() }
     }
 
-    // ═══════════════════════════════════
-    // Releases
-    // ═══════════════════════════════════
-
     suspend fun getReleases(context: Context, owner: String, repo: String): List<GHRelease> {
         val r = request(context, "/repos/$owner/$repo/releases?per_page=20")
         if (!r.success) return emptyList()
@@ -591,10 +519,6 @@ object GitHubManager {
             }
         } catch (e: Exception) { emptyList() }
     }
-
-    // ═══════════════════════════════════
-    // Gists
-    // ═══════════════════════════════════
 
     suspend fun getGists(context: Context): List<GHGist> {
         val r = request(context, "/gists?per_page=30")
@@ -640,10 +564,6 @@ object GitHubManager {
     suspend fun deleteGist(context: Context, gistId: String): Boolean =
         request(context, "/gists/$gistId", "DELETE").let { it.code == 204 || it.success }
 
-    // ═══════════════════════════════════
-    // Search (public repos)
-    // ═══════════════════════════════════
-
     suspend fun searchUsers(context: Context, query: String): List<GHUser> {
         val r = request(context, "/search/users?q=$query&per_page=10")
         if (!r.success) return emptyList()
@@ -655,10 +575,6 @@ object GitHubManager {
             }
         } catch (e: Exception) { emptyList() }
     }
-
-    // ═══════════════════════════════════
-    // Diff between commits
-    // ═══════════════════════════════════
 
     suspend fun getCommitDiff(context: Context, owner: String, repo: String, sha: String): GHCommitDetail? {
         val r = request(context, "/repos/$owner/$repo/commits/$sha")
@@ -684,10 +600,6 @@ object GitHubManager {
             )
         } catch (e: Exception) { null }
     }
-
-    // ═══════════════════════════════════
-    // GitHub Actions (Workflows & Runs)
-    // ═══════════════════════════════════
 
     suspend fun getWorkflows(context: Context, owner: String, repo: String): List<GHWorkflow> {
         val r = request(context, "/repos/$owner/$repo/actions/workflows?per_page=30")
@@ -754,7 +666,6 @@ object GitHubManager {
             } catch (e: Exception) { "Error: ${e.message}" }
         }
 
-    /** Get actual log text for a specific job */
     suspend fun getJobLogs(context: Context, owner: String, repo: String, jobId: Long): String =
         withContext(Dispatchers.IO) {
             try {
@@ -783,7 +694,6 @@ object GitHubManager {
     suspend fun cancelWorkflowRun(context: Context, owner: String, repo: String, runId: Long): Boolean =
         request(context, "/repos/$owner/$repo/actions/runs/$runId/cancel", "POST", "{}").success
 
-    /** Trigger a workflow manually (requires workflow_dispatch in .yml) */
     suspend fun dispatchWorkflow(context: Context, owner: String, repo: String, workflowId: Long, branch: String, inputs: Map<String, String> = emptyMap()): Boolean {
         val body = JSONObject().apply {
             put("ref", branch)
@@ -795,10 +705,6 @@ object GitHubManager {
         }.toString()
         return request(context, "/repos/$owner/$repo/actions/workflows/$workflowId/dispatches", "POST", body).let { it.code == 204 || it.success }
     }
-
-    // ═══════════════════════════════════
-    // Build Artifacts
-    // ═══════════════════════════════════
 
     suspend fun getRunArtifacts(context: Context, owner: String, repo: String, runId: Long): List<GHArtifact> {
         val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/artifacts")
@@ -818,7 +724,6 @@ object GitHubManager {
         } catch (e: Exception) { emptyList() }
     }
 
-    /** Download artifact zip to device */
     suspend fun downloadArtifact(context: Context, owner: String, repo: String, artifactId: Long, destFile: java.io.File): Boolean =
         withContext(Dispatchers.IO) {
             try {
@@ -849,10 +754,6 @@ object GitHubManager {
         workflowId = j.optLong("workflow_id")
     )
 
-    // ═══════════════════════════════════
-    // Notifications
-    // ═══════════════════════════════════
-
     suspend fun getNotifications(context: Context, all: Boolean = false): List<GHNotification> {
         val r = request(context, "/notifications?all=$all&per_page=50")
         if (!r.success) return emptyList()
@@ -880,10 +781,6 @@ object GitHubManager {
     suspend fun markAllNotificationsRead(context: Context): Boolean =
         request(context, "/notifications", "PUT", "{\"read\":true}").let { it.code == 205 || it.success }
 
-    // ═══════════════════════════════════
-    // Watch / Unwatch
-    // ═══════════════════════════════════
-
     suspend fun isWatching(context: Context, owner: String, repo: String): Boolean {
         val r = request(context, "/repos/$owner/$repo/subscription")
         return r.success && JSONObject(r.body).optBoolean("subscribed", false)
@@ -895,12 +792,8 @@ object GitHubManager {
     suspend fun unwatchRepo(context: Context, owner: String, repo: String): Boolean =
         request(context, "/repos/$owner/$repo/subscription", "DELETE").let { it.code == 204 || it.success }
 
-    // ═══════════════════════════════════
-    // Code Search
-    // ═══════════════════════════════════
-
     suspend fun searchCode(context: Context, query: String, owner: String, repo: String): List<GHCodeResult> {
-        val q = java.net.URLEncoder.encode("$query repo:$owner/$repo", "UTF-8")
+        val q = URLEncoder.encode("$query repo:$owner/$repo", "UTF-8")
         val r = request(context, "/search/code?q=$q&per_page=20")
         if (!r.success) return emptyList()
         return try {
@@ -915,10 +808,6 @@ object GitHubManager {
             }
         } catch (e: Exception) { emptyList() }
     }
-
-    // ═══════════════════════════════════
-    // User Profiles & Follow
-    // ═══════════════════════════════════
 
     suspend fun getUserProfile(context: Context, username: String): GHUserProfile? {
         val r = request(context, "/users/$username")
@@ -954,10 +843,6 @@ object GitHubManager {
     suspend fun unfollowUser(context: Context, username: String): Boolean =
         request(context, "/user/following/$username", "DELETE").let { it.code == 204 || it.success }
 
-    // ═══════════════════════════════════
-    // Starred Repos
-    // ═══════════════════════════════════
-
     suspend fun getStarredRepos(context: Context, page: Int = 1): List<GHRepo> {
         val r = request(context, "/user/starred?sort=created&per_page=30&page=$page")
         if (!r.success) return emptyList()
@@ -966,10 +851,6 @@ object GitHubManager {
             (0 until arr.length()).map { parseRepo(arr.getJSONObject(it)) }
         } catch (e: Exception) { emptyList() }
     }
-
-    // ═══════════════════════════════════
-    // Organizations
-    // ═══════════════════════════════════
 
     suspend fun getOrganizations(context: Context): List<GHOrg> {
         val r = request(context, "/user/orgs?per_page=30")
@@ -993,10 +874,6 @@ object GitHubManager {
         } catch (e: Exception) { emptyList() }
     }
 
-    // ═══════════════════════════════════
-    // Labels
-    // ═══════════════════════════════════
-
     suspend fun getLabels(context: Context, owner: String, repo: String): List<GHLabel> {
         val r = request(context, "/repos/$owner/$repo/labels?per_page=50")
         if (!r.success) return emptyList()
@@ -1015,16 +892,12 @@ object GitHubManager {
     }
 
     suspend fun deleteLabel(context: Context, owner: String, repo: String, name: String): Boolean =
-        request(context, "/repos/$owner/$repo/labels/${java.net.URLEncoder.encode(name, "UTF-8")}", "DELETE").let { it.code == 204 || it.success }
+        request(context, "/repos/$owner/$repo/labels/${URLEncoder.encode(name, "UTF-8")}", "DELETE").let { it.code == 204 || it.success }
 
     suspend fun addLabelsToIssue(context: Context, owner: String, repo: String, issueNumber: Int, labels: List<String>): Boolean {
         val body = JSONObject().apply { put("labels", JSONArray(labels)) }.toString()
         return request(context, "/repos/$owner/$repo/issues/$issueNumber/labels", "POST", body).success
     }
-
-    // ═══════════════════════════════════
-    // Milestones
-    // ═══════════════════════════════════
 
     suspend fun getMilestones(context: Context, owner: String, repo: String): List<GHMilestone> {
         val r = request(context, "/repos/$owner/$repo/milestones?per_page=30")
@@ -1051,11 +924,6 @@ object GitHubManager {
         return request(context, "/repos/$owner/$repo/milestones", "POST", body).success
     }
 
-    // ═══════════════════════════════════
-    // Batch Upload (folder → repo)
-    // ═══════════════════════════════════
-
-    /** Upload all files from a local directory as a single commit */
     suspend fun uploadDirectory(
         context: Context, owner: String, repo: String, branch: String,
         localDir: java.io.File, repoBasePath: String = "", message: String,
@@ -1071,15 +939,11 @@ object GitHubManager {
         current.listFiles()?.forEach { f ->
             val rel = if (basePath.isNotBlank()) "$basePath/${f.name}" else f.name
             if (f.isDirectory) collectFiles(root, f, rel, result)
-            else if (f.length() < 50 * 1024 * 1024) { // skip files > 50MB (GitHub limit)
+            else if (f.length() < 50 * 1024 * 1024) {
                 try { result.add(rel to f.readBytes()) } catch (_: Exception) {}
             }
         }
     }
-
-    // ═══════════════════════════════════
-    // Helpers
-    // ═══════════════════════════════════
 
     private fun parseRepo(j: JSONObject) = GHRepo(
         name = j.optString("name"),
@@ -1098,10 +962,6 @@ object GitHubManager {
 
     data class ApiResult(val success: Boolean, val body: String, val code: Int)
 }
-
-// ═══════════════════════════════════
-// Data models
-// ═══════════════════════════════════
 
 data class GHUser(val login: String, val name: String, val avatarUrl: String, val bio: String,
     val publicRepos: Int, val privateRepos: Int, val followers: Int, val following: Int)

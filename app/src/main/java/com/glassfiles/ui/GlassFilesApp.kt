@@ -60,7 +60,6 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
     val context = LocalContext.current
     val settings = appSettings ?: remember { com.glassfiles.data.AppSettings(context) }
 
-    // Sync AppSettings → ThemeState for FileItems
     com.glassfiles.ui.theme.ThemeState.folderStyle = settings.folderIconStyle
     com.glassfiles.ui.theme.ThemeState.fileFontSize = settings.fileFontSize
 
@@ -76,24 +75,22 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
     var aiInitialImage by remember { mutableStateOf<String?>(null) }
     var selectedTagName by remember { mutableStateOf("") }
 
-    // GitHub persistent state — like terminal, stays alive when minimized
     var githubWasOpened by remember { mutableStateOf(false) }
-    var githubMiniMode by remember { mutableStateOf(false) } // true = floating mini window
-    var githubBubbleMode by remember { mutableStateOf(false) } // true = small floating bubble
-    // Persistent window geometry — survives bubble collapse/expand
+    var githubMiniMode by remember { mutableStateOf(false) }
+    var githubBubbleMode by remember { mutableStateOf(false) }
     var ghWinW by remember { mutableFloatStateOf(-1f) }
     var ghWinH by remember { mutableFloatStateOf(-1f) }
     var ghWinX by remember { mutableFloatStateOf(-1f) }
     var ghWinY by remember { mutableFloatStateOf(-1f) }
-    var githubUploadFile by remember { mutableStateOf<FileItem?>(null) } // file pending upload to GitHub
-    var githubCommitFiles by remember { mutableStateOf<List<String>?>(null) } // files pending commit to GitHub
+    var githubUploadFile by remember { mutableStateOf<FileItem?>(null) }
+    var githubCommitFiles by remember { mutableStateOf<List<String>?>(null) }
     val githubAvatarUrl = remember { com.glassfiles.data.github.GitHubManager.getCachedUser(context)?.avatarUrl }
 
     fun navigateTo(screen: AppScreen) {
         if (screen == AppScreen.GITHUB) {
             githubWasOpened = true
             githubMiniMode = false
-            selectedTab = 2 // Reset to Browse so GitHub tab doesn't re-trigger
+            selectedTab = 2
         }
         previousScreen = activeScreen
         activeScreen = screen
@@ -104,7 +101,6 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
 
     LaunchedEffect(Unit) {
         driveSignedIn = GoogleDriveManager.isSignedIn(context)
-        // Auto-clean trash (30 days)
         trashManager.autoClean(30)
     }
 
@@ -124,7 +120,6 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
     }
 
     fun goBack() {
-        // When leaving GitHub fullscreen, minimize to mini-window instead of destroying
         if (activeScreen == AppScreen.GITHUB && githubWasOpened) {
             githubMiniMode = true
             activeScreen = previousScreen
@@ -134,6 +129,14 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
         val prev = previousScreen
         previousScreen = AppScreen.MAIN
         activeScreen = prev
+    }
+
+    fun closeGitHubFully() {
+        githubMiniMode = false
+        githubBubbleMode = false
+        githubWasOpened = false
+        activeScreen = AppScreen.MAIN
+        previousScreen = AppScreen.MAIN
     }
 
     BackHandler(enabled = true) {
@@ -155,21 +158,14 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
     }
 
     Box(Modifier.fillMaxSize().background(SurfaceLight)) {
-        // Terminal layer — always alive but hidden behind opaque content when not active
         if (terminalWasOpened) {
-            Box(Modifier.fillMaxSize()
-                .graphicsLayer {
-                    alpha = if (activeScreen == AppScreen.TERMINAL) 1f else 0f
-                }
-            ) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (activeScreen == AppScreen.TERMINAL) 1f else 0f }) {
                 TerminalScreen(initialDir = terminalDir, onBackClick = { goBack() }, onOpenFile = { openFileExternal(it) })
             }
         }
 
-        // GitHub — single persistent instance, switches between fullscreen and floating window
         if (githubWasOpened) {
             if (!githubMiniMode && activeScreen == AppScreen.GITHUB) {
-                // Fullscreen mode
                 Box(Modifier.fillMaxSize()) {
                     GitHubScreen(
                         onBack = {
@@ -185,11 +181,23 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                             previousScreen = AppScreen.MAIN
                         }
                     )
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 18.dp, end = 16.dp)
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFF3B30).copy(0.16f))
+                            .border(1.dp, Color(0x66FF3B30), CircleShape)
+                            .clickable { closeGitHubFully() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30))
+                    }
                 }
             }
         }
 
-        // Animated screen transitions — each branch has opaque background
         AnimatedContent(
             targetState = activeScreen,
             transitionSpec = {
@@ -225,8 +233,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                 }
                 AppScreen.DEVICE_INFO -> DeviceInfoScreen(onBack = { goBack() })
                 AppScreen.APP_MANAGER -> AppManagerScreen(onBack = { goBack() })
-                AppScreen.BOOKMARKS -> BookmarksScreen(onBack = { goBack() },
-                    onNavigate = { path -> folderStack = listOf(File(path).name to path); activeScreen = AppScreen.MAIN })
+                AppScreen.BOOKMARKS -> BookmarksScreen(onBack = { goBack() }, onNavigate = { path -> folderStack = listOf(File(path).name to path); activeScreen = AppScreen.MAIN })
                 AppScreen.DIFF -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { DiffScreen(onBack = { goBack() }) }
                 AppScreen.NOTES -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { NotesScreen(onBack = { goBack() }) }
                 AppScreen.CONTENT_SEARCH -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
@@ -245,22 +252,18 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                 AppScreen.FTP -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { FtpScreen(onBack = { goBack() }) }
                 AppScreen.DUAL_PANE -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { DualPaneScreen(onBack = { goBack() }, appSettings = settings) }
                 AppScreen.THEME -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { ThemeScreen(settings = settings, onBack = { goBack() }) }
-                AppScreen.GITHUB -> Box(Modifier.fillMaxSize()) // Content in persistent layer above
+                AppScreen.GITHUB -> Box(Modifier.fillMaxSize())
                 AppScreen.MAIN -> {
                     Box(Modifier.fillMaxSize().background(SurfaceLight).layerBackdrop(backdrop)) {
-                        AnimatedContent(
-                            targetState = folderStack,
-                            transitionSpec = {
-                                if (targetState.size > initialState.size) {
-                                    (fadeIn(tween(200)) + slideInHorizontally(tween(300)) { it / 3 }) togetherWith
-                                    (fadeOut(tween(150)) + slideOutHorizontally(tween(200)) { -it / 5 })
-                                } else {
-                                    (fadeIn(tween(200)) + slideInHorizontally(tween(300)) { -it / 3 }) togetherWith
-                                    (fadeOut(tween(150)) + slideOutHorizontally(tween(200)) { it / 5 })
-                                }
-                            },
-                            label = "folder"
-                        ) { stack ->
+                        AnimatedContent(targetState = folderStack, transitionSpec = {
+                            if (targetState.size > initialState.size) {
+                                (fadeIn(tween(200)) + slideInHorizontally(tween(300)) { it / 3 }) togetherWith
+                                (fadeOut(tween(150)) + slideOutHorizontally(tween(200)) { -it / 5 })
+                            } else {
+                                (fadeIn(tween(200)) + slideInHorizontally(tween(300)) { -it / 3 }) togetherWith
+                                (fadeOut(tween(150)) + slideOutHorizontally(tween(200)) { it / 5 })
+                            }
+                        }, label = "folder") { stack ->
                             if (stack.isNotEmpty()) {
                                 val (name, path) = stack.last()
                                 val isDrive = path.startsWith("gdrive://")
@@ -318,9 +321,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                             } else {
                                 AnimatedContent(selectedTab, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) }, label = "tab") { tab ->
                                     when (tab) {
-                                        0 -> RecentsScreen(context = context, onFileClick = { file ->
-                                            if (file.isDirectory) folderStack = listOf(file.name to file.path)
-                                        }, onAiAction = { prompt, image -> aiInitialPrompt = prompt; aiInitialImage = image; navigateTo(AppScreen.AI_CHAT) })
+                                        0 -> RecentsScreen(context = context, onFileClick = { file -> if (file.isDirectory) folderStack = listOf(file.name to file.path) }, onAiAction = { prompt, image -> aiInitialPrompt = prompt; aiInitialImage = image; navigateTo(AppScreen.AI_CHAT) })
                                         1 -> SharedScreen()
                                         2 -> BrowseScreen(driveSignedIn = driveSignedIn,
                                             onFolderClick = { folderStack = listOf(it.name to it.path) },
@@ -354,9 +355,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                         }
                     }
 
-                    // FABs with glass effect
-                    AnimatedVisibility(folderStack.isEmpty(), enter = fadeIn(tween(300)) + scaleIn(tween(300)),
-                        exit = fadeOut(tween(200)) + scaleOut(tween(200)), modifier = Modifier.fillMaxSize()) {
+                    AnimatedVisibility(folderStack.isEmpty(), enter = fadeIn(tween(300)) + scaleIn(tween(300)), exit = fadeOut(tween(200)) + scaleOut(tween(200)), modifier = Modifier.fillMaxSize()) {
                         Box(Modifier.fillMaxSize()) {
                             Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 148.dp).clickable { navigateTo(AppScreen.AI_CHAT) }) {
                                 GlassFab(backdrop, Icons.Rounded.AutoAwesome, iconTint = Color.White, tintColor = Color(0x66238636))
@@ -374,7 +373,6 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
             }
         }
 
-        // GitHub floating resizable window — contains actual GitHubScreen
         if (githubWasOpened && githubMiniMode && !githubBubbleMode) {
             GitHubFloatingWindow(
                 onExpand = {
@@ -382,43 +380,23 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                     previousScreen = activeScreen
                     activeScreen = AppScreen.GITHUB
                 },
-                onClose = {
-                    githubMiniMode = false
-                    githubBubbleMode = false
-                    githubWasOpened = false
-                },
-                onCollapse = {
-                    githubBubbleMode = true
-                },
+                onClose = { closeGitHubFully() },
+                onCollapse = { githubBubbleMode = true },
                 winW = ghWinW, winH = ghWinH, winX = ghWinX, winY = ghWinY,
                 onGeometryChange = { w, h, x, y -> ghWinW = w; ghWinH = h; ghWinX = x; ghWinY = y }
             )
         }
 
-        // GitHub bubble — small draggable circle, tap to restore mini window
         if (githubWasOpened && githubBubbleMode) {
-            GitHubBubble(
-                onExpand = { githubBubbleMode = false; githubMiniMode = true },
-                onClose = { githubBubbleMode = false; githubMiniMode = false; githubWasOpened = false }
-            )
+            GitHubBubble(onExpand = { githubBubbleMode = false; githubMiniMode = true }, onClose = { closeGitHubFully() })
         }
 
-        // GitHub upload from file manager dialog
         if (githubUploadFile != null) {
-            GitHubUploadFromDeviceDialog(
-                file = githubUploadFile!!,
-                onDismiss = { githubUploadFile = null },
-                onDone = { githubUploadFile = null }
-            )
+            GitHubUploadFromDeviceDialog(file = githubUploadFile!!, onDismiss = { githubUploadFile = null }, onDone = { githubUploadFile = null })
         }
 
-        // GitHub commit multiple files dialog
         if (githubCommitFiles != null) {
-            GitHubCommitDialog(
-                filePaths = githubCommitFiles!!,
-                onDismiss = { githubCommitFiles = null },
-                onDone = { githubCommitFiles = null }
-            )
+            GitHubCommitDialog(filePaths = githubCommitFiles!!, onDismiss = { githubCommitFiles = null }, onDone = { githubCommitFiles = null })
         }
     }
 }
@@ -435,11 +413,6 @@ private fun PermissionScreen(onRequest: () -> Unit) {
         }
     }
 }
-
-// ═══════════════════════════════════════════════
-// GitHub Floating Window — resizable, draggable
-// Contains actual GitHubScreen inside
-// ═══════════════════════════════════════════════
 
 @Composable
 private fun GitHubFloatingWindow(
@@ -471,12 +444,7 @@ private fun GitHubFloatingWindow(
             offsetY = offsetY.coerceIn(with(density) { 32.dp.toPx() }, screenH - windowH + m)
         }
 
-        // Save geometry on every change
-        LaunchedEffect(windowW, windowH, offsetX, offsetY) {
-            onGeometryChange(windowW, windowH, offsetX, offsetY)
-        }
-
-        // NO scrim — interface underneath is fully interactive
+        LaunchedEffect(windowW, windowH, offsetX, offsetY) { onGeometryChange(windowW, windowH, offsetX, offsetY) }
 
         Box(
             Modifier
@@ -499,17 +467,14 @@ private fun GitHubFloatingWindow(
                     Icon(Icons.Rounded.Code, null, Modifier.size(14.dp), tint = Blue)
                     Spacer(Modifier.width(4.dp))
                     Text("GitHub", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
-                    // Collapse to bubble
                     Box(Modifier.size(26.dp).clip(CircleShape).background(Color(0xFFFF9500).copy(0.1f)).clickable { onCollapse() }, contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.RemoveCircleOutline, null, Modifier.size(13.dp), tint = Color(0xFFFF9500))
                     }
                     Spacer(Modifier.width(4.dp))
-                    // Expand
                     Box(Modifier.size(26.dp).clip(CircleShape).background(Blue.copy(0.1f)).clickable { onExpand() }, contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.OpenInFull, null, Modifier.size(13.dp), tint = Blue)
                     }
                     Spacer(Modifier.width(4.dp))
-                    // Close
                     Box(Modifier.size(26.dp).clip(CircleShape).background(Color(0xFFFF3B30).copy(0.1f)).clickable { onClose() }, contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.Close, null, Modifier.size(13.dp), tint = Color(0xFFFF3B30))
                     }
@@ -519,7 +484,6 @@ private fun GitHubFloatingWindow(
                     GitHubScreen(onBack = { onCollapse() }, onMinimize = { onCollapse() }, compact = true)
                 }
             }
-            // Resize handles
             Box(Modifier.align(Alignment.BottomEnd).size(28.dp).pointerInput(Unit) { detectDragGestures { _, d -> windowW = (windowW + d.x).coerceIn(minW, maxW); windowH = (windowH + d.y).coerceIn(minH, maxH); clamp() } }.padding(4.dp), contentAlignment = Alignment.Center) {
                 Icon(Icons.Rounded.DragHandle, null, Modifier.size(14.dp).graphicsLayer { rotationZ = -45f }, tint = TextTertiary)
             }
@@ -533,16 +497,8 @@ private fun GitHubFloatingWindow(
     }
 }
 
-// ═══════════════════════════════════
-// ═══════════════════════════════════
-// GitHub Bubble — collapsed floating button
-// ═══════════════════════════════════
-
 @Composable
-private fun GitHubBubble(
-    onExpand: () -> Unit,
-    onClose: () -> Unit
-) {
+private fun GitHubBubble(onExpand: () -> Unit, onClose: () -> Unit) {
     val density = LocalDensity.current
     val context = LocalContext.current
     var offsetX by remember { mutableFloatStateOf(0f) }
@@ -579,409 +535,10 @@ private fun GitHubBubble(
                 .clickable { onExpand() },
             contentAlignment = Alignment.Center
         ) {
-            if (avatarUrl != null) {
-                coil.compose.AsyncImage(avatarUrl, "GitHub", Modifier.size(52.dp).clip(CircleShape))
-            } else {
-                Icon(Icons.Rounded.Code, null, Modifier.size(24.dp), tint = Blue)
-            }
+            if (avatarUrl != null) coil.compose.AsyncImage(avatarUrl, "GitHub", Modifier.size(52.dp).clip(CircleShape))
+            else Icon(Icons.Rounded.Code, null, Modifier.size(24.dp), tint = Blue)
         }
     }
-}
-
-// ═══════════════════════════════════
-// GitHub Upload from File Manager
-// Pick repo → branch → path → commit
-// ═══════════════════════════════════
-
-@Composable
-private fun GitHubUploadFromDeviceDialog(
-    file: FileItem,
-    onDismiss: () -> Unit,
-    onDone: () -> Unit
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var repos by remember { mutableStateOf<List<com.glassfiles.data.github.GHRepo>>(emptyList()) }
-    var branches by remember { mutableStateOf<List<String>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var uploading by remember { mutableStateOf(false) }
-
-    var selectedRepo by remember { mutableStateOf<com.glassfiles.data.github.GHRepo?>(null) }
-    var selectedBranch by remember { mutableStateOf("") }
-    var repoPath by remember { mutableStateOf(file.name) }
-    var commitMsg by remember { mutableStateOf("Add ${file.name}") }
-    var step by remember { mutableIntStateOf(0) } // 0=pick repo, 1=configure
-
-    LaunchedEffect(Unit) {
-        repos = com.glassfiles.data.github.GitHubManager.getRepos(context)
-        loading = false
-    }
-
-    LaunchedEffect(selectedRepo) {
-        if (selectedRepo != null) {
-            branches = com.glassfiles.data.github.GitHubManager.getBranches(context, selectedRepo!!.owner, selectedRepo!!.name)
-            selectedBranch = selectedRepo!!.defaultBranch
-            step = 1
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Rounded.Cloud, null, Modifier.size(22.dp), tint = Color(0xFF238636))
-                Text(Strings.ghUploadToGitHub, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 18.sp)
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // File info
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(Icons.Rounded.InsertDriveFile, null, Modifier.size(20.dp), tint = TextSecondary)
-                    Column(Modifier.weight(1f)) {
-                        Text(file.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1)
-                        Text(fmtUploadSize(file.size), fontSize = 11.sp, color = TextTertiary)
-                    }
-                }
-
-                if (loading) {
-                    Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    }
-                } else if (step == 0) {
-                    // Step 1: Pick repo
-                    Text(Strings.ghSelectRepo, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
-                    Column(
-                        Modifier.fillMaxWidth().heightIn(max = 300.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        repos.forEach { repo ->
-                            Row(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                                    .background(if (selectedRepo == repo) Blue.copy(0.1f) else Color.Transparent)
-                                    .clickable { selectedRepo = repo }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    if (repo.isPrivate) Icons.Rounded.Lock else Icons.Rounded.FolderOpen,
-                                    null, Modifier.size(16.dp),
-                                    tint = if (repo.isPrivate) Color(0xFFFF9F0A) else Blue
-                                )
-                                Column(Modifier.weight(1f)) {
-                                    Text(repo.name, fontSize = 13.sp, color = TextPrimary, maxLines = 1)
-                                    Text(repo.owner, fontSize = 10.sp, color = TextTertiary)
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Step 2: Configure upload
-                    Text("→ ${selectedRepo!!.owner}/${selectedRepo!!.name}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Blue)
-
-                    // Branch picker
-                    Text(Strings.ghPickBranch, fontSize = 12.sp, color = TextSecondary)
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        branches.forEach { b ->
-                            Box(
-                                Modifier.clip(RoundedCornerShape(6.dp))
-                                    .background(if (b == selectedBranch) Blue.copy(0.15f) else SurfaceLight)
-                                    .clickable { selectedBranch = b }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) { Text(b, fontSize = 12.sp, color = if (b == selectedBranch) Blue else TextSecondary) }
-                        }
-                    }
-
-                    OutlinedTextField(
-                        repoPath, { repoPath = it },
-                        label = { Text(Strings.ghFilePath) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
-                    )
-
-                    OutlinedTextField(
-                        commitMsg, { commitMsg = it },
-                        label = { Text(Strings.ghCommitMsg) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
-                    )
-
-                    if (uploading) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(top = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
-                            Text(Strings.ghUploadingFile, fontSize = 12.sp, color = Blue)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            if (step == 1 && selectedRepo != null) {
-                TextButton(
-                    onClick = {
-                        if (repoPath.isBlank() || uploading) return@TextButton
-                        uploading = true
-                        scope.launch {
-                            val ok = com.glassfiles.data.github.GitHubManager.uploadFileFromPath(
-                                context, selectedRepo!!.owner, selectedRepo!!.name,
-                                repoPath, file.path, commitMsg, selectedBranch
-                            )
-                            android.widget.Toast.makeText(
-                                context,
-                                if (ok) Strings.ghUploadSuccess else Strings.error,
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                            uploading = false
-                            if (ok) onDone()
-                        }
-                    },
-                    enabled = !uploading
-                ) {
-                    Text(Strings.ghUpload, color = if (uploading) TextTertiary else Color(0xFF238636), fontWeight = FontWeight.Bold)
-                }
-            }
-        },
-        dismissButton = {
-            if (step == 1) {
-                TextButton(onClick = { step = 0; selectedRepo = null }) {
-                    Text(Strings.ghSelectRepo, color = TextSecondary, fontSize = 12.sp)
-                }
-            }
-            TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) }
-        }
-    )
-}
-
-// ═══════════════════════════════════
-// GitHub Commit Multiple Files
-// Select repo → branch → path → commit message → push
-// ═══════════════════════════════════
-
-@Composable
-private fun GitHubCommitDialog(
-    filePaths: List<String>,
-    onDismiss: () -> Unit,
-    onDone: () -> Unit
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var repos by remember { mutableStateOf<List<com.glassfiles.data.github.GHRepo>>(emptyList()) }
-    var branches by remember { mutableStateOf<List<String>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var committing by remember { mutableStateOf(false) }
-    var progress by remember { mutableStateOf(0) }
-    var total by remember { mutableStateOf(0) }
-
-    var selectedRepo by remember { mutableStateOf<com.glassfiles.data.github.GHRepo?>(null) }
-    var selectedBranch by remember { mutableStateOf("") }
-    var repoBasePath by remember { mutableStateOf("") }
-    var commitMsg by remember { mutableStateOf("Add ${filePaths.size} files") }
-    var step by remember { mutableIntStateOf(0) } // 0=pick repo, 1=configure
-
-    val files = remember { filePaths.map { java.io.File(it) }.filter { it.exists() } }
-    val totalSize = remember { files.sumOf { if (it.isFile) it.length() else 0L } }
-
-    LaunchedEffect(Unit) {
-        repos = com.glassfiles.data.github.GitHubManager.getRepos(context)
-        loading = false
-    }
-
-    LaunchedEffect(selectedRepo) {
-        if (selectedRepo != null) {
-            branches = com.glassfiles.data.github.GitHubManager.getBranches(context, selectedRepo!!.owner, selectedRepo!!.name)
-            selectedBranch = selectedRepo!!.defaultBranch
-            step = 1
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = { if (!committing) onDismiss() },
-        containerColor = SurfaceWhite,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Rounded.CloudUpload, null, Modifier.size(22.dp), tint = Color(0xFF238636))
-                Text(Strings.ghCommitToGitHub, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 18.sp)
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Files info
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(Icons.Rounded.Folder, null, Modifier.size(20.dp), tint = Blue)
-                    Column(Modifier.weight(1f)) {
-                        Text("${files.size} ${Strings.ghCommitFiles.lowercase()}", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                        Text(fmtUploadSize(totalSize), fontSize = 11.sp, color = TextTertiary)
-                    }
-                }
-
-                // File list preview (max 5 visible)
-                Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SurfaceLight).padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    files.take(5).forEach { f ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                if (f.isDirectory) Icons.Rounded.Folder else Icons.Rounded.InsertDriveFile,
-                                null, Modifier.size(14.dp), tint = if (f.isDirectory) Blue else TextSecondary
-                            )
-                            Text(f.name, fontSize = 12.sp, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                    if (files.size > 5) {
-                        Text("+${files.size - 5} more", fontSize = 11.sp, color = TextTertiary)
-                    }
-                }
-
-                if (loading) {
-                    Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    }
-                } else if (step == 0) {
-                    // Pick repo
-                    Text(Strings.ghSelectRepo, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
-                    Column(
-                        Modifier.fillMaxWidth().heightIn(max = 250.dp).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        repos.forEach { repo ->
-                            Row(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                                    .background(if (selectedRepo == repo) Blue.copy(0.1f) else Color.Transparent)
-                                    .clickable { selectedRepo = repo }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    if (repo.isPrivate) Icons.Rounded.Lock else Icons.Rounded.FolderOpen,
-                                    null, Modifier.size(16.dp),
-                                    tint = if (repo.isPrivate) Color(0xFFFF9F0A) else Blue
-                                )
-                                Text(repo.name, fontSize = 13.sp, color = TextPrimary, maxLines = 1, modifier = Modifier.weight(1f))
-                            }
-                        }
-                    }
-                } else {
-                    // Configure commit
-                    Text("→ ${selectedRepo!!.owner}/${selectedRepo!!.name}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Blue)
-
-                    // Branch
-                    Text(Strings.ghPickBranch, fontSize = 12.sp, color = TextSecondary)
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        branches.forEach { b ->
-                            Box(
-                                Modifier.clip(RoundedCornerShape(6.dp))
-                                    .background(if (b == selectedBranch) Blue.copy(0.15f) else SurfaceLight)
-                                    .clickable { selectedBranch = b }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) { Text(b, fontSize = 12.sp, color = if (b == selectedBranch) Blue else TextSecondary) }
-                        }
-                    }
-
-                    // Base path in repo
-                    OutlinedTextField(
-                        repoBasePath, { repoBasePath = it },
-                        label = { Text(Strings.ghRepoPath) },
-                        singleLine = true, modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("folder/subfolder") },
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
-                    )
-
-                    // Commit message
-                    OutlinedTextField(
-                        commitMsg, { commitMsg = it },
-                        label = { Text(Strings.ghCommitMsg) },
-                        singleLine = false, maxLines = 3, modifier = Modifier.fillMaxWidth(),
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp)
-                    )
-
-                    // Progress
-                    if (committing) {
-                        Column(Modifier.fillMaxWidth()) {
-                            LinearProgressIndicator(
-                                progress = { if (total > 0) progress.toFloat() / total else 0f },
-                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)),
-                                color = Color(0xFF238636)
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text("${Strings.ghCommitting} $progress / $total", fontSize = 12.sp, color = Blue)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            if (step == 1 && selectedRepo != null) {
-                TextButton(
-                    onClick = {
-                        if (commitMsg.isBlank() || committing) return@TextButton
-                        committing = true
-                        scope.launch {
-                            // Collect all files as pairs (repoPath -> bytes)
-                            val fileData = mutableListOf<Pair<String, ByteArray>>()
-                            files.forEach { f ->
-                                if (f.isDirectory) {
-                                    collectFilesRecursive(f, f, repoBasePath, fileData)
-                                } else {
-                                    val rp = if (repoBasePath.isNotBlank()) "$repoBasePath/${f.name}" else f.name
-                                    try { fileData.add(rp to f.readBytes()) } catch (_: Exception) {}
-                                }
-                            }
-                            total = fileData.size
-
-                            val ok = com.glassfiles.data.github.GitHubManager.uploadMultipleFiles(
-                                context, selectedRepo!!.owner, selectedRepo!!.name,
-                                selectedBranch, fileData, commitMsg
-                            ) { done, t -> progress = done; total = t }
-
-                            android.widget.Toast.makeText(
-                                context,
-                                if (ok) Strings.ghCommitSuccess else Strings.ghCommitFailed,
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                            committing = false
-                            if (ok) onDone()
-                        }
-                    },
-                    enabled = !committing
-                ) {
-                    Text(Strings.ghCommitToGitHub, color = if (committing) TextTertiary else Color(0xFF238636), fontWeight = FontWeight.Bold)
-                }
-            }
-        },
-        dismissButton = {
-            if (!committing) {
-                if (step == 1) {
-                    TextButton(onClick = { step = 0; selectedRepo = null }) {
-                        Text("← ${Strings.ghSelectRepo}", color = TextSecondary, fontSize = 12.sp)
-                    }
-                }
-                TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) }
-            }
-        }
-    )
 }
 
 private fun collectFilesRecursive(root: java.io.File, current: java.io.File, basePath: String, result: MutableList<Pair<String, ByteArray>>) {
@@ -999,5 +556,3 @@ private fun fmtUploadSize(b: Long): String = when {
     b < 1024L * 1024 -> "%.1f KB".format(b / 1024.0)
     else -> "%.1f MB".format(b / (1024.0 * 1024))
 }
-
-
