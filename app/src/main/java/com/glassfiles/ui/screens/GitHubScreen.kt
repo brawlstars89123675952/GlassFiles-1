@@ -39,7 +39,12 @@ import java.io.File
 private val LocalGHCompact = compositionLocalOf { false }
 
 @Composable
-fun GitHubScreen(onBack: () -> Unit, onMinimize: () -> Unit = {}, compact: Boolean = false) {
+fun GitHubScreen(
+    onBack: () -> Unit,
+    onMinimize: () -> Unit = {},
+    onClose: (() -> Unit)? = null,
+    compact: Boolean = false
+) {
     CompositionLocalProvider(LocalGHCompact provides compact) {
     val context = LocalContext.current
     var isLoggedIn by remember { mutableStateOf(GitHubManager.isLoggedIn(context)) }
@@ -49,17 +54,17 @@ fun GitHubScreen(onBack: () -> Unit, onMinimize: () -> Unit = {}, compact: Boole
     var showSettings by remember { mutableStateOf(false) }
     LaunchedEffect(isLoggedIn) { if (isLoggedIn) user = GitHubManager.getUser(context) }
     when {
-        !isLoggedIn -> LoginScreen(onBack, onMinimize) { GitHubManager.saveToken(context, it); isLoggedIn = true }
-        showSettings -> GitHubSettingsScreen(onBack = { showSettings = false }, onLogout = { GitHubManager.logout(context); isLoggedIn = false; user = null; showSettings = false })
-        showGists -> GistsScreen({ showGists = false }, onMinimize)
-        selectedRepo != null -> RepoDetailScreen(selectedRepo!!, { selectedRepo = null }, onMinimize)
-        else -> ReposScreen(user, onBack, onMinimize, { GitHubManager.logout(context); isLoggedIn = false; user = null }, { selectedRepo = it }, { showGists = true }, { showSettings = true })
+        !isLoggedIn -> LoginScreen(onBack, onMinimize, onClose) { GitHubManager.saveToken(context, it); isLoggedIn = true }
+        showSettings -> GitHubSettingsScreen(onBack = { showSettings = false }, onLogout = { GitHubManager.logout(context); isLoggedIn = false; user = null; showSettings = false }, onClose = onClose)
+        showGists -> GistsScreen({ showGists = false }, onMinimize, onClose)
+        selectedRepo != null -> RepoDetailScreen(selectedRepo!!, { selectedRepo = null }, onMinimize, onClose)
+        else -> ReposScreen(user, onBack, onMinimize, onClose, { GitHubManager.logout(context); isLoggedIn = false; user = null }, { selectedRepo = it }, { showGists = true }, { showSettings = true })
     }
     }
 }
 
 @Composable
-private fun GHTopBar(title: String, subtitle: String? = null, onBack: () -> Unit, onMinimize: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
+private fun GHTopBar(title: String, subtitle: String? = null, onBack: () -> Unit, onMinimize: (() -> Unit)? = null, onClose: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
     val compact = LocalGHCompact.current
     val shape = if (compact) RoundedCornerShape(0.dp) else RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
     Row(Modifier.fillMaxWidth().background(SurfaceWhite, shape).padding(
@@ -74,16 +79,17 @@ private fun GHTopBar(title: String, subtitle: String? = null, onBack: () -> Unit
             if (subtitle != null && !compact) Text(subtitle, fontSize = 13.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (onMinimize != null && !compact) IconButton(onClick = onMinimize) { Icon(Icons.Rounded.PictureInPictureAlt, null, Modifier.size(20.dp), tint = Blue) }
+        if (onClose != null && !compact) IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = Color(0xFFFF3B30)) }
         actions()
     }
 }
 
 @Composable
-private fun LoginScreen(onBack: () -> Unit, onMinimize: () -> Unit, onLogin: (String) -> Unit) {
+private fun LoginScreen(onBack: () -> Unit, onMinimize: () -> Unit, onClose: (() -> Unit)? = null, onLogin: (String) -> Unit) {
     var token by remember { mutableStateOf("") }; var testing by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }
     val context = LocalContext.current; val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar("GitHub", onBack = onBack, onMinimize = onMinimize)
+        GHTopBar("GitHub", onBack = onBack, onMinimize = onMinimize, onClose = onClose)
         Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Box(Modifier.size(80.dp).clip(CircleShape).background(TextPrimary), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Code, null, Modifier.size(40.dp), tint = SurfaceLight) }
             Spacer(Modifier.height(24.dp)); Text("GitHub", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
@@ -103,7 +109,7 @@ private fun LoginScreen(onBack: () -> Unit, onMinimize: () -> Unit, onLogin: (St
 }
 
 @Composable
-private fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Unit, onLogout: () -> Unit, onRepoClick: (GHRepo) -> Unit, onGists: () -> Unit, onSettings: () -> Unit) {
+private fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Unit, onClose: (() -> Unit)? = null, onLogout: () -> Unit, onRepoClick: (GHRepo) -> Unit, onGists: () -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current; val scope = rememberCoroutineScope()
     var repos by remember { mutableStateOf<List<GHRepo>>(emptyList()) }; var loading by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }; var showCreate by remember { mutableStateOf(false) }
@@ -123,7 +129,7 @@ private fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Uni
     if (showOrgs) { OrgsScreen(onBack = { showOrgs = false }, onRepoClick = { showOrgs = false; onRepoClick(it) }); return }
     if (viewProfile != null) { ProfileScreen(username = viewProfile!!, onBack = { viewProfile = null }, onRepoClick = { viewProfile = null; onRepoClick(it) }); return }
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar("GitHub", onBack = onBack, onMinimize = onMinimize) {
+        GHTopBar("GitHub", onBack = onBack, onMinimize = onMinimize, onClose = onClose) {
             IconButton(onClick = { showNotifications = true }) { Icon(Icons.Rounded.Notifications, null, Modifier.size(20.dp), tint = Blue) }
             IconButton(onClick = onGists) { Icon(Icons.Rounded.Description, null, Modifier.size(20.dp), tint = Blue) }
             IconButton(onClick = { showCreate = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue) }
@@ -191,7 +197,7 @@ private fun RepoCard(repo: GHRepo, onClick: () -> Unit) {
 private enum class RepoTab { FILES, COMMITS, ISSUES, PULLS, RELEASES, ACTIONS, README, CODE_SEARCH }
 
 @Composable
-private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -> Unit = {}) {
+private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -> Unit = {}, onClose: (() -> Unit)? = null) {
     val context = LocalContext.current; val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(RepoTab.FILES) }; var contents by remember { mutableStateOf<List<GHContent>>(emptyList()) }
     var currentPath by remember { mutableStateOf("") }; var commits by remember { mutableStateOf<List<GHCommit>>(emptyList()) }
@@ -208,7 +214,6 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
     var showCreateBranch by remember { mutableStateOf(false) }; var showCreateIssue by remember { mutableStateOf(false) }
     var showCreatePR by remember { mutableStateOf(false) }; var selectedIssue by remember { mutableStateOf<GHIssue?>(null) }
     var selectedCommitSha by remember { mutableStateOf<String?>(null) }; var deleteTarget by remember { mutableStateOf<GHContent?>(null) }
-    var showRepoSettings by remember { mutableStateOf(false) }
     var showBranchPicker by remember { mutableStateOf(false) }
     var languages by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }; var contributors by remember { mutableStateOf<List<GHContributor>>(emptyList()) }
     // Pagination
@@ -228,7 +233,6 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
         RepoTab.CODE_SEARCH -> { /* searches on demand */ }
     }; loading = false }
 
-    if (showRepoSettings) { GitHubRepoSettingsScreen(repo = repo, onBack = { showRepoSettings = false }); return }
     if (selectedIssue != null) { IssueDetailScreen(repo, selectedIssue!!.number) { selectedIssue = null }; return }
     if (selectedCommitSha != null) { CommitDiffScreen(repo, selectedCommitSha!!) { selectedCommitSha = null }; return }
     if (selectedRunId != null) { WorkflowRunDetailScreen(repo, selectedRunId!!) { selectedRunId = null }; return }
@@ -239,7 +243,7 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
         val isMd = ext in listOf("md", "markdown")
         val cachedLines = remember(safeFileContent) { safeFileContent.lines() }
         Column(Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
-            GHTopBar(currentPath.substringAfterLast("/"), onBack = { fileContent = null }) {
+            GHTopBar(currentPath.substringAfterLast("/"), onBack = { fileContent = null }, onClose = onClose) {
                 // Copy all
                 IconButton(onClick = {
                     val clip = android.content.ClipData.newPlainText("code", safeFileContent)
@@ -291,9 +295,8 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
     if (editingFile != null) { EditFileScreen(repo, editingFile!!, selectedBranch, { editingFile = null }) { editingFile = null; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath) } }; return }
 
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(repo.name, subtitle = if (currentPath.isNotBlank()) currentPath else repo.owner, onBack = { if (currentPath.isNotBlank() && selectedTab == RepoTab.FILES) currentPath = currentPath.substringBeforeLast("/", "") else onBack() }, onMinimize = onMinimize) {
+        GHTopBar(repo.name, subtitle = if (currentPath.isNotBlank()) currentPath else repo.owner, onBack = { if (currentPath.isNotBlank() && selectedTab == RepoTab.FILES) currentPath = currentPath.substringBeforeLast("/", "") else onBack() }, onMinimize = onMinimize, onClose = onClose) {
             val ic = if (LocalGHCompact.current) 16.dp else 20.dp
-            IconButton(onClick = { showRepoSettings = true }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.Settings, null, Modifier.size(ic), tint = Blue) }
             IconButton(onClick = { scope.launch { if (isStarred) GitHubManager.unstarRepo(context, repo.owner, repo.name) else GitHubManager.starRepo(context, repo.owner, repo.name); isStarred = !isStarred } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isStarred) Icons.Rounded.Star else Icons.Rounded.StarBorder, null, Modifier.size(ic), tint = Color(0xFFFFCC00)) }
             IconButton(onClick = { scope.launch { if (isWatching) GitHubManager.unwatchRepo(context, repo.owner, repo.name) else GitHubManager.watchRepo(context, repo.owner, repo.name); isWatching = !isWatching } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isWatching) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, Modifier.size(ic), tint = if (isWatching) Blue else TextSecondary) }
             IconButton(onClick = { scope.launch { val ok = GitHubManager.forkRepo(context, repo.owner, repo.name); Toast.makeText(context, if (ok) Strings.ghForked else Strings.error, Toast.LENGTH_SHORT).show() } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.CallSplit, null, Modifier.size(ic), tint = Blue) }
@@ -558,13 +561,13 @@ private fun EditFileScreen(repo: GHRepo, file: GHContent, branch: String, onBack
 }
 
 @Composable
-private fun GistsScreen(onBack: () -> Unit, onMinimize: () -> Unit) { val context = LocalContext.current; val scope = rememberCoroutineScope()
+private fun GistsScreen(onBack: () -> Unit, onMinimize: () -> Unit, onClose: (() -> Unit)? = null) { val context = LocalContext.current; val scope = rememberCoroutineScope()
     var gists by remember { mutableStateOf<List<GHGist>>(emptyList()) }; var loading by remember { mutableStateOf(true) }; var showCreate by remember { mutableStateOf(false) }
     var viewingGist by remember { mutableStateOf<GHGist?>(null) }; var gistContent by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(Unit) { gists = GitHubManager.getGists(context); loading = false }
-    if (viewingGist != null) { Column(Modifier.fillMaxSize().background(SurfaceLight)) { GHTopBar(viewingGist!!.description.ifBlank { "Gist" }, onBack = { viewingGist = null; gistContent = emptyMap() }) { IconButton(onClick = { scope.launch { GitHubManager.deleteGist(context, viewingGist!!.id); gists = GitHubManager.getGists(context); viewingGist = null; gistContent = emptyMap() } }) { Icon(Icons.Rounded.Delete, null, Modifier.size(20.dp), tint = Color(0xFFFF3B30)) } }
+    if (viewingGist != null) { Column(Modifier.fillMaxSize().background(SurfaceLight)) { GHTopBar(viewingGist!!.description.ifBlank { "Gist" }, onBack = { viewingGist = null; gistContent = emptyMap() }, onClose = onClose) { IconButton(onClick = { scope.launch { GitHubManager.deleteGist(context, viewingGist!!.id); gists = GitHubManager.getGists(context); viewingGist = null; gistContent = emptyMap() } }) { Icon(Icons.Rounded.Delete, null, Modifier.size(20.dp), tint = Color(0xFFFF3B30)) } }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) { gistContent.forEach { (n, t) -> item { Text(n, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Blue); Spacer(Modifier.height(4.dp)); Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF1E1E22)).horizontalScroll(rememberScrollState()).padding(10.dp)) { Text(t, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFD4D4D4), lineHeight = 18.sp) }; Spacer(Modifier.height(12.dp)) } } } }; return }
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) { GHTopBar("Gists", onBack = onBack, onMinimize = onMinimize) { IconButton(onClick = { showCreate = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue) } }
+    Column(Modifier.fillMaxSize().background(SurfaceLight)) { GHTopBar("Gists", onBack = onBack, onMinimize = onMinimize, onClose = onClose) { IconButton(onClick = { showCreate = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue) } }
         if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
         else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) { items(gists) { g -> Row(Modifier.fillMaxWidth().clickable { scope.launch { gistContent = GitHubManager.getGistContent(context, g.id); viewingGist = g } }.padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Icons.Rounded.Description, null, Modifier.size(20.dp), tint = Blue); Column(Modifier.weight(1f)) { Text(g.description.ifBlank { g.files.firstOrNull() ?: "Gist" }, fontSize = 14.sp, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text("${g.files.size} files", fontSize = 11.sp, color = TextSecondary); Text(if (g.isPublic) Strings.ghPublic else Strings.ghPrivate, fontSize = 11.sp, color = TextTertiary); Text(g.updatedAt.take(10), fontSize = 11.sp, color = TextTertiary) } }
@@ -686,7 +689,7 @@ private fun DispatchWorkflowDialog(repo: GHRepo, workflows: List<GHWorkflow>, br
 // ═══════════════════════════════════
 
 @Composable
-private fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit) {
+private fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onClose: (() -> Unit)? = null) {
     val context = LocalContext.current; val scope = rememberCoroutineScope()
     var user by remember { mutableStateOf(GitHubManager.getCachedUser(context)) }
     val token = remember { GitHubManager.getToken(context) }
@@ -694,7 +697,7 @@ private fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit) {
     var newToken by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(Strings.ghSettings, onBack = onBack)
+        GHTopBar(Strings.ghSettings, onBack = onBack, onClose = onClose)
 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             // Account section
