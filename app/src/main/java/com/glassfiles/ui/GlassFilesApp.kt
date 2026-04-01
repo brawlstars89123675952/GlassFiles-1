@@ -168,12 +168,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
             if (!githubMiniMode && activeScreen == AppScreen.GITHUB) {
                 Box(Modifier.fillMaxSize()) {
                     GitHubScreen(
-                        onBack = {
-                            githubMiniMode = true
-                            val prev = previousScreen
-                            activeScreen = prev
-                            previousScreen = AppScreen.MAIN
-                        },
+                        onBack = { closeGitHubFully() },
                         onMinimize = {
                             githubMiniMode = true
                             val prev = previousScreen
