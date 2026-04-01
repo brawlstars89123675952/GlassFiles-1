@@ -208,6 +208,7 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
     var showCreateBranch by remember { mutableStateOf(false) }; var showCreateIssue by remember { mutableStateOf(false) }
     var showCreatePR by remember { mutableStateOf(false) }; var selectedIssue by remember { mutableStateOf<GHIssue?>(null) }
     var selectedCommitSha by remember { mutableStateOf<String?>(null) }; var deleteTarget by remember { mutableStateOf<GHContent?>(null) }
+    var showRepoSettings by remember { mutableStateOf(false) }
     var showBranchPicker by remember { mutableStateOf(false) }
     var languages by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }; var contributors by remember { mutableStateOf<List<GHContributor>>(emptyList()) }
     // Pagination
@@ -227,6 +228,7 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
         RepoTab.CODE_SEARCH -> { /* searches on demand */ }
     }; loading = false }
 
+    if (showRepoSettings) { GitHubRepoSettingsScreen(repo = repo, onBack = { showRepoSettings = false }); return }
     if (selectedIssue != null) { IssueDetailScreen(repo, selectedIssue!!.number) { selectedIssue = null }; return }
     if (selectedCommitSha != null) { CommitDiffScreen(repo, selectedCommitSha!!) { selectedCommitSha = null }; return }
     if (selectedRunId != null) { WorkflowRunDetailScreen(repo, selectedRunId!!) { selectedRunId = null }; return }
@@ -291,6 +293,7 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         GHTopBar(repo.name, subtitle = if (currentPath.isNotBlank()) currentPath else repo.owner, onBack = { if (currentPath.isNotBlank() && selectedTab == RepoTab.FILES) currentPath = currentPath.substringBeforeLast("/", "") else onBack() }, onMinimize = onMinimize) {
             val ic = if (LocalGHCompact.current) 16.dp else 20.dp
+            IconButton(onClick = { showRepoSettings = true }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.Settings, null, Modifier.size(ic), tint = Blue) }
             IconButton(onClick = { scope.launch { if (isStarred) GitHubManager.unstarRepo(context, repo.owner, repo.name) else GitHubManager.starRepo(context, repo.owner, repo.name); isStarred = !isStarred } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isStarred) Icons.Rounded.Star else Icons.Rounded.StarBorder, null, Modifier.size(ic), tint = Color(0xFFFFCC00)) }
             IconButton(onClick = { scope.launch { if (isWatching) GitHubManager.unwatchRepo(context, repo.owner, repo.name) else GitHubManager.watchRepo(context, repo.owner, repo.name); isWatching = !isWatching } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isWatching) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, Modifier.size(ic), tint = if (isWatching) Blue else TextSecondary) }
             IconButton(onClick = { scope.launch { val ok = GitHubManager.forkRepo(context, repo.owner, repo.name); Toast.makeText(context, if (ok) Strings.ghForked else Strings.error, Toast.LENGTH_SHORT).show() } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.CallSplit, null, Modifier.size(ic), tint = Blue) }
