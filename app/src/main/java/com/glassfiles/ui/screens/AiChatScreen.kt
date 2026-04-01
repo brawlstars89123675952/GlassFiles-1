@@ -31,7 +31,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -576,43 +580,43 @@ private fun HighlightedCodeBlock(code: String, lang: String, onCopy: () -> Unit)
     }
 }
 
-private fun buildHighlightedLine(line: String, lang: String): androidx.compose.ui.text.AnnotatedString {
-    return androidx.compose.ui.text.buildAnnotatedString {
+private fun buildHighlightedLine(line: String, lang: String): AnnotatedString {
+    return buildAnnotatedString {
         val trimmed = line
         var i = 0
         while (i < trimmed.length) {
             when {
                 // Comment
                 i < trimmed.length - 1 && trimmed[i] == '/' && trimmed[i + 1] == '/' -> {
-                    withStyle(androidx.compose.ui.text.SpanStyle(color = CodeComment)) { append(trimmed.substring(i)) }
+                    withStyle(SpanStyle(color = CodeComment)) { append(trimmed.substring(i)) }
                     i = trimmed.length
                 }
                 trimmed[i] == '#' && (lang in listOf("python", "py", "bash", "sh", "yaml", "yml", "toml", "rb")) -> {
-                    withStyle(androidx.compose.ui.text.SpanStyle(color = CodeComment)) { append(trimmed.substring(i)) }
+                    withStyle(SpanStyle(color = CodeComment)) { append(trimmed.substring(i)) }
                     i = trimmed.length
                 }
                 // String double
                 trimmed[i] == '"' -> {
                     val end = trimmed.indexOf('"', i + 1).let { if (it < 0) trimmed.length - 1 else it }
-                    withStyle(androidx.compose.ui.text.SpanStyle(color = CodeString)) { append(trimmed.substring(i, end + 1)) }
+                    withStyle(SpanStyle(color = CodeString)) { append(trimmed.substring(i, end + 1)) }
                     i = end + 1
                 }
                 // String single
                 trimmed[i] == '\'' -> {
                     val end = trimmed.indexOf('\'', i + 1).let { if (it < 0) trimmed.length - 1 else it }
-                    withStyle(androidx.compose.ui.text.SpanStyle(color = CodeString)) { append(trimmed.substring(i, end + 1)) }
+                    withStyle(SpanStyle(color = CodeString)) { append(trimmed.substring(i, end + 1)) }
                     i = end + 1
                 }
                 // Annotation / decorator
                 trimmed[i] == '@' -> {
                     var j = i + 1; while (j < trimmed.length && (trimmed[j].isLetterOrDigit() || trimmed[j] == '.')) j++
-                    withStyle(androidx.compose.ui.text.SpanStyle(color = CodeType)) { append(trimmed.substring(i, j)) }
+                    withStyle(SpanStyle(color = CodeType)) { append(trimmed.substring(i, j)) }
                     i = j
                 }
                 // Number
                 trimmed[i].isDigit() && (i == 0 || !trimmed[i - 1].isLetterOrDigit()) -> {
                     var j = i; while (j < trimmed.length && (trimmed[j].isDigit() || trimmed[j] == '.' || trimmed[j] == 'f' || trimmed[j] == 'L')) j++
-                    withStyle(androidx.compose.ui.text.SpanStyle(color = CodeNumber)) { append(trimmed.substring(i, j)) }
+                    withStyle(SpanStyle(color = CodeNumber)) { append(trimmed.substring(i, j)) }
                     i = j
                 }
                 // Word (keyword or identifier)
@@ -625,10 +629,10 @@ private fun buildHighlightedLine(line: String, lang: String): androidx.compose.u
                         j < trimmed.length && trimmed[j] == '(' -> CodeFunc
                         else -> CodeDefault
                     }
-                    withStyle(androidx.compose.ui.text.SpanStyle(color = color)) { append(word) }
+                    withStyle(SpanStyle(color = color)) { append(word) }
                     i = j
                 }
-                else -> { withStyle(androidx.compose.ui.text.SpanStyle(color = CodeDefault)) { append(trimmed[i].toString()) }; i++ }
+                else -> { withStyle(SpanStyle(color = CodeDefault)) { append(trimmed[i].toString()) }; i++ }
             }
         }
     }
