@@ -179,21 +179,9 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                             val prev = previousScreen
                             activeScreen = prev
                             previousScreen = AppScreen.MAIN
-                        }
+                        },
+                        onClose = { closeGitHubFully() }
                     )
-                    Box(
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 18.dp, end = 16.dp)
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFFF3B30).copy(0.16f))
-                            .border(1.dp, Color(0x66FF3B30), CircleShape)
-                            .clickable { closeGitHubFully() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30))
-                    }
                 }
             }
         }
