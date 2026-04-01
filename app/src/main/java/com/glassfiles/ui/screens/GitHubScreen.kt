@@ -39,12 +39,7 @@ import java.io.File
 private val LocalGHCompact = compositionLocalOf { false }
 
 @Composable
-fun GitHubScreen(
-    onBack: () -> Unit,
-    onMinimize: () -> Unit = {},
-    onClose: (() -> Unit)? = null,
-    compact: Boolean = false
-) {
+fun GitHubScreen(onBack: () -> Unit, onMinimize: () -> Unit = {}, onClose: (() -> Unit)? = null, compact: Boolean = false) {
     CompositionLocalProvider(LocalGHCompact provides compact) {
     val context = LocalContext.current
     var isLoggedIn by remember { mutableStateOf(GitHubManager.isLoggedIn(context)) }
@@ -206,7 +201,7 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
     var workflowRuns by remember { mutableStateOf<List<GHWorkflowRun>>(emptyList()) }; var selectedRunId by remember { mutableStateOf<Long?>(null) }
     var workflows by remember { mutableStateOf<List<GHWorkflow>>(emptyList()) }; var showDispatch by remember { mutableStateOf(false) }
     var branches by remember { mutableStateOf<List<String>>(emptyList()) }; var loading by remember { mutableStateOf(true) }
-    var fileContent by remember { mutableStateOf<String?>(null) }; var editingFile by remember { mutableStateOf<GHContent?>(null) }
+    var fileContent by remember { mutableStateOf<String?>(null) }; var openedFile by remember { mutableStateOf<GHContent?>(null) }; var editingFile by remember { mutableStateOf<GHContent?>(null) }
     var cloneProgress by remember { mutableStateOf<String?>(null) }; var isStarred by remember { mutableStateOf(false) }
     var isWatching by remember { mutableStateOf(false) }
     var selectedBranch by remember { mutableStateOf(repo.defaultBranch) }
@@ -223,7 +218,7 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
 
     LaunchedEffect(Unit) { isStarred = GitHubManager.isStarred(context, repo.owner, repo.name); isWatching = GitHubManager.isWatching(context, repo.owner, repo.name); branches = GitHubManager.getBranches(context, repo.owner, repo.name) }
     LaunchedEffect(selectedTab, currentPath, selectedBranch) { loading = true; when (selectedTab) {
-        RepoTab.FILES -> contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath)
+        RepoTab.FILES -> contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch)
         RepoTab.COMMITS -> { commitsPage = 1; val r = GitHubManager.getCommits(context, repo.owner, repo.name, 1); commits = r; commitsHasMore = r.size >= 30 }
         RepoTab.ISSUES -> { issuesPage = 1; val r = GitHubManager.getIssues(context, repo.owner, repo.name, page = 1); issues = r; issuesHasMore = r.size >= 30 }
         RepoTab.PULLS -> { pullsPage = 1; val r = GitHubManager.getPullRequests(context, repo.owner, repo.name, page = 1); pulls = r; pullsHasMore = r.size >= 30 }
@@ -237,62 +232,56 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
     if (selectedCommitSha != null) { CommitDiffScreen(repo, selectedCommitSha!!) { selectedCommitSha = null }; return }
     if (selectedRunId != null) { WorkflowRunDetailScreen(repo, selectedRunId!!) { selectedRunId = null }; return }
     val safeFileContent = fileContent
-    if (safeFileContent != null) {
-        val ext = currentPath.substringAfterLast(".", "").lowercase()
+    val safeOpenedFile = openedFile
+    if (safeFileContent != null && safeOpenedFile != null) {
+        val ext = safeOpenedFile.name.substringAfterLast(".", "").lowercase()
         val isImage = ext in listOf("png", "jpg", "jpeg", "gif", "webp", "svg", "ico")
         val isMd = ext in listOf("md", "markdown")
         val cachedLines = remember(safeFileContent) { safeFileContent.lines() }
         Column(Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
-            GHTopBar(currentPath.substringAfterLast("/"), onBack = { fileContent = null }, onClose = onClose) {
-                // Copy all
+            GHTopBar(safeOpenedFile.name, onBack = { fileContent = null; openedFile = null }, onClose = onClose) {
                 IconButton(onClick = {
                     val clip = android.content.ClipData.newPlainText("code", safeFileContent)
                     (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
                     Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
                 }) { Icon(Icons.Rounded.ContentCopy, null, Modifier.size(20.dp), tint = Blue) }
-                // Download
-                IconButton(onClick = { scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${currentPath.substringAfterLast("/")}"); val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, currentPath, dest); Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show() } }) { Icon(Icons.Rounded.Download, null, Modifier.size(20.dp), tint = Blue) }
-                // Edit
-                IconButton(onClick = { val fc = contents.find { it.path == currentPath }; if (fc != null) { editingFile = fc; fileContent = null } }) { Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = Blue) }
+                IconButton(onClick = {
+                    scope.launch {
+                        val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${safeOpenedFile.name}")
+                        val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, safeOpenedFile.path, dest, selectedBranch)
+                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                    }
+                }) { Icon(Icons.Rounded.Download, null, Modifier.size(20.dp), tint = Blue) }
+                IconButton(onClick = { editingFile = safeOpenedFile; fileContent = null }) {
+                    Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = Blue)
+                }
             }
-            // File info bar
             Row(Modifier.fillMaxWidth().background(Color(0xFF161B22)).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("${cachedLines.size} lines", fontSize = 11.sp, color = Color(0xFF8B949E))
                 Text("${safeFileContent.length} chars", fontSize = 11.sp, color = Color(0xFF8B949E))
                 Text(ext.uppercase(), fontSize = 11.sp, color = Color(0xFF58A6FF), fontWeight = FontWeight.SemiBold)
             }
-            // Content
             if (isImage) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Image preview not available\nUse Download to save", fontSize = 14.sp, color = Color(0xFF8B949E), textAlign = TextAlign.Center)
                 }
             } else if (isMd) {
                 LazyColumn(Modifier.fillMaxSize().padding(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-                    items(cachedLines.size) { idx ->
-                        MarkdownLine(cachedLines[idx])
-                    }
+                    items(cachedLines.size) { idx -> MarkdownLine(cachedLines[idx]) }
                 }
             } else {
-                // Code with syntax highlighting
                 LazyColumn(Modifier.fillMaxSize().padding(start = 4.dp, end = 4.dp, top = 4.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                     items(cachedLines.size) { idx ->
                         Row(Modifier.fillMaxWidth()) {
-                            Text(
-                                "${idx + 1}".padStart(4),
-                                fontSize = 11.sp, fontFamily = FontFamily.Monospace,
-                                color = Color(0xFF484F58), modifier = Modifier.padding(end = 10.dp)
-                            )
-                            Text(
-                                highlightLine(cachedLines[idx], ext),
-                                fontSize = 12.sp, fontFamily = FontFamily.Monospace, lineHeight = 18.sp
-                            )
+                            Text("${idx + 1}".padStart(4), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Color(0xFF484F58), modifier = Modifier.padding(end = 10.dp))
+                            Text(highlightLine(cachedLines[idx], ext), fontSize = 12.sp, fontFamily = FontFamily.Monospace, lineHeight = 18.sp)
                         }
                     }
                 }
             }
         }; return
     }
-    if (editingFile != null) { EditFileScreen(repo, editingFile!!, selectedBranch, { editingFile = null }) { editingFile = null; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath) } }; return }
+    if (editingFile != null) { EditFileScreen(repo, editingFile!!, selectedBranch, { editingFile = null }) { editingFile = null; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch) } }; return }
 
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         GHTopBar(repo.name, subtitle = if (currentPath.isNotBlank()) currentPath else repo.owner, onBack = { if (currentPath.isNotBlank() && selectedTab == RepoTab.FILES) currentPath = currentPath.substringBeforeLast("/", "") else onBack() }, onMinimize = onMinimize, onClose = onClose) {
@@ -321,7 +310,7 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor))
         if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
         else when (selectedTab) {
-            RepoTab.FILES -> FilesTab(contents, onDirClick = { currentPath = it.path }, onFileClick = { scope.launch { fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, it.path); currentPath = it.path } }, onEdit = { editingFile = it }, onDelete = { deleteTarget = it }, onDownload = { scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${it.name}"); val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, it.path, dest); Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show() } })
+            RepoTab.FILES -> FilesTab(contents, onDirClick = { currentPath = it.path }, onFileClick = { scope.launch { openedFile = it; fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, it.path, selectedBranch) } }, onEdit = { editingFile = it }, onDelete = { deleteTarget = it }, onDownload = { scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${it.name}"); val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, it.path, dest, selectedBranch); Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show() } })
             RepoTab.COMMITS -> CommitsTab(commits, commitsHasMore, { scope.launch { commitsPage++; val r = GitHubManager.getCommits(context, repo.owner, repo.name, commitsPage); if (r.size < 30) commitsHasMore = false; commits = commits + r } }) { selectedCommitSha = it.sha }
             RepoTab.ISSUES -> IssuesTab(issues, issuesHasMore, { scope.launch { issuesPage++; val r = GitHubManager.getIssues(context, repo.owner, repo.name, page = issuesPage); if (r.size < 30) issuesHasMore = false; issues = issues + r } }) { selectedIssue = it }
             RepoTab.PULLS -> PullsTab(pulls, repo) { scope.launch { pulls = GitHubManager.getPullRequests(context, repo.owner, repo.name) } }
@@ -331,12 +320,12 @@ private fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () ->
             RepoTab.CODE_SEARCH -> CodeSearchTab(repo)
         }
     }
-    if (showUpload) UploadDialog(repo, currentPath, selectedBranch, { showUpload = false }) { showUpload = false; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath) } }
-    if (showCreateFile) CreateFileDialog(repo, currentPath, selectedBranch, { showCreateFile = false }) { showCreateFile = false; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath) } }
+    if (showUpload) UploadDialog(repo, currentPath, selectedBranch, { showUpload = false }) { showUpload = false; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch) } }
+    if (showCreateFile) CreateFileDialog(repo, currentPath, selectedBranch, { showCreateFile = false }) { showCreateFile = false; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch) } }
     if (showCreateBranch) CreateBranchDialog(repo, branches, { showCreateBranch = false }) { showCreateBranch = false; scope.launch { branches = GitHubManager.getBranches(context, repo.owner, repo.name) } }
     if (showCreateIssue) CreateIssueDialog(repo, { showCreateIssue = false }) { showCreateIssue = false; scope.launch { issues = GitHubManager.getIssues(context, repo.owner, repo.name) } }
     if (showCreatePR) CreatePRDialog(repo, branches, { showCreatePR = false }) { showCreatePR = false; scope.launch { pulls = GitHubManager.getPullRequests(context, repo.owner, repo.name) } }
-    if (deleteTarget != null) DeleteFileDialog(repo, deleteTarget!!, selectedBranch, { deleteTarget = null }) { deleteTarget = null; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath) } }
+    if (deleteTarget != null) DeleteFileDialog(repo, deleteTarget!!, selectedBranch, { deleteTarget = null }) { deleteTarget = null; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch) } }
     if (showBranchPicker) BranchPickerDialog(branches, selectedBranch, { selectedBranch = it; showBranchPicker = false }, { showBranchPicker = false }) { showBranchPicker = false; showCreateBranch = true }
     if (showDispatch && workflows.isNotEmpty()) DispatchWorkflowDialog(repo, workflows, branches, { showDispatch = false }) { showDispatch = false; scope.launch { workflowRuns = GitHubManager.getWorkflowRuns(context, repo.owner, repo.name) } }
 }
@@ -467,7 +456,7 @@ private fun EditFileScreen(repo: GHRepo, file: GHContent, branch: String, onBack
     val clipMgr = remember { context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager }
 
     LaunchedEffect(file) {
-        val raw = GitHubManager.getFileContent(context, repo.owner, repo.name, file.path)
+        val raw = GitHubManager.getFileContent(context, repo.owner, repo.name, file.path, branch)
         textFieldValue = androidx.compose.ui.text.input.TextFieldValue(raw)
         loading = false
     }
@@ -685,31 +674,76 @@ private fun DispatchWorkflowDialog(repo: GHRepo, workflows: List<GHWorkflow>, br
 }
 
 // ═══════════════════════════════════
-// GitHub Settings Screen
-// ═══════════════════════════════════
 
+// GitHub Settings Screen
 @Composable
 private fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onClose: (() -> Unit)? = null) {
-    val context = LocalContext.current; val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     var user by remember { mutableStateOf(GitHubManager.getCachedUser(context)) }
-    val token = remember { GitHubManager.getToken(context) }
     var showChangeToken by remember { mutableStateOf(false) }
     var newToken by remember { mutableStateOf("") }
+    var showCreateRepo by remember { mutableStateOf(false) }
+    var showProfile by remember { mutableStateOf(false) }
+    var showNotifications by remember { mutableStateOf(false) }
+    var showStarred by remember { mutableStateOf(false) }
+    var showOrgs by remember { mutableStateOf(false) }
+    var showGists by remember { mutableStateOf(false) }
+    var showRepoPicker by remember { mutableStateOf(false) }
+
+    if (showProfile && user != null) {
+        ProfileScreen(username = user!!.login, onBack = { showProfile = false }, onRepoClick = {})
+        return
+    }
+    if (showNotifications) {
+        NotificationsScreen(onBack = { showNotifications = false })
+        return
+    }
+    if (showStarred) {
+        StarredScreen(onBack = { showStarred = false }, onRepoClick = {})
+        return
+    }
+    if (showOrgs) {
+        OrgsScreen(onBack = { showOrgs = false }, onRepoClick = {})
+        return
+    }
+    if (showGists) {
+        GistsScreen(onBack = { showGists = false }, onMinimize = {}, onClose = onClose)
+        return
+    }
+    if (showRepoPicker) {
+        RepoSettingsRepoPickerScreen(onBack = { showRepoPicker = false }, onClose = onClose)
+        return
+    }
 
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         GHTopBar(Strings.ghSettings, onBack = onBack, onClose = onClose)
 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-            // Account section
             item {
-                Text(Strings.ghAccount, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                Text(
+                    Strings.ghAccount,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
             }
             item {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceWhite)) {
-                    // User info
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceWhite)
+                ) {
                     if (user != null) {
-                        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             AsyncImage(user!!.avatarUrl, user!!.login, Modifier.size(48.dp).clip(CircleShape))
                             Column(Modifier.weight(1f)) {
                                 Text(user!!.name.ifBlank { user!!.login }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
@@ -718,19 +752,69 @@ private fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onClo
                         }
                         Box(Modifier.fillMaxWidth().padding(start = 16.dp).height(0.5.dp).background(SeparatorColor))
                     }
-                    // Token
+                    SettingsRow(Icons.Rounded.Person, "My profile", "Open GitHub profile") { showProfile = true }
+                    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
+                    SettingsRow(Icons.Rounded.Refresh, "Refresh account", "Reload user data") {
+                        scope.launch {
+                            user = GitHubManager.getUser(context)
+                            Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
                     SettingsRow(Icons.Rounded.Key, Strings.ghToken, Strings.ghTokenHidden) { showChangeToken = true }
                     Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
-                    // Logout
-                    SettingsRow(Icons.Rounded.Logout, Strings.ghSignIn.let { if (user != null) "Выйти / Sign out" else it }, color = Color(0xFFFF3B30)) { onLogout() }
+                    SettingsRow(Icons.Rounded.Logout, if (user != null) "Выйти / Sign out" else Strings.ghSignIn, color = Color(0xFFFF3B30)) { onLogout() }
                 }
             }
 
-            // Storage section
             item {
                 Spacer(Modifier.height(16.dp))
-                Text(Strings.ghClonePath, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                Text(
+                    "GitHub tools",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+            item {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceWhite)
+                ) {
+                    SettingsRow(Icons.Rounded.Notifications, "Notifications", "View GitHub inbox") { showNotifications = true }
+                    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
+                    SettingsRow(Icons.Rounded.DoneAll, "Mark all notifications read", "Clear unread notifications") {
+                        scope.launch {
+                            val ok = GitHubManager.markAllNotificationsRead(context)
+                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
+                    SettingsRow(Icons.Rounded.Star, "Starred repos", "Repositories you starred") { showStarred = true }
+                    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
+                    SettingsRow(Icons.Rounded.Business, "Organizations", "Your GitHub organizations") { showOrgs = true }
+                    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
+                    SettingsRow(Icons.Rounded.Description, "Gists", "Open your gists") { showGists = true }
+                    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
+                    SettingsRow(Icons.Rounded.SettingsApplications, "Repository settings", "General, access, variables, secrets, webhooks, rules, security") { showRepoPicker = true }
+                    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
+                    SettingsRow(Icons.Rounded.AddBox, "New repository", "Create repository from settings") { showCreateRepo = true }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    Strings.ghClonePath,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
             }
             item {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceWhite)) {
@@ -743,68 +827,102 @@ private fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onClo
                 }
             }
 
-            // About section
             item {
                 Spacer(Modifier.height(16.dp))
-                Text(Strings.ghAbout, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                Text(
+                    Strings.ghAbout,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
             }
             item {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceWhite)) {
                     SettingsRow(Icons.Rounded.Info, Strings.ghAboutDesc)
                     Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(SeparatorColor))
-                    SettingsRow(Icons.Rounded.Code, Strings.ghVersion, "1.0")
-                }
-            }
-
-            // Features list
-            item {
-                Spacer(Modifier.height(16.dp))
-                Text(Strings.tools, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-            }
-            item {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceWhite)) {
-                    FeatureRow("Repos", "Create, browse, star, fork, clone")
-                    FeatureRow("Files", "View, edit, upload, delete, download")
-                    FeatureRow("Issues & PR", "Create, comment, close, merge")
-                    FeatureRow("Actions", "Workflows, runs, artifacts, dispatch")
-                    FeatureRow("Releases", "Browse, download assets")
-                    FeatureRow("Gists", "Create, view, delete")
-                    FeatureRow("Notifications", "View, mark read")
-                    FeatureRow("Code Search", "Search inside repos")
-                    FeatureRow("Profiles", "View profiles, follow/unfollow")
-                    FeatureRow("Organizations", "Browse org repos")
-                    FeatureRow("Syntax Highlight", "Code viewer with colors")
+                    SettingsRow(Icons.Rounded.Code, Strings.ghVersion, "1.1")
                 }
             }
         }
     }
 
-    // Change token dialog
     if (showChangeToken) {
         AlertDialog(
-            onDismissRequest = { showChangeToken = false }, containerColor = SurfaceWhite,
+            onDismissRequest = { showChangeToken = false },
+            containerColor = SurfaceWhite,
             title = { Text(Strings.ghChangeToken, fontWeight = FontWeight.Bold, color = TextPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(Strings.ghTokenHint, fontSize = 11.sp, color = TextTertiary)
-                    OutlinedTextField(newToken, { newToken = it }, label = { Text("Personal Access Token") },
-                        singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        newToken,
+                        { newToken = it },
+                        label = { Text("Personal Access Token") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
-            confirmButton = { TextButton(onClick = {
-                if (newToken.isNotBlank()) {
-                    GitHubManager.saveToken(context, newToken)
-                    scope.launch { user = GitHubManager.getUser(context) }
-                    showChangeToken = false; newToken = ""
-                }
-            }) { Text(Strings.done, color = Blue) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (newToken.isNotBlank()) {
+                        GitHubManager.saveToken(context, newToken)
+                        scope.launch { user = GitHubManager.getUser(context) }
+                        showChangeToken = false
+                        newToken = ""
+                    }
+                }) { Text(Strings.done, color = Blue) }
+            },
             dismissButton = { TextButton(onClick = { showChangeToken = false }) { Text(Strings.cancel, color = TextSecondary) } }
         )
     }
+
+    if (showCreateRepo) {
+        CreateRepoDialog(onDismiss = { showCreateRepo = false }) { name, desc, privateRepo ->
+            scope.launch {
+                val ok = GitHubManager.createRepo(context, name, desc, privateRepo)
+                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                if (ok) user = GitHubManager.getUser(context)
+                showCreateRepo = false
+            }
+        }
+    }
 }
 
+@Composable
+private fun RepoSettingsRepoPickerScreen(onBack: () -> Unit, onClose: (() -> Unit)? = null) {
+    val context = LocalContext.current
+    var repos by remember { mutableStateOf<List<GHRepo>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var selectedRepo by remember { mutableStateOf<GHRepo?>(null) }
+
+    LaunchedEffect(Unit) {
+        repos = GitHubManager.getRepos(context, 1)
+        loading = false
+    }
+
+    if (selectedRepo != null) {
+        GitHubRepoSettingsScreen(repo = selectedRepo!!, onBack = { selectedRepo = null })
+        return
+    }
+
+    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+        GHTopBar("Repository settings", subtitle = "Select repository", onBack = onBack, onClose = onClose)
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                items(repos) { repo ->
+                    RepoCard(repo) { selectedRepo = repo }
+                }
+            }
+        }
+    }
+}
 @Composable
 private fun SettingsRow(icon: ImageVector, title: String, subtitle: String? = null, color: Color = TextPrimary, onClick: (() -> Unit)? = null) {
     Row(
