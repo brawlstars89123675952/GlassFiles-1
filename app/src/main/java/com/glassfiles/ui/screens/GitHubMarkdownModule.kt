@@ -38,7 +38,7 @@ import java.io.File
 // Compact mode — propagates through all sub-screens automatically
 
 @Composable
-private fun MarkdownLine(line: String) {
+internal fun MarkdownLine(line: String) {
     val trimmed = line.trimStart()
     when {
         trimmed.startsWith("# ") -> Text(trimmed.removePrefix("# "), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE6EDF3), modifier = Modifier.padding(vertical = 6.dp))
@@ -62,7 +62,7 @@ private fun MarkdownLine(line: String) {
     }
 }
 
-private fun buildMdAnnotated(text: String): androidx.compose.ui.text.AnnotatedString {
+internal fun buildMdAnnotated(text: String): androidx.compose.ui.text.AnnotatedString {
     return androidx.compose.ui.text.buildAnnotatedString {
         var i = 0
         val len = text.length
@@ -113,7 +113,7 @@ private fun buildMdAnnotated(text: String): androidx.compose.ui.text.AnnotatedSt
 // Syntax Highlighting (fast, safe)
 // ═══════════════════════════════════
 
-private val defaultKeywords = setOf(
+internal val defaultKeywords = setOf(
     "fun", "val", "var", "class", "object", "interface", "enum", "data", "sealed", "abstract",
     "override", "private", "public", "protected", "internal", "open", "final", "companion",
     "import", "package", "return", "if", "else", "when", "for", "while", "do", "break", "continue",
@@ -126,14 +126,14 @@ private val defaultKeywords = setOf(
     "switch", "case", "default", "goto", "volatile", "register", "typedef", "sizeof"
 )
 
-private val htmlKeywords = setOf(
+internal val htmlKeywords = setOf(
     "div", "span", "html", "head", "body", "script", "style", "link", "meta", "title",
     "p", "a", "img", "input", "button", "form", "table", "tr", "td", "th", "ul", "ol", "li",
     "h1", "h2", "h3", "h4", "h5", "h6", "br", "hr", "section", "header", "footer", "nav",
     "class", "id", "src", "href", "type", "value", "name", "content", "rel", "width", "height"
 )
 
-private fun highlightLine(line: String, ext: String): androidx.compose.ui.text.AnnotatedString {
+internal fun highlightLine(line: String, ext: String): androidx.compose.ui.text.AnnotatedString {
     val defColor = Color(0xFFD4D4D4)
 
     // Safety: very long lines → no highlighting (prevents OOM on minified files)
@@ -155,7 +155,7 @@ private fun highlightLine(line: String, ext: String): androidx.compose.ui.text.A
     }
 }
 
-private fun doHighlightLine(line: String, ext: String): androidx.compose.ui.text.AnnotatedString {
+internal fun doHighlightLine(line: String, ext: String): androidx.compose.ui.text.AnnotatedString {
     val kwColor = Color(0xFFC586C0)
     val strColor = Color(0xFFCE9178)
     val commentColor = Color(0xFF6A9955)
@@ -287,7 +287,7 @@ private fun doHighlightLine(line: String, ext: String): androidx.compose.ui.text
     }
 }
 
-private fun findSafeCommentStart(line: String, isPython: Boolean): Int {
+internal fun findSafeCommentStart(line: String, isPython: Boolean): Int {
     var i = 0; var inStr = false; var q = ' '
     val len = line.length
     while (i < len) {
