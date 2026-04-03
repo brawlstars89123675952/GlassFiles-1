@@ -313,8 +313,7 @@ internal fun PullsTab(pulls: List<GHPullRequest>, repo: GHRepo, onRefresh: () ->
                         }
                         if (pr.body.isNotBlank()) {
                             Text(
-                                pr.body.replace("
-", " ").take(140),
+                                pr.body.replace("\n", " ").take(140),
                                 fontSize = 11.sp,
                                 color = TextTertiary,
                                 maxLines = 2,
