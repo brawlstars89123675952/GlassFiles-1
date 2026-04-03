@@ -83,6 +83,7 @@ import com.glassfiles.ui.theme.TextPrimary
 import com.glassfiles.ui.theme.TextSecondary
 import com.glassfiles.ui.theme.TextTertiary
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.ColumnScope
 
 private enum class NativeSettingsTab {
     PROFILE, EMAILS, NOTIFICATIONS, KEYS, ORGANIZATIONS, REPOSITORIES, DEVELOPER, UNSUPPORTED
@@ -258,12 +259,12 @@ internal fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onCl
             NativeSettingsTab.PROFILE -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
                 item {
                     NativeSection("Profile") {
-                        NativeField("Name", profileName) { profileName = it }
-                        NativeField("Bio", profileBio, { profileBio = it }, singleLine = false, minLines = 3)
-                        NativeField("Company", profileCompany) { profileCompany = it }
-                        NativeField("Location", profileLocation) { profileLocation = it }
-                        NativeField("Blog", profileBlog) { profileBlog = it }
-                        NativeField("Twitter username", profileTwitter) { profileTwitter = it }
+                        NativeField(label = "Name", value = profileName, onValueChange = { profileName = it })
+                        NativeField(label = "Bio", value = profileBio, onValueChange = { profileBio = it }, singleLine = false, minLines = 3)
+                        NativeField(label = "Company", value = profileCompany, onValueChange = { profileCompany = it })
+                        NativeField(label = "Location", value = profileLocation, onValueChange = { profileLocation = it })
+                        NativeField(label = "Blog", value = profileBlog, onValueChange = { profileBlog = it })
+                        NativeField(label = "Twitter username", value = profileTwitter, onValueChange = { profileTwitter = it })
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Switch(checked = profileHireable, onCheckedChange = { profileHireable = it })
                             Text("Available for hire", color = TextPrimary, fontSize = 14.sp)
@@ -314,7 +315,7 @@ internal fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onCl
                             }
                         }, shape = RoundedCornerShape(10.dp)) { Text("Apply visibility") }
                         Spacer(Modifier.height(12.dp))
-                        NativeField("Add email", newEmail) { newEmail = it }
+                        NativeField(label = "Add email", value = newEmail, onValueChange = { newEmail = it })
                         Spacer(Modifier.height(8.dp))
                         Button(onClick = {
                             scope.launch {
@@ -397,13 +398,14 @@ internal fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onCl
                             NativeTabChip("GPG", keyTab == KeyTab.GPG) { keyTab = KeyTab.GPG }
                         }
                         Spacer(Modifier.height(12.dp))
-                        NativeField(if (keyTab == KeyTab.GPG) "Name" else "Title", keyTitle) { keyTitle = it }
+                        NativeField(label = if (keyTab == KeyTab.GPG) "Name" else "Title", value = keyTitle, onValueChange = { keyTitle = it })
                         NativeField(
-                            if (keyTab == KeyTab.GPG) "ASCII-armored public key" else "Public key",
-                            keyBody,
+                            label = if (keyTab == KeyTab.GPG) "ASCII-armored public key" else "Public key",
+                            value = keyBody,
+                            onValueChange = { keyBody = it },
                             singleLine = false,
                             minLines = 4
-                        ) { keyBody = it }
+                        )
                         Spacer(Modifier.height(8.dp))
                         Button(onClick = {
                             scope.launch {
