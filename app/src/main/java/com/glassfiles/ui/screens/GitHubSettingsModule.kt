@@ -7,11 +7,13 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,32 +24,46 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.rounded.AlternateEmail
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Business
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Email
+import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Security
-import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.Web
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,24 +72,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.glassfiles.data.github.GHAccountProfile
-import com.glassfiles.data.github.GHEmailAddress
-import com.glassfiles.data.github.GHGpgKeyItem
-import com.glassfiles.data.github.GHKeyItem
-import com.glassfiles.data.github.GHNotification
-import com.glassfiles.data.github.GHOrg
-import com.glassfiles.data.github.GHRateLimit
+import com.glassfiles.data.Strings
+import com.glassfiles.data.github.GHBlockedUser
+import com.glassfiles.data.github.GHEmailEntry
+import com.glassfiles.data.github.GHFollowerUser
+import com.glassfiles.data.github.GHInteractionLimit
+import com.glassfiles.data.github.GHNotificationThread
 import com.glassfiles.data.github.GHRepo
-import com.glassfiles.data.github.GHTokenScopes
+import com.glassfiles.data.github.GHSocialAccount
+import com.glassfiles.data.github.GHUserKey
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.theme.Blue
 import com.glassfiles.ui.theme.SeparatorColor
@@ -83,330 +96,347 @@ import com.glassfiles.ui.theme.TextPrimary
 import com.glassfiles.ui.theme.TextSecondary
 import com.glassfiles.ui.theme.TextTertiary
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.layout.ColumnScope
 
-private enum class NativeSettingsTab {
-    PROFILE, EMAILS, NOTIFICATIONS, KEYS, ORGANIZATIONS, REPOSITORIES, DEVELOPER, UNSUPPORTED
+private enum class ApiSettingsTab {
+    PROFILE,
+    EMAILS,
+    NOTIFICATIONS,
+    KEYS,
+    SOCIAL,
+    PEOPLE,
+    BLOCKED,
+    INTERACTION_LIMIT,
+    ORGANIZATIONS,
+    REPOSITORIES,
+    DEVELOPER
 }
 
 private enum class KeyTab { SSH, SSH_SIGNING, GPG }
 
 @Composable
 internal fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onClose: (() -> Unit)? = null) {
-    val context = LocalContext.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var selectedScreen by remember { mutableStateOf<NativeSettingsTab?>(null) }
-    var loading by remember { mutableStateOf(false) }
+    var user by remember { mutableStateOf(GitHubManager.getCachedUser(context)) }
+    var selectedTab by remember { mutableStateOf(ApiSettingsTab.PROFILE) }
 
-    var profile by remember { mutableStateOf<GHAccountProfile?>(null) }
-    var profileName by remember { mutableStateOf("") }
-    var profileBio by remember { mutableStateOf("") }
-    var profileCompany by remember { mutableStateOf("") }
-    var profileLocation by remember { mutableStateOf("") }
-    var profileBlog by remember { mutableStateOf("") }
-    var profileTwitter by remember { mutableStateOf("") }
-    var profileHireable by remember { mutableStateOf(false) }
+    var profileName by remember { mutableStateOf(user?.name ?: "") }
+    var profileBio by remember { mutableStateOf(user?.bio ?: "") }
+    var profileCompany by remember { mutableStateOf(user?.company ?: "") }
+    var profileLocation by remember { mutableStateOf(user?.location ?: "") }
+    var profileBlog by remember { mutableStateOf(user?.blog ?: "") }
+    var profileTwitter by remember { mutableStateOf(user?.twitterUsername ?: "") }
 
-    var emails by remember { mutableStateOf<List<GHEmailAddress>>(emptyList()) }
+    var emails by remember { mutableStateOf<List<GHEmailEntry>>(emptyList()) }
     var newEmail by remember { mutableStateOf("") }
-    var visibility by remember { mutableStateOf("private") }
+    var emailVisibility by remember { mutableStateOf("private") }
 
-    var notifications by remember { mutableStateOf<List<GHNotification>>(emptyList()) }
-    var includeReadNotifications by remember { mutableStateOf(false) }
+    var notifications by remember { mutableStateOf<List<GHNotificationThread>>(emptyList()) }
+    var notificationsOnlyUnread by remember { mutableStateOf(true) }
 
     var keyTab by remember { mutableStateOf(KeyTab.SSH) }
-    var sshKeys by remember { mutableStateOf<List<GHKeyItem>>(emptyList()) }
-    var sshSigningKeys by remember { mutableStateOf<List<GHKeyItem>>(emptyList()) }
-    var gpgKeys by remember { mutableStateOf<List<GHGpgKeyItem>>(emptyList()) }
+    var sshKeys by remember { mutableStateOf<List<GHUserKey>>(emptyList()) }
+    var sshSigningKeys by remember { mutableStateOf<List<GHUserKey>>(emptyList()) }
+    var gpgKeys by remember { mutableStateOf<List<GHUserKey>>(emptyList()) }
     var keyTitle by remember { mutableStateOf("") }
     var keyBody by remember { mutableStateOf("") }
 
-    var orgs by remember { mutableStateOf<List<GHOrg>>(emptyList()) }
-    var repos by remember { mutableStateOf<List<GHRepo>>(emptyList()) }
-    var pinnedRepoNames by remember { mutableStateOf<List<String>>(emptyList()) }
-    var recentRepoNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    var socialAccounts by remember { mutableStateOf<List<GHSocialAccount>>(emptyList()) }
+    var newSocial by remember { mutableStateOf("") }
 
-    var tokenScopes by remember { mutableStateOf<GHTokenScopes?>(null) }
-    var rateLimit by remember { mutableStateOf<GHRateLimit?>(null) }
-    var actionLogs by remember { mutableStateOf<List<String>>(emptyList()) }
-    var showTokenDialog by remember { mutableStateOf(false) }
+    var followers by remember { mutableStateOf<List<GHFollowerUser>>(emptyList()) }
+    var following by remember { mutableStateOf<List<GHFollowerUser>>(emptyList()) }
+
+    var blockedUsers by remember { mutableStateOf<List<GHBlockedUser>>(emptyList()) }
+    var blockTarget by remember { mutableStateOf("") }
+
+    var interactionLimit by remember { mutableStateOf<GHInteractionLimit?>(null) }
+
+    var orgs by remember { mutableStateOf<List<String>>(emptyList()) }
+    var starredRepos by remember { mutableStateOf<List<GHRepo>>(emptyList()) }
+
+    var tokenScopes by remember { mutableStateOf<List<String>>(emptyList()) }
+    var rateLimitSummary by remember { mutableStateOf("") }
+    var diagnosticsText by remember { mutableStateOf("") }
+    var actionLog = remember { mutableStateListOf<String>() }
+
+    var showChangeToken by remember { mutableStateOf(false) }
     var newToken by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
 
-    suspend fun loadProfile() {
+    fun addLog(entry: String) {
+        actionLog.add(0, "${System.currentTimeMillis()}: $entry")
+        if (actionLog.size > 100) actionLog.removeLast()
+    }
+
+    suspend fun refreshProfile() {
+        user = GitHubManager.getUser(context)
+        profileName = user?.name ?: ""
+        profileBio = user?.bio ?: ""
+        profileCompany = user?.company ?: ""
+        profileLocation = user?.location ?: ""
+        profileBlog = user?.blog ?: ""
+        profileTwitter = user?.twitterUsername ?: ""
+    }
+
+    suspend fun refreshTab(tab: ApiSettingsTab = selectedTab) {
         loading = true
-        val p = GitHubManager.getAuthenticatedUserProfile(context)
-        profile = p
-        profileName = p?.name ?: ""
-        profileBio = p?.bio ?: ""
-        profileCompany = p?.company ?: ""
-        profileLocation = p?.location ?: ""
-        profileBlog = p?.blog ?: ""
-        profileTwitter = p?.twitterUsername ?: ""
-        profileHireable = p?.hireable == true
+        when (tab) {
+            ApiSettingsTab.PROFILE -> refreshProfile()
+            ApiSettingsTab.EMAILS -> emails = GitHubManager.getEmails(context)
+            ApiSettingsTab.NOTIFICATIONS -> notifications = GitHubManager.getNotifications(context, onlyUnread = notificationsOnlyUnread)
+            ApiSettingsTab.KEYS -> {
+                sshKeys = GitHubManager.getSshKeys(context)
+                sshSigningKeys = GitHubManager.getSshSigningKeys(context)
+                gpgKeys = GitHubManager.getGpgKeys(context)
+            }
+            ApiSettingsTab.SOCIAL -> socialAccounts = GitHubManager.getSocialAccounts(context)
+            ApiSettingsTab.PEOPLE -> {
+                followers = GitHubManager.getFollowers(context)
+                following = GitHubManager.getFollowing(context)
+            }
+            ApiSettingsTab.BLOCKED -> blockedUsers = GitHubManager.getBlockedUsers(context)
+            ApiSettingsTab.INTERACTION_LIMIT -> interactionLimit = GitHubManager.getInteractionLimit(context)
+            ApiSettingsTab.ORGANIZATIONS -> orgs = GitHubManager.getOrganizations(context)
+            ApiSettingsTab.REPOSITORIES -> starredRepos = GitHubManager.getStarredRepositories(context)
+            ApiSettingsTab.DEVELOPER -> {
+                tokenScopes = GitHubManager.getTokenScopes(context)
+                rateLimitSummary = GitHubManager.getRateLimitSummary(context)
+                diagnosticsText = GitHubManager.getDiagnosticsSummary(context)
+            }
+        }
         loading = false
     }
 
-    suspend fun loadEmails() {
-        loading = true
-        emails = GitHubManager.getUserEmails(context)
-        visibility = emails.firstOrNull { it.primary }?.visibility ?: "private"
-        loading = false
+    LaunchedEffect(selectedTab) {
+        refreshTab(selectedTab)
     }
-
-    suspend fun loadNotifications() {
-        loading = true
-        notifications = GitHubManager.getNotifications(context, all = includeReadNotifications)
-        loading = false
-    }
-
-    suspend fun loadKeys() {
-        loading = true
-        sshKeys = GitHubManager.getGitSshKeys(context)
-        sshSigningKeys = GitHubManager.getSshSigningKeysNative(context)
-        gpgKeys = GitHubManager.getGpgKeysNative(context)
-        loading = false
-    }
-
-    suspend fun loadOrgs() {
-        loading = true
-        orgs = GitHubManager.getOrganizations(context)
-        loading = false
-    }
-
-    suspend fun loadRepos() {
-        loading = true
-        repos = GitHubManager.getRepos(context, 1)
-        pinnedRepoNames = GitHubManager.getPinnedRepoNames(context)
-        recentRepoNames = GitHubManager.getRecentRepoNames(context)
-        loading = false
-    }
-
-    suspend fun loadDeveloper() {
-        loading = true
-        tokenScopes = GitHubManager.getTokenScopes(context)
-        rateLimit = GitHubManager.getRateLimit(context)
-        actionLogs = GitHubManager.getActionLogs(context)
-        loading = false
-    }
-
-    LaunchedEffect(selectedScreen, includeReadNotifications, keyTab) {
-    when (selectedScreen) {
-        null -> loadProfile()
-        NativeSettingsTab.PROFILE -> loadProfile()
-        NativeSettingsTab.EMAILS -> loadEmails()
-        NativeSettingsTab.NOTIFICATIONS -> loadNotifications()
-        NativeSettingsTab.KEYS -> loadKeys()
-        NativeSettingsTab.ORGANIZATIONS -> loadOrgs()
-        NativeSettingsTab.REPOSITORIES -> loadRepos()
-        NativeSettingsTab.DEVELOPER -> loadDeveloper()
-        NativeSettingsTab.UNSUPPORTED -> loading = false
-    }
-}
 
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-    GHTopBar(
-        if (selectedScreen == null) "GitHub Settings" else settingsScreenTitle(selectedScreen!!),
-        onBack = { if (selectedScreen == null) onBack() else selectedScreen = null },
-        onClose = onClose
-    )
+        GHTopBar(
+            "GitHub Settings",
+            subtitle = user?.name?.takeIf { it.isNotBlank() } ?: user?.login ?: "GitHub",
+            onBack = onBack,
+            onClose = onClose
+        )
 
-    profile?.let { p ->
-        val safeName = p.name.takeUnless { it.isBlank() || it == "null" } ?: p.login
-        val safeEmail = p.email.takeUnless { it.isBlank() || it == "null" }
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
-                .clip(RoundedCornerShape(14.dp)).background(SurfaceWhite).padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsyncImage(p.avatarUrl, p.login, Modifier.size(52.dp).clip(CircleShape))
-            Column(Modifier.weight(1f)) {
-                Text(safeName, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                Text("@${p.login}", color = TextSecondary, fontSize = 13.sp)
-                if (safeEmail != null) Text(safeEmail, color = TextTertiary, fontSize = 11.sp)
-            }
-            IconButton(onClick = {
-    scope.launch {
-        when (selectedScreen) {
-            null -> loadProfile()
-            NativeSettingsTab.PROFILE -> loadProfile()
-            NativeSettingsTab.EMAILS -> loadEmails()
-            NativeSettingsTab.NOTIFICATIONS -> loadNotifications()
-            NativeSettingsTab.KEYS -> loadKeys()
-            NativeSettingsTab.ORGANIZATIONS -> loadOrgs()
-            NativeSettingsTab.REPOSITORIES -> loadRepos()
-            NativeSettingsTab.DEVELOPER -> loadDeveloper()
-            NativeSettingsTab.UNSUPPORTED -> Unit
-        }
-    }
-}) {
-                if (loading) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
-                else Icon(Icons.Rounded.Refresh, null, tint = Blue)
-            }
-        }
-    }
-
-
-        when (selectedScreen) {
-            null -> SettingsHomeScreen(
-                currentToken = GitHubManager.getToken(context),
-                currentDownloadPath = GitHubManager.getDownloadBasePath(context),
-                currentClonePath = GitHubManager.getCloneBasePath(context),
-                onOpenScreen = { selectedScreen = it },
-                onChangeToken = { showTokenDialog = true },
-                onSignOut = onLogout,
-                onClearCache = {
-                    GitHubManager.clearAccountCache(context)
-                    GitHubManager.clearRepoMemory(context)
-                    GitHubManager.clearBranchMemory(context)
-                    GitHubManager.clearDiagnostics(context)
-                    GitHubManager.clearActionLogs(context)
-                    Toast.makeText(context, "GitHub cache cleared", Toast.LENGTH_SHORT).show()
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SurfaceWhite).padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AsyncImage(
+                    model = user?.avatarUrl,
+                    contentDescription = user?.login,
+                    modifier = Modifier.size(50.dp).clip(CircleShape)
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        user?.name?.takeIf { it.isNotBlank() } ?: user?.login ?: "GitHub",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "@${user?.login ?: "unknown"}",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-            )
-            NativeSettingsTab.PROFILE -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-                item {
-                    NativeSection("Profile") {
+                if (loading) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
+                else IconButton(onClick = { scope.launch { refreshTab(selectedTab) } }) {
+                    Icon(Icons.Rounded.Refresh, null, tint = Blue)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+        ) {
+            item {
+                NativeSection("Account") {
+                    NativeSettingsRow("Profile", "Name, bio, company, location, links", selectedTab == ApiSettingsTab.PROFILE) { selectedTab = ApiSettingsTab.PROFILE }
+                    NativeDivider()
+                    NativeSettingsRow("Emails", "Primary, public visibility, add and delete", selectedTab == ApiSettingsTab.EMAILS) { selectedTab = ApiSettingsTab.EMAILS }
+                    NativeDivider()
+                    NativeSettingsRow("Notifications", "Threads, unread filter, mark read", selectedTab == ApiSettingsTab.NOTIFICATIONS) { selectedTab = ApiSettingsTab.NOTIFICATIONS }
+                    NativeDivider()
+                    NativeSettingsRow("Keys", "SSH, SSH signing, GPG", selectedTab == ApiSettingsTab.KEYS) { selectedTab = ApiSettingsTab.KEYS }
+                    NativeDivider()
+                    NativeSettingsRow("Social accounts", "Linked social profiles", selectedTab == ApiSettingsTab.SOCIAL) { selectedTab = ApiSettingsTab.SOCIAL }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+
+            item {
+                NativeSection("People") {
+                    NativeSettingsRow("Followers / Following", "Follow, unfollow, inspect people", selectedTab == ApiSettingsTab.PEOPLE) { selectedTab = ApiSettingsTab.PEOPLE }
+                    NativeDivider()
+                    NativeSettingsRow("Blocked users", "Block and unblock users", selectedTab == ApiSettingsTab.BLOCKED) { selectedTab = ApiSettingsTab.BLOCKED }
+                    NativeDivider()
+                    NativeSettingsRow("Interaction limits", "Temporary public interaction limits", selectedTab == ApiSettingsTab.INTERACTION_LIMIT) { selectedTab = ApiSettingsTab.INTERACTION_LIMIT }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+
+            item {
+                NativeSection("Workspace") {
+                    NativeSettingsRow("Organizations", "Your organizations", selectedTab == ApiSettingsTab.ORGANIZATIONS) { selectedTab = ApiSettingsTab.ORGANIZATIONS }
+                    NativeDivider()
+                    NativeSettingsRow("Repositories", "Starred, pinned, recent", selectedTab == ApiSettingsTab.REPOSITORIES) { selectedTab = ApiSettingsTab.REPOSITORIES }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+
+            item {
+                NativeSection("Developer") {
+                    NativeSettingsRow("Developer settings", "Scopes, rate limit, diagnostics, token", selectedTab == ApiSettingsTab.DEVELOPER) { selectedTab = ApiSettingsTab.DEVELOPER }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+
+            item {
+                when (selectedTab) {
+                    ApiSettingsTab.PROFILE -> NativeSection("Profile") {
                         NativeField(label = "Name", value = profileName, onValueChange = { profileName = it })
                         NativeField(label = "Bio", value = profileBio, onValueChange = { profileBio = it }, singleLine = false, minLines = 3)
                         NativeField(label = "Company", value = profileCompany, onValueChange = { profileCompany = it })
                         NativeField(label = "Location", value = profileLocation, onValueChange = { profileLocation = it })
                         NativeField(label = "Blog", value = profileBlog, onValueChange = { profileBlog = it })
                         NativeField(label = "Twitter username", value = profileTwitter, onValueChange = { profileTwitter = it })
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Switch(checked = profileHireable, onCheckedChange = { profileHireable = it })
-                            Text("Available for hire", color = TextPrimary, fontSize = 14.sp)
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Button(onClick = {
+                        NativeActionRow(Icons.Rounded.Check, "Save profile") {
                             scope.launch {
-                                val updated = GitHubManager.updateAuthenticatedUserProfile(
+                                val ok = GitHubManager.updateProfile(
                                     context,
-                                    profileName,
-                                    profileBio,
-                                    profileCompany,
-                                    profileLocation,
-                                    profileBlog,
-                                    profileTwitter,
-                                    profileHireable
+                                    name = profileName,
+                                    bio = profileBio,
+                                    company = profileCompany,
+                                    location = profileLocation,
+                                    blog = profileBlog,
+                                    twitter = profileTwitter
                                 )
-                                if (updated != null) {
-                                    profile = updated
-                                    Toast.makeText(context, "Profile updated", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(context, "Update failed", Toast.LENGTH_SHORT).show()
-                                }
+                                addLog("Profile updated: $ok")
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                refreshProfile()
                             }
-                        }, shape = RoundedCornerShape(10.dp)) {
-                            Icon(Icons.Rounded.Save, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Save profile")
                         }
                     }
-                }
-            }
 
-            NativeSettingsTab.EMAILS -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-                item {
-                    NativeSection("Emails") {
-                        Text("Primary visibility", color = TextSecondary, fontSize = 12.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            NativeTabChip("Private", visibility == "private") { visibility = "private" }
-                            NativeTabChip("Public", visibility == "public") { visibility = "public" }
+                    ApiSettingsTab.EMAILS -> NativeSection("Emails") {
+                        emails.forEachIndexed { index, email ->
+                            NativeEmailRow(email) {
+                                scope.launch {
+                                    val ok = GitHubManager.deleteEmail(context, email.email)
+                                    addLog("Delete email ${email.email}: $ok")
+                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                    refreshTab(ApiSettingsTab.EMAILS)
+                                }
+                            }
+                            if (index != emails.lastIndex) NativeDivider()
                         }
-                        Spacer(Modifier.height(8.dp))
-                        Button(onClick = {
+                        if (emails.isNotEmpty()) NativeDivider()
+                        NativeField(label = "Add email", value = newEmail, onValueChange = { newEmail = it })
+                        NativeActionRow(Icons.Rounded.Add, "Add email") {
+                            scope.launch {
+                                val ok = GitHubManager.addEmail(context, newEmail)
+                                addLog("Add email $newEmail: $ok")
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                if (ok) newEmail = ""
+                                refreshTab(ApiSettingsTab.EMAILS)
+                            }
+                        }
+                        NativeDivider()
+                        NativeVisibilityToggle(emailVisibility) { visibility ->
                             scope.launch {
                                 val ok = GitHubManager.setPrimaryEmailVisibility(context, visibility)
-                                Toast.makeText(context, if (ok) "Visibility updated" else "Update failed", Toast.LENGTH_SHORT).show()
-                                loadEmails()
+                                emailVisibility = visibility
+                                addLog("Set email visibility $visibility: $ok")
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                             }
-                        }, shape = RoundedCornerShape(10.dp)) { Text("Apply visibility") }
-                        Spacer(Modifier.height(12.dp))
-                        NativeField(label = "Add email", value = newEmail, onValueChange = { newEmail = it })
-                        Spacer(Modifier.height(8.dp))
-                        Button(onClick = {
-                            scope.launch {
-                                val ok = GitHubManager.addUserEmail(context, newEmail)
-                                Toast.makeText(context, if (ok) "Email added" else "Add failed", Toast.LENGTH_SHORT).show()
-                                if (ok) newEmail = ""
-                                loadEmails()
-                            }
-                        }, shape = RoundedCornerShape(10.dp)) { Text("Add email") }
+                        }
                     }
-                }
-                items(emails) { email ->
-                    NativeItemCard(
-                        icon = Icons.Rounded.Email,
-                        title = email.email,
-                        subtitle = listOf(
-                            if (email.primary) "Primary" else null,
-                            if (email.verified) "Verified" else "Unverified",
-                            email.visibility ?: "private"
-                        ).filterNotNull().joinToString(" • "),
-                        actionLabel = if (email.primary) null else "Delete",
-                        onAction = if (email.primary) null else {
-                            {
-                                scope.launch {
-                                    val ok = GitHubManager.deleteUserEmail(context, email.email)
-                                    Toast.makeText(context, if (ok) "Email deleted" else "Delete failed", Toast.LENGTH_SHORT).show()
-                                    loadEmails()
-                                }
-                            }
-                        }
-                    )
-                }
-            }
 
-            NativeSettingsTab.NOTIFICATIONS -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-                item {
-                    NativeSection("Notifications") {
-                        Text("GitHub notifications API works best with classic PAT tokens.", color = TextTertiary, fontSize = 11.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Switch(checked = includeReadNotifications, onCheckedChange = { includeReadNotifications = it })
-                            Text(if (includeReadNotifications) "Include read threads" else "Unread only", color = TextPrimary, fontSize = 14.sp)
+                    ApiSettingsTab.NOTIFICATIONS -> NativeSection("Notifications") {
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Unread only", fontSize = 14.sp, color = TextPrimary)
+                            Switch(
+                                checked = notificationsOnlyUnread,
+                                onCheckedChange = {
+                                    notificationsOnlyUnread = it
+                                    scope.launch { refreshTab(ApiSettingsTab.NOTIFICATIONS) }
+                                },
+                                colors = SwitchDefaults.colors(checkedTrackColor = Blue)
+                            )
                         }
-                        Spacer(Modifier.height(8.dp))
-                        Button(onClick = {
+                        NativeActionRow(Icons.Rounded.Check, "Mark all read") {
                             scope.launch {
                                 val ok = GitHubManager.markAllNotificationsRead(context)
-                                Toast.makeText(context, if (ok) "All marked read" else "Action failed", Toast.LENGTH_SHORT).show()
-                                loadNotifications()
+                                addLog("Mark all notifications read: $ok")
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                refreshTab(ApiSettingsTab.NOTIFICATIONS)
                             }
-                        }, shape = RoundedCornerShape(10.dp)) { Text("Mark all read") }
-                    }
-                }
-                items(notifications) { n ->
-                    NativeItemCard(
-                        icon = Icons.Rounded.Notifications,
-                        title = n.title.ifBlank { "Untitled thread" },
-                        subtitle = listOf(n.repoName, n.type, n.reason, n.updatedAt.take(19).replace("T", " ")).filter { it.isNotBlank() }.joinToString(" • "),
-                        badge = if (n.unread) "UNREAD" else null,
-                        actionLabel = if (n.unread) "Read" else null,
-                        onAction = if (n.unread) {
-                            {
+                        }
+                        if (notifications.isNotEmpty()) NativeDivider()
+                        notifications.forEachIndexed { index, item ->
+                            NativeNotificationRow(item) {
                                 scope.launch {
-                                    val ok = GitHubManager.markNotificationRead(context, n.id)
-                                    Toast.makeText(context, if (ok) "Marked read" else "Action failed", Toast.LENGTH_SHORT).show()
-                                    loadNotifications()
+                                    val ok = GitHubManager.markThreadRead(context, item.id)
+                                    addLog("Mark thread ${item.id} read: $ok")
+                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                    refreshTab(ApiSettingsTab.NOTIFICATIONS)
                                 }
                             }
-                        } else null
-                    )
-                }
-            }
+                            if (index != notifications.lastIndex) NativeDivider()
+                        }
+                        if (notifications.isEmpty()) {
+                            Text("No notifications", color = TextTertiary, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                    }
 
-            NativeSettingsTab.KEYS -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-                item {
-                    NativeSection("Keys") {
-                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ApiSettingsTab.KEYS -> NativeSection("Keys") {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             NativeTabChip("SSH", keyTab == KeyTab.SSH) { keyTab = KeyTab.SSH }
                             NativeTabChip("SSH signing", keyTab == KeyTab.SSH_SIGNING) { keyTab = KeyTab.SSH_SIGNING }
                             NativeTabChip("GPG", keyTab == KeyTab.GPG) { keyTab = KeyTab.GPG }
                         }
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(8.dp))
+                        val currentKeys = when (keyTab) {
+                            KeyTab.SSH -> sshKeys
+                            KeyTab.SSH_SIGNING -> sshSigningKeys
+                            KeyTab.GPG -> gpgKeys
+                        }
+                        currentKeys.forEachIndexed { index, key ->
+                            NativeKeyRow(key) {
+                                scope.launch {
+                                    val ok = when (keyTab) {
+                                        KeyTab.SSH -> GitHubManager.deleteSshKey(context, key.id)
+                                        KeyTab.SSH_SIGNING -> GitHubManager.deleteSshSigningKey(context, key.id)
+                                        KeyTab.GPG -> GitHubManager.deleteGpgKey(context, key.id)
+                                    }
+                                    addLog("Delete key ${key.id}: $ok")
+                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                    refreshTab(ApiSettingsTab.KEYS)
+                                }
+                            }
+                            if (index != currentKeys.lastIndex) NativeDivider()
+                        }
+                        if (currentKeys.isNotEmpty()) NativeDivider()
                         NativeField(label = if (keyTab == KeyTab.GPG) "Name" else "Title", value = keyTitle, onValueChange = { keyTitle = it })
                         NativeField(
                             label = if (keyTab == KeyTab.GPG) "ASCII-armored public key" else "Public key",
@@ -415,455 +445,458 @@ internal fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onCl
                             singleLine = false,
                             minLines = 4
                         )
-                        Spacer(Modifier.height(8.dp))
-                        Button(onClick = {
+                        NativeActionRow(Icons.Rounded.Add, "Add key") {
                             scope.launch {
                                 val ok = when (keyTab) {
-                                    KeyTab.SSH -> GitHubManager.addGitSshKey(context, keyTitle, keyBody)
-                                    KeyTab.SSH_SIGNING -> GitHubManager.addSshSigningKeyNative(context, keyTitle, keyBody)
-                                    KeyTab.GPG -> GitHubManager.addGpgKeyNative(context, keyTitle, keyBody)
+                                    KeyTab.SSH -> GitHubManager.addSshKey(context, keyTitle, keyBody)
+                                    KeyTab.SSH_SIGNING -> GitHubManager.addSshSigningKey(context, keyTitle, keyBody)
+                                    KeyTab.GPG -> GitHubManager.addGpgKey(context, keyBody, keyTitle)
                                 }
-                                Toast.makeText(context, if (ok) "Key added" else "Add failed", Toast.LENGTH_SHORT).show()
-                                if (ok) {
-                                    keyTitle = ""
-                                    keyBody = ""
-                                    loadKeys()
-                                }
-                            }
-                        }, shape = RoundedCornerShape(10.dp)) { Text("Add key") }
-                    }
-                }
-                when (keyTab) {
-                    KeyTab.SSH -> items(sshKeys) { key ->
-                        NativeItemCard(
-                            icon = Icons.Rounded.Key,
-                            title = key.title.ifBlank { "SSH key" },
-                            subtitle = key.createdAt.take(10),
-                            body = key.key,
-                            actionLabel = "Delete",
-                            onAction = {
-                                scope.launch {
-                                    val ok = GitHubManager.deleteGitSshKey(context, key.id)
-                                    Toast.makeText(context, if (ok) "Key deleted" else "Delete failed", Toast.LENGTH_SHORT).show()
-                                    loadKeys()
-                                }
-                            }
-                        )
-                    }
-                    KeyTab.SSH_SIGNING -> items(sshSigningKeys) { key ->
-                        NativeItemCard(
-                            icon = Icons.Rounded.Security,
-                            title = key.title.ifBlank { "SSH signing key" },
-                            subtitle = key.createdAt.take(10),
-                            body = key.key,
-                            actionLabel = "Delete",
-                            onAction = {
-                                scope.launch {
-                                    val ok = GitHubManager.deleteSshSigningKeyNative(context, key.id)
-                                    Toast.makeText(context, if (ok) "Key deleted" else "Delete failed", Toast.LENGTH_SHORT).show()
-                                    loadKeys()
-                                }
-                            }
-                        )
-                    }
-                    KeyTab.GPG -> items(gpgKeys) { key ->
-                        NativeItemCard(
-                            icon = Icons.Rounded.Lock,
-                            title = key.name.ifBlank { key.keyId.ifBlank { "GPG key" } },
-                            subtitle = listOf(key.keyId, key.createdAt.take(10)).filter { it.isNotBlank() }.joinToString(" • "),
-                            body = if (key.emails.isEmpty()) key.publicKey.take(140) else key.emails.joinToString(", "),
-                            actionLabel = "Delete",
-                            onAction = {
-                                scope.launch {
-                                    val ok = GitHubManager.deleteGpgKeyNative(context, key.id)
-                                    Toast.makeText(context, if (ok) "Key deleted" else "Delete failed", Toast.LENGTH_SHORT).show()
-                                    loadKeys()
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-
-            NativeSettingsTab.ORGANIZATIONS -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-                item {
-                    NativeSection("Organizations") {
-                        Text("Organizations available to the active account.", color = TextSecondary, fontSize = 12.sp)
-                    }
-                }
-                items(orgs) { org ->
-                    NativeItemCard(
-                        icon = Icons.Rounded.Business,
-                        title = org.login,
-                        subtitle = org.description.ifBlank { "No description" }
-                    )
-                }
-            }
-
-            NativeSettingsTab.REPOSITORIES -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-                item {
-                    NativeSection("Pinned repositories") {
-                        if (pinnedRepoNames.isEmpty()) Text("No pinned repositories", color = TextTertiary, fontSize = 12.sp)
-                        else pinnedRepoNames.forEach { name ->
-                            NativeMiniRow(name, actionLabel = "Unpin") {
-                                GitHubManager.removePinnedRepo(context, name)
-                                pinnedRepoNames = GitHubManager.getPinnedRepoNames(context)
+                                addLog("Add key: $ok")
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                if (ok) { keyTitle = ""; keyBody = "" }
+                                refreshTab(ApiSettingsTab.KEYS)
                             }
                         }
                     }
-                }
-                item {
-                    Spacer(Modifier.height(10.dp))
-                    NativeSection("Recent repositories") {
-                        if (recentRepoNames.isEmpty()) Text("No recent repositories", color = TextTertiary, fontSize = 12.sp)
-                        else recentRepoNames.forEach { name ->
-                            NativeMiniRow(name, actionLabel = "Forget") {
-                                GitHubManager.removeRecentRepo(context, name)
-                                recentRepoNames = GitHubManager.getRecentRepoNames(context)
+
+                    ApiSettingsTab.SOCIAL -> NativeSection("Social accounts") {
+                        socialAccounts.forEachIndexed { index, account ->
+                            NativeSocialRow(account) {
+                                scope.launch {
+                                    val ok = GitHubManager.deleteSocialAccount(context, account.url)
+                                    addLog("Delete social ${account.url}: $ok")
+                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                    refreshTab(ApiSettingsTab.SOCIAL)
+                                }
+                            }
+                            if (index != socialAccounts.lastIndex) NativeDivider()
+                        }
+                        if (socialAccounts.isNotEmpty()) NativeDivider()
+                        NativeField(label = "Add social URL", value = newSocial, onValueChange = { newSocial = it })
+                        NativeActionRow(Icons.Rounded.Add, "Add social account") {
+                            scope.launch {
+                                val ok = GitHubManager.addSocialAccount(context, newSocial)
+                                addLog("Add social $newSocial: $ok")
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                if (ok) newSocial = ""
+                                refreshTab(ApiSettingsTab.SOCIAL)
                             }
                         }
                     }
-                }
-                item {
-                    Spacer(Modifier.height(10.dp))
-                    NativeSection("My repositories") {
-                        Text("Tap pin to keep a repository in settings.", color = TextSecondary, fontSize = 12.sp)
-                    }
-                }
-                items(repos) { repo ->
-                    NativeItemCard(
-                        icon = Icons.Rounded.Storage,
-                        title = repo.fullName,
-                        subtitle = listOf(repo.language, repo.updatedAt.take(10)).filter { it.isNotBlank() }.joinToString(" • "),
-                        body = repo.description.takeUnless { it.isBlank() || it == "null" } ?: "",
-                        actionLabel = if (GitHubManager.isRepoPinned(context, repo.fullName)) "Unpin" else "Pin",
-                        onAction = {
-                            GitHubManager.togglePinnedRepo(context, repo.fullName)
-                            pinnedRepoNames = GitHubManager.getPinnedRepoNames(context)
-                        }
-                    )
-                }
-            }
 
-            NativeSettingsTab.DEVELOPER -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-                item {
-                    NativeSection("Developer settings") {
-                        Button(onClick = { showTokenDialog = true }, shape = RoundedCornerShape(10.dp)) {
-                            Icon(Icons.Rounded.Key, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Change token")
+                    ApiSettingsTab.PEOPLE -> NativeSection("People") {
+                        Text("Followers", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 6.dp))
+                        followers.forEachIndexed { index, person ->
+                            NativePeopleRow(person, following = false) {
+                                scope.launch {
+                                    val ok = GitHubManager.followUser(context, person.login)
+                                    addLog("Follow ${person.login}: $ok")
+                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                    refreshTab(ApiSettingsTab.PEOPLE)
+                                }
+                            }
+                            if (index != followers.lastIndex) NativeDivider()
+                        }
+                        if (followers.isNotEmpty()) Spacer(Modifier.height(10.dp))
+                        Text("Following", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 6.dp))
+                        following.forEachIndexed { index, person ->
+                            NativePeopleRow(person, following = true) {
+                                scope.launch {
+                                    val ok = GitHubManager.unfollowUser(context, person.login)
+                                    addLog("Unfollow ${person.login}: $ok")
+                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                    refreshTab(ApiSettingsTab.PEOPLE)
+                                }
+                            }
+                            if (index != following.lastIndex) NativeDivider()
+                        }
+                    }
+
+                    ApiSettingsTab.BLOCKED -> NativeSection("Blocked users") {
+                        blockedUsers.forEachIndexed { index, blocked ->
+                            NativeBlockedUserRow(blocked) {
+                                scope.launch {
+                                    val ok = GitHubManager.unblockUser(context, blocked.login)
+                                    addLog("Unblock ${blocked.login}: $ok")
+                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                    refreshTab(ApiSettingsTab.BLOCKED)
+                                }
+                            }
+                            if (index != blockedUsers.lastIndex) NativeDivider()
+                        }
+                        if (blockedUsers.isNotEmpty()) NativeDivider()
+                        NativeField(label = "Block user", value = blockTarget, onValueChange = { blockTarget = it })
+                        NativeActionRow(Icons.Rounded.Block, "Block user") {
+                            scope.launch {
+                                val ok = GitHubManager.blockUser(context, blockTarget)
+                                addLog("Block $blockTarget: $ok")
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                if (ok) blockTarget = ""
+                                refreshTab(ApiSettingsTab.BLOCKED)
+                            }
+                        }
+                    }
+
+                    ApiSettingsTab.INTERACTION_LIMIT -> NativeSection("Interaction limits") {
+                        val current = interactionLimit
+                        Text(
+                            current?.let { "Current: ${it.limit} for ${it.expiry ?: "custom duration"}" } ?: "No active interaction limit",
+                            color = TextSecondary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                        NativeActionRow(Icons.Rounded.Warning, "Enable existing users for 24h") {
+                            scope.launch {
+                                val ok = GitHubManager.setInteractionLimit(context, "existing_users", "one_day")
+                                addLog("Set interaction limit existing_users: $ok")
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                refreshTab(ApiSettingsTab.INTERACTION_LIMIT)
+                            }
+                        }
+                        NativeActionRow(Icons.Rounded.Warning, "Enable contributors only for 24h") {
+                            scope.launch {
+                                val ok = GitHubManager.setInteractionLimit(context, "contributors_only", "one_day")
+                                addLog("Set interaction limit contributors_only: $ok")
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                refreshTab(ApiSettingsTab.INTERACTION_LIMIT)
+                            }
+                        }
+                        NativeActionRow(Icons.Rounded.Warning, "Enable collaborators only for 24h") {
+                            scope.launch {
+                                val ok = GitHubManager.setInteractionLimit(context, "collaborators_only", "one_day")
+                                addLog("Set interaction limit collaborators_only: $ok")
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                refreshTab(ApiSettingsTab.INTERACTION_LIMIT)
+                            }
+                        }
+                        NativeActionRow(Icons.Rounded.Close, "Remove interaction limit") {
+                            scope.launch {
+                                val ok = GitHubManager.removeInteractionLimit(context)
+                                addLog("Remove interaction limit: $ok")
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                refreshTab(ApiSettingsTab.INTERACTION_LIMIT)
+                            }
+                        }
+                    }
+
+                    ApiSettingsTab.ORGANIZATIONS -> NativeSection("Organizations") {
+                        orgs.forEachIndexed { index, org ->
+                            NativeTextRow(org, "Organization")
+                            if (index != orgs.lastIndex) NativeDivider()
+                        }
+                        if (orgs.isEmpty()) {
+                            Text("No organizations", color = TextTertiary, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                    }
+
+                    ApiSettingsTab.REPOSITORIES -> NativeSection("Repositories") {
+                        starredRepos.forEachIndexed { index, repo ->
+                            NativeRepoRow(repo,
+                                onOpen = {
+                                    addLog("Open repo ${repo.owner}/${repo.name}")
+                                },
+                                onUnstar = {
+                                    scope.launch {
+                                        val ok = GitHubManager.unstarRepo(context, repo.owner, repo.name)
+                                        addLog("Unstar ${repo.owner}/${repo.name}: $ok")
+                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                        refreshTab(ApiSettingsTab.REPOSITORIES)
+                                    }
+                                },
+                                onPin = {
+                                    GitHubManager.pinRepository(context, repo)
+                                    addLog("Pin ${repo.owner}/${repo.name}")
+                                    Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                            if (index != starredRepos.lastIndex) NativeDivider()
+                        }
+                        if (starredRepos.isEmpty()) {
+                            Text("No starred repositories", color = TextTertiary, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                    }
+
+                    ApiSettingsTab.DEVELOPER -> NativeSection("Developer settings") {
+                        Text("Scopes", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        if (tokenScopes.isEmpty()) {
+                            Text("No scopes detected", color = TextTertiary, fontSize = 13.sp, modifier = Modifier.padding(vertical = 6.dp))
+                        } else {
+                            tokenScopes.forEachIndexed { index, scopeName ->
+                                NativeTextRow(scopeName, "scope")
+                                if (index != tokenScopes.lastIndex) NativeDivider()
+                            }
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text("Token scopes", color = TextSecondary, fontSize = 12.sp)
-                        Text(tokenScopes?.scopes?.joinToString(", ").takeUnless { it.isNullOrBlank() } ?: "Unknown / not loaded", color = TextPrimary, fontSize = 13.sp)
-                        Spacer(Modifier.height(10.dp))
-                        Text("Rate limit", color = TextSecondary, fontSize = 12.sp)
-                        Text(rateLimit?.let { "${it.remaining}/${it.limit} remaining" } ?: "Unknown", color = TextPrimary, fontSize = 13.sp)
-                        Spacer(Modifier.height(10.dp))
-                        Text("Last API error", color = TextSecondary, fontSize = 12.sp)
-                        Text(GitHubManager.getLastApiError(context).ifBlank { "None" }, color = TextPrimary, fontSize = 12.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
-                        Spacer(Modifier.height(10.dp))
-                        Text("Last HTTP code", color = TextSecondary, fontSize = 12.sp)
-                        Text(GitHubManager.getLastHttpCode(context).toString(), color = TextPrimary, fontSize = 13.sp)
-                        Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = {
-                                GitHubManager.clearDiagnostics(context)
-                                scope.launch { loadDeveloper() }
-                            }, shape = RoundedCornerShape(10.dp)) { Text("Clear diagnostics") }
-                            Button(onClick = {
-                                GitHubManager.clearActionLogs(context)
-                                scope.launch { loadDeveloper() }
-                            }, shape = RoundedCornerShape(10.dp)) { Text("Clear logs") }
-                        }
+                        Text("Rate limit", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(rateLimitSummary.ifBlank { "Unknown" }, color = TextPrimary, fontSize = 13.sp, modifier = Modifier.padding(vertical = 6.dp))
                         Spacer(Modifier.height(8.dp))
-                        Button(onClick = onLogout, shape = RoundedCornerShape(10.dp)) { Text("Sign out") }
+                        Text("Diagnostics", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(diagnosticsText.ifBlank { "No diagnostics" }, color = TextPrimary, fontSize = 13.sp, modifier = Modifier.padding(vertical = 6.dp))
+                        NativeDivider()
+                        NativeActionRow(Icons.Rounded.Key, "Change token") { showChangeToken = true }
+                        NativeActionRow(Icons.Rounded.Delete, "Clear diagnostics") {
+                            GitHubManager.clearDiagnostics(context)
+                            diagnosticsText = GitHubManager.getDiagnosticsSummary(context)
+                            actionLog.clear()
+                            Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                        }
+                        NativeActionRow(Icons.Rounded.Logout, "Sign out", tint = Color(0xFFFF3B30)) {
+                            GitHubManager.logout(context)
+                            onLogout()
+                        }
+                        if (actionLog.isNotEmpty()) {
+                            NativeDivider()
+                            Text("Action log", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 6.dp))
+                            actionLog.take(30).forEachIndexed { index, item ->
+                                Text(item, color = TextPrimary, fontSize = 11.sp, modifier = Modifier.padding(vertical = 2.dp))
+                                if (index != actionLog.take(30).lastIndex) NativeDivider()
+                            }
+                        }
                     }
                 }
-                item {
-                    Spacer(Modifier.height(10.dp))
-                    NativeSection("Stored action log") {
-                        if (actionLogs.isEmpty()) Text("No action log entries", color = TextTertiary, fontSize = 12.sp)
-                    }
-                }
-                items(actionLogs.take(40)) { line ->
-                    val parts = line.split("|", limit = 2)
-                    val stamp = parts.getOrNull(0)?.toLongOrNull()
-                    val msg = parts.getOrNull(1) ?: line
-                    NativeItemCard(
-                        icon = Icons.Rounded.Check,
-                        title = msg,
-                        subtitle = stamp?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it)) } ?: "",
-                        small = true
-                    )
-                }
-            }
-
-            NativeSettingsTab.UNSUPPORTED -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-                item {
-                    NativeSection("Not exposed cleanly by GitHub API") {
-                        Text("These web GitHub settings are not implemented natively here because GitHub does not expose the same level of public account-management API for them.", color = TextSecondary, fontSize = 12.sp)
-                    }
-                }
-                items(listOf(
-                    "Password and authentication",
-                    "Sessions",
-                    "Billing and plans",
-                    "Copilot account preferences",
-                    "Pages account-level settings",
-                    "Saved replies",
-                    "Full browser Security pages"
-                )) { name ->
-                    NativeItemCard(icon = Icons.Rounded.Lock, title = name, subtitle = "Not supported natively", small = true)
-                }
+                Spacer(Modifier.height(18.dp))
             }
         }
     }
 
-    if (showTokenDialog) {
+    if (showChangeToken) {
         AlertDialog(
-            onDismissRequest = { showTokenDialog = false },
+            onDismissRequest = { showChangeToken = false },
+            containerColor = SurfaceWhite,
+            title = { Text("Change token", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(Strings.ghTokenHint, fontSize = 11.sp, color = TextTertiary)
+                    OutlinedTextField(
+                        value = newToken,
+                        onValueChange = { newToken = it },
+                        label = { Text("Personal Access Token") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     if (newToken.isNotBlank()) {
                         GitHubManager.saveToken(context, newToken)
-                        scope.launch {
-                            loadProfile()
-                            loadDeveloper()
-                        }
-                        Toast.makeText(context, "Token updated", Toast.LENGTH_SHORT).show()
-                        showTokenDialog = false
+                        addLog("Token updated")
+                        showChangeToken = false
                         newToken = ""
+                        scope.launch { refreshTab(ApiSettingsTab.DEVELOPER) }
                     }
-                }) { Text("Save", color = Blue) }
+                }) { Text(Strings.done, color = Blue) }
             },
-            dismissButton = { TextButton(onClick = { showTokenDialog = false }) { Text("Cancel", color = TextSecondary) } },
-            title = { Text("Change token") },
-            text = {
-                OutlinedTextField(
-                    value = newToken,
-                    onValueChange = { newToken = it },
-                    label = { Text("Personal access token") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth()
-                )
+            dismissButton = {
+                TextButton(onClick = { showChangeToken = false }) { Text(Strings.cancel, color = TextSecondary) }
             }
         )
     }
 }
 
-
-private fun settingsScreenTitle(screen: NativeSettingsTab): String = when (screen) {
-    NativeSettingsTab.PROFILE -> "Profile"
-    NativeSettingsTab.EMAILS -> "Emails"
-    NativeSettingsTab.NOTIFICATIONS -> "Notifications"
-    NativeSettingsTab.KEYS -> "Keys"
-    NativeSettingsTab.ORGANIZATIONS -> "Organizations"
-    NativeSettingsTab.REPOSITORIES -> "Repositories"
-    NativeSettingsTab.DEVELOPER -> "Developer settings"
-    NativeSettingsTab.UNSUPPORTED -> "Unsupported"
-}
-
-@Composable
-private fun SettingsHomeScreen(
-    currentToken: String,
-    currentDownloadPath: String,
-    currentClonePath: String,
-    onOpenScreen: (NativeSettingsTab) -> Unit,
-    onChangeToken: () -> Unit,
-    onSignOut: () -> Unit,
-    onClearCache: () -> Unit
-) {
-    val tokenPreview = remember(currentToken) {
-        when {
-            currentToken.isBlank() -> "Not set"
-            currentToken.length <= 8 -> currentToken
-            else -> currentToken.take(4) + "••••••••"
-        }
-    }
-
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text("Account", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            Column(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(SurfaceWhite)
-            ) {
-                SettingsHomeRow(Icons.Rounded.AccountCircle, "Profile", "Name, bio, company, location") { onOpenScreen(NativeSettingsTab.PROFILE) }
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Email, "Emails", "Primary visibility, add, delete") { onOpenScreen(NativeSettingsTab.EMAILS) }
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Notifications, "Notifications", "Unread, mark read, thread state") { onOpenScreen(NativeSettingsTab.NOTIFICATIONS) }
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Key, "Keys", "SSH, SSH signing, GPG") { onOpenScreen(NativeSettingsTab.KEYS) }
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Business, "Organizations", "My organizations") { onOpenScreen(NativeSettingsTab.ORGANIZATIONS) }
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Storage, "Repositories", "Pinned, recent, my repositories") { onOpenScreen(NativeSettingsTab.REPOSITORIES) }
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Security, "Developer settings", "Token scopes, rate limit, diagnostics") { onOpenScreen(NativeSettingsTab.DEVELOPER) }
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Lock, "Unsupported", "GitHub account pages not exposed cleanly by API") { onOpenScreen(NativeSettingsTab.UNSUPPORTED) }
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Key, "Token", tokenPreview) { onChangeToken() }
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Delete, "Sign out", "Disconnect current GitHub session", actionTint = Color(0xFFFF3B30)) { onSignOut() }
-            }
-        }
-        item {
-            Text("Paths & cache", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            Column(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(SurfaceWhite)
-            ) {
-                SettingsHomeRow(Icons.Rounded.Storage, "Download path", currentDownloadPath)
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Storage, "Clone path", currentClonePath)
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Delete, "Clear cache", "Account, repos, branches, diagnostics", actionTint = Color(0xFFFF3B30)) { onClearCache() }
-            }
-        }
-        item {
-            Text("About GitHub integration", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            Column(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(SurfaceWhite)
-            ) {
-                SettingsHomeRow(Icons.Rounded.Check, "Full GitHub client inside Glass Files", "Native GitHub module")
-                SettingsDivider()
-                SettingsHomeRow(Icons.Rounded.Check, "Version", "1.0")
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsHomeRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String = "",
-    actionTint: Color = TextPrimary,
-    onClick: (() -> Unit)? = null
-) {
-    Row(
-        Modifier.fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, null, Modifier.size(20.dp), tint = if (actionTint == TextPrimary) Blue else actionTint)
-        Column(Modifier.weight(1f)) {
-            Text(title, color = actionTint, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle.isNotBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Text(subtitle, color = TextTertiary, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsDivider() {
-    Box(Modifier.fillMaxWidth().padding(start = 46.dp, end = 14.dp).height(0.5.dp).background(SeparatorColor))
-}
-
-@Composable
-private fun NativeTabChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(9.dp))
-            .background(if (selected) Blue.copy(alpha = 0.14f) else SurfaceWhite)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp)
-    ) {
-        Text(label, color = if (selected) Blue else TextSecondary, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-    }
-}
-
 @Composable
 private fun NativeSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SurfaceWhite).padding(14.dp)) {
-        Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(10.dp))
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SurfaceWhite).padding(14.dp)
+    ) {
+        Text(title, color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
         content()
     }
 }
 
 @Composable
-private fun NativeField(label: String, value: String, onValueChange: (String) -> Unit = {}, singleLine: Boolean = true, minLines: Int = 1) {
+private fun NativeDivider() {
+    Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor).padding(vertical = 0.dp))
+}
+
+@Composable
+private fun NativeSettingsRow(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (selected) Blue.copy(alpha = 0.08f) else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(Icons.Rounded.Settings, null, tint = if (selected) Blue else TextSecondary, modifier = Modifier.size(18.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = if (selected) Blue else TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(subtitle, color = TextTertiary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun NativeField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit = {},
+    singleLine: Boolean = true,
+    minLines: Int = 1
+) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
         singleLine = singleLine,
         minLines = minLines,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = TextPrimary),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Blue,
+            unfocusedBorderColor = SeparatorColor,
+            focusedLabelColor = Blue,
+            unfocusedLabelColor = TextTertiary,
+            cursorColor = Blue
+        )
     )
-    Spacer(Modifier.height(8.dp))
 }
 
 @Composable
-private fun NativeItemCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String = "",
-    body: String = "",
-    badge: String? = null,
-    actionLabel: String? = null,
-    onAction: (() -> Unit)? = null,
-    small: Boolean = false
-) {
+private fun NativeActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, tint: Color = Blue, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.Top
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Icon(icon, null, Modifier.size(if (small) 18.dp else 20.dp), tint = Blue)
+        Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
+        Text(title, color = tint, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun NativeEmailRow(email: GHEmailEntry, onDelete: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(title, color = TextPrimary, fontSize = if (small) 13.sp else 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (badge != null) {
-                    Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Blue.copy(alpha = 0.12f)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                        Text(badge, color = Blue, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-            if (subtitle.isNotBlank()) Text(subtitle, color = TextSecondary, fontSize = 11.sp)
-            if (body.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(body, color = TextTertiary, fontSize = 11.sp, maxLines = 5, overflow = TextOverflow.Ellipsis, fontFamily = if (body.contains("ssh-") || body.contains("BEGIN PGP")) FontFamily.Monospace else null)
-            }
+            Text(email.email, color = TextPrimary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val tags = buildList {
+                if (email.primary) add("primary")
+                if (email.verified) add("verified")
+                add(email.visibility.ifBlank { "private" })
+            }.joinToString(" • ")
+            Text(tags, color = TextTertiary, fontSize = 11.sp)
         }
-        if (actionLabel != null && onAction != null) {
-            Text(
-                actionLabel,
-                color = if (actionLabel.contains("Delete") || actionLabel.contains("Forget") || actionLabel.contains("Unpin")) Color(0xFFFF3B30) else Blue,
-                fontSize = 12.sp,
-                modifier = Modifier.clickable(onClick = onAction)
-            )
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Rounded.Delete, null, tint = Color(0xFFFF3B30), modifier = Modifier.size(18.dp))
         }
     }
 }
 
 @Composable
-private fun NativeMiniRow(title: String, actionLabel: String, onAction: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, color = TextPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f))
-        Text(actionLabel, color = Color(0xFFFF3B30), fontSize = 12.sp, modifier = Modifier.clickable(onClick = onAction))
+private fun NativeNotificationRow(item: GHNotificationThread, onMarkRead: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.Notifications, null, tint = if (item.unread) Blue else TextTertiary, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(item.subjectTitle, color = TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${item.repositoryFullName} • ${item.reason}", color = TextTertiary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (item.unread) {
+            TextButton(onClick = onMarkRead) { Text("Read", color = Blue, fontSize = 12.sp) }
+        }
     }
-    Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor))
+}
+
+@Composable
+private fun NativeVisibilityToggle(current: String, onSet: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        NativeTabChip("private", current == "private") { onSet("private") }
+        NativeTabChip("public", current == "public") { onSet("public") }
+    }
+}
+
+@Composable
+private fun NativeTabChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(8.dp)).background(if (selected) Blue.copy(alpha = 0.14f) else SurfaceLight).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Text(label, color = if (selected) Blue else TextSecondary, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+    }
+}
+
+@Composable
+private fun NativeKeyRow(key: GHUserKey, onDelete: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.Key, null, tint = Blue, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(key.title.ifBlank { key.name.ifBlank { "Key ${key.id}" } }, color = TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(key.createdAt.take(10), color = TextTertiary, fontSize = 11.sp)
+        }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Rounded.Delete, null, tint = Color(0xFFFF3B30), modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun NativeSocialRow(account: GHSocialAccount, onDelete: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.Public, null, tint = Blue, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(account.provider.ifBlank { "Social account" }, color = TextPrimary, fontSize = 13.sp)
+            Text(account.url, color = TextTertiary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Rounded.Delete, null, tint = Color(0xFFFF3B30), modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun NativePeopleRow(person: GHFollowerUser, following: Boolean, onAction: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        AsyncImage(model = person.avatarUrl, contentDescription = person.login, modifier = Modifier.size(28.dp).clip(CircleShape))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(person.login, color = TextPrimary, fontSize = 13.sp)
+            Text(if (following) "Following" else "Follower", color = TextTertiary, fontSize = 11.sp)
+        }
+        TextButton(onClick = onAction) {
+            Text(if (following) "Unfollow" else "Follow", color = Blue, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun NativeBlockedUserRow(user: GHBlockedUser, onUnblock: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        AsyncImage(model = user.avatarUrl, contentDescription = user.login, modifier = Modifier.size(28.dp).clip(CircleShape))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(user.login, color = TextPrimary, fontSize = 13.sp)
+            Text("Blocked user", color = TextTertiary, fontSize = 11.sp)
+        }
+        TextButton(onClick = onUnblock) { Text("Unblock", color = Color(0xFFFF3B30), fontSize = 12.sp) }
+    }
+}
+
+@Composable
+private fun NativeRepoRow(repo: GHRepo, onOpen: () -> Unit, onUnstar: () -> Unit, onPin: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Description, null, tint = Blue, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("${repo.owner}/${repo.name}", color = TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(repo.description.takeIf { it.isNotBlank() } ?: "No description", color = TextTertiary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = onOpen) { Text("Open", color = Blue, fontSize = 12.sp) }
+            TextButton(onClick = onPin) { Text("Pin", color = Blue, fontSize = 12.sp) }
+            TextButton(onClick = onUnstar) { Text("Unstar", color = Color(0xFFFF3B30), fontSize = 12.sp) }
+        }
+    }
+}
+
+@Composable
+private fun NativeTextRow(title: String, subtitle: String) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text(title, color = TextPrimary, fontSize = 13.sp)
+        Text(subtitle, color = TextTertiary, fontSize = 11.sp)
+    }
 }
