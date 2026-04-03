@@ -1,14 +1,12 @@
 package com.glassfiles.data.github
 
 import android.content.Context
-import android.os.Environment
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
-import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -22,541 +20,18 @@ object GitHubManager {
     private const val PREFS = "github_prefs"
     private const val KEY_TOKEN = "token"
     private const val KEY_USER = "user_json"
-    private const val KEY_RECENT_REPOS = "recent_repos"
-    private const val KEY_PINNED_REPOS = "pinned_repos"
-    private const val KEY_DEFAULT_REPO_TAB = "default_repo_tab"
-    private const val KEY_REMEMBER_LAST_BRANCH = "remember_last_branch"
-    private const val KEY_LAST_BRANCH_PREFIX = "last_branch_"
-    private const val KEY_EDITOR_LINE_WRAP = "editor_line_wrap"
-    private const val KEY_EDITOR_LINE_NUMBERS = "editor_line_numbers"
-    private const val KEY_EDITOR_MONOSPACE = "editor_monospace"
-    private const val KEY_DOWNLOAD_PATH = "download_path"
-    private const val KEY_CLONE_PATH = "clone_path"
-    private const val KEY_NOTIF_UNREAD_ONLY = "notif_unread_only"
-    private const val KEY_NOTIF_ISSUES = "notif_issues"
-    private const val KEY_NOTIF_PRS = "notif_prs"
-    private const val KEY_NOTIF_RELEASES = "notif_releases"
-    private const val KEY_NOTIF_DISCUSSIONS = "notif_discussions"
-    private const val KEY_NOTIF_OTHER = "notif_other"
-    private const val KEY_CONFIRM_MERGE_PR = "confirm_merge_pr"
-    private const val KEY_CONFIRM_CLOSE_ISSUE = "confirm_close_issue"
-    private const val KEY_CONFIRM_LOGOUT = "confirm_logout"
-    private const val KEY_CONFIRM_CLEAR_CACHE = "confirm_clear_cache"
-    private const val KEY_LAST_API_ERROR = "last_api_error"
-    private const val KEY_LAST_HTTP_CODE = "last_http_code"
-    private const val KEY_LAST_SYNC_TIME = "last_sync_time"
-    private const val KEY_RATE_LIMIT_REMAINING = "rate_limit_remaining"
-    private const val KEY_RATE_LIMIT_LIMIT = "rate_limit_limit"
-    private const val KEY_RATE_LIMIT_RESET = "rate_limit_reset"
-    private const val KEY_ACCOUNTS = "accounts"
-    private const val KEY_CURRENT_ACCOUNT_ID = "current_account_id"
-    private const val KEY_EDITOR_TAB_WIDTH = "editor_tab_width"
-    private const val KEY_EDITOR_USE_SPACES = "editor_use_spaces"
-    private const val KEY_EDITOR_AUTO_SAVE_DRAFT = "editor_auto_save_draft"
-    private const val KEY_EDITOR_RESTORE_DRAFTS = "editor_restore_drafts"
-    private const val KEY_EDITOR_OPEN_MODE = "editor_open_mode"
-    private const val KEY_EDITOR_THEME_MODE = "editor_theme_mode"
-    private const val KEY_HIDE_TOKEN = "hide_token"
-    private const val KEY_CONFIRM_TOKEN_REVEAL = "confirm_token_reveal"
-    private const val KEY_ACTION_LOGS = "action_logs"
-    private const val KEY_REPO_OPEN_TAB_PREFIX = "repo_open_tab_"
-    private const val KEY_EDITOR_DRAFT_PREFIX = "editor_draft_"
 
     fun saveToken(context: Context, token: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_TOKEN, token).apply()
-        addActionLog(context, "Active token updated")
     }
 
     fun getToken(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_TOKEN, "") ?: ""
 
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    private fun getStringList(context: Context, key: String): MutableList<String> {
-        val raw = prefs(context).getString(key, "[]") ?: "[]"
-        return try {
-            val arr = JSONArray(raw)
-            MutableList(arr.length()) { i -> arr.optString(i) }.filter { it.isNotBlank() }.toMutableList()
-        } catch (_: Exception) {
-            mutableListOf()
-        }
-    }
-
-    private fun putStringList(context: Context, key: String, values: List<String>) {
-        val arr = JSONArray()
-        values.forEach { arr.put(it) }
-        prefs(context).edit().putString(key, arr.toString()).apply()
-    }
-
-
-    data class GHStoredAccount(
-        val id: String,
-        val login: String,
-        val name: String,
-        val avatarUrl: String,
-        val tokenPreview: String,
-        val userJson: String,
-        val token: String
-    )
-
-    private fun readStoredAccounts(context: Context): MutableList<GHStoredAccount> {
-        val raw = prefs(context).getString(KEY_ACCOUNTS, "[]") ?: "[]"
-        return try {
-            val arr = JSONArray(raw)
-            MutableList(arr.length()) { i ->
-                val j = arr.getJSONObject(i)
-                GHStoredAccount(
-                    id = j.optString("id"),
-                    login = j.optString("login"),
-                    name = j.optString("name"),
-                    avatarUrl = j.optString("avatarUrl"),
-                    tokenPreview = j.optString("tokenPreview"),
-                    userJson = j.optString("userJson"),
-                    token = j.optString("token")
-                )
-            }.filter { it.id.isNotBlank() && it.token.isNotBlank() }.toMutableList()
-        } catch (_: Exception) {
-            mutableListOf()
-        }
-    }
-
-    private fun writeStoredAccounts(context: Context, accounts: List<GHStoredAccount>) {
-        val arr = JSONArray()
-        accounts.forEach { account ->
-            arr.put(JSONObject().apply {
-                put("id", account.id)
-                put("login", account.login)
-                put("name", account.name)
-                put("avatarUrl", account.avatarUrl)
-                put("tokenPreview", account.tokenPreview)
-                put("userJson", account.userJson)
-                put("token", account.token)
-            })
-        }
-        prefs(context).edit().putString(KEY_ACCOUNTS, arr.toString()).apply()
-    }
-
-    private fun tokenPreview(token: String): String = when {
-        token.length <= 8 -> token
-        else -> token.take(4) + "••••" + token.takeLast(4)
-    }
-
-    private fun accountIdFor(login: String): String = login.trim().lowercase()
-
-    private fun upsertStoredAccount(context: Context, token: String, user: GHUser, rawUserJson: String) {
-        if (token.isBlank() || user.login.isBlank()) return
-        val list = readStoredAccounts(context)
-        val id = accountIdFor(user.login)
-        list.removeAll { it.id == id }
-        list.add(0, GHStoredAccount(
-            id = id,
-            login = user.login,
-            name = user.name,
-            avatarUrl = user.avatarUrl,
-            tokenPreview = tokenPreview(token),
-            userJson = rawUserJson,
-            token = token
-        ))
-        writeStoredAccounts(context, list.distinctBy { it.id }.take(10))
-        prefs(context).edit().putString(KEY_CURRENT_ACCOUNT_ID, id).apply()
-    }
-
-    fun getStoredAccounts(context: Context): List<GHStoredAccount> = readStoredAccounts(context)
-
-    fun getCurrentAccountId(context: Context): String? = prefs(context).getString(KEY_CURRENT_ACCOUNT_ID, null)
-
-    fun switchAccount(context: Context, accountId: String): Boolean {
-        val account = readStoredAccounts(context).firstOrNull { it.id == accountId } ?: return false
-        prefs(context).edit()
-            .putString(KEY_TOKEN, account.token)
-            .putString(KEY_USER, account.userJson)
-            .putString(KEY_CURRENT_ACCOUNT_ID, account.id)
-            .apply()
-        addActionLog(context, "Switched account to @${account.login}")
-        return true
-    }
-
-    fun removeStoredAccount(context: Context, accountId: String): Boolean {
-        val list = readStoredAccounts(context)
-        val removed = list.firstOrNull { it.id == accountId } ?: return false
-        val newList = list.filterNot { it.id == accountId }
-        writeStoredAccounts(context, newList)
-        val editor = prefs(context).edit()
-        if (getCurrentAccountId(context) == accountId) {
-            val fallback = newList.firstOrNull()
-            if (fallback != null) {
-                editor.putString(KEY_TOKEN, fallback.token)
-                editor.putString(KEY_USER, fallback.userJson)
-                editor.putString(KEY_CURRENT_ACCOUNT_ID, fallback.id)
-            } else {
-                editor.remove(KEY_TOKEN)
-                editor.remove(KEY_USER)
-                editor.remove(KEY_CURRENT_ACCOUNT_ID)
-            }
-        }
-        editor.apply()
-        addActionLog(context, "Removed account @${removed.login}")
-        return true
-    }
-
-    fun setRepoOpenTabForRepo(context: Context, repoFullName: String, tabValue: String?) {
-        val key = KEY_REPO_OPEN_TAB_PREFIX + repoFullName.replace("/", "__")
-        val editor = prefs(context).edit()
-        if (tabValue.isNullOrBlank()) editor.remove(key) else editor.putString(key, tabValue)
-        editor.apply()
-    }
-
-    fun getRepoOpenTabForRepo(context: Context, repoFullName: String): String? =
-        prefs(context).getString(KEY_REPO_OPEN_TAB_PREFIX + repoFullName.replace("/", "__"), null)
-
-    fun setEditorTabWidth(context: Context, width: Int) {
-        prefs(context).edit().putInt(KEY_EDITOR_TAB_WIDTH, width.coerceIn(1, 8)).apply()
-    }
-
-    fun getEditorTabWidth(context: Context): Int = prefs(context).getInt(KEY_EDITOR_TAB_WIDTH, 4).coerceIn(1, 8)
-
-    fun setEditorUseSpaces(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_EDITOR_USE_SPACES, enabled).apply()
-    }
-
-    fun getEditorUseSpaces(context: Context): Boolean = prefs(context).getBoolean(KEY_EDITOR_USE_SPACES, true)
-
-    fun setEditorAutoSaveDraft(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_EDITOR_AUTO_SAVE_DRAFT, enabled).apply()
-    }
-
-    fun isEditorAutoSaveDraft(context: Context): Boolean = prefs(context).getBoolean(KEY_EDITOR_AUTO_SAVE_DRAFT, true)
-
-    fun setEditorRestoreDrafts(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_EDITOR_RESTORE_DRAFTS, enabled).apply()
-    }
-
-    fun isEditorRestoreDrafts(context: Context): Boolean = prefs(context).getBoolean(KEY_EDITOR_RESTORE_DRAFTS, true)
-
-    fun setEditorOpenMode(context: Context, mode: String) {
-        prefs(context).edit().putString(KEY_EDITOR_OPEN_MODE, if (mode == "editor") "editor" else "preview").apply()
-    }
-
-    fun getEditorOpenMode(context: Context): String = prefs(context).getString(KEY_EDITOR_OPEN_MODE, "preview") ?: "preview"
-
-    fun setEditorThemeMode(context: Context, mode: String) {
-        val value = when (mode) { "light", "match_app" -> mode else -> "dark" }
-        prefs(context).edit().putString(KEY_EDITOR_THEME_MODE, value).apply()
-    }
-
-    fun getEditorThemeMode(context: Context): String = prefs(context).getString(KEY_EDITOR_THEME_MODE, "dark") ?: "dark"
-
-    fun setHideTokenEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_HIDE_TOKEN, enabled).apply()
-    }
-
-    fun isHideTokenEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_HIDE_TOKEN, true)
-
-    fun setConfirmTokenRevealEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_CONFIRM_TOKEN_REVEAL, enabled).apply()
-    }
-
-    fun isConfirmTokenRevealEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_CONFIRM_TOKEN_REVEAL, true)
-
-    fun saveEditorDraft(context: Context, repoFullName: String, filePath: String, content: String) {
-        val key = KEY_EDITOR_DRAFT_PREFIX + (repoFullName + "__" + filePath).replace("/", "__")
-        prefs(context).edit().putString(key, content).apply()
-    }
-
-    fun getEditorDraft(context: Context, repoFullName: String, filePath: String): String? {
-        val key = KEY_EDITOR_DRAFT_PREFIX + (repoFullName + "__" + filePath).replace("/", "__")
-        return prefs(context).getString(key, null)
-    }
-
-    fun clearEditorDraft(context: Context, repoFullName: String, filePath: String) {
-        val key = KEY_EDITOR_DRAFT_PREFIX + (repoFullName + "__" + filePath).replace("/", "__")
-        prefs(context).edit().remove(key).apply()
-    }
-
-    fun clearAllEditorDrafts(context: Context) {
-        val editor = prefs(context).edit()
-        prefs(context).all.keys.filter { it.startsWith(KEY_EDITOR_DRAFT_PREFIX) }.forEach { editor.remove(it) }
-        editor.apply()
-    }
-
-    fun addActionLog(context: Context, message: String) {
-        if (message.isBlank()) return
-        val current = getStringList(context, KEY_ACTION_LOGS)
-        val stamped = "${System.currentTimeMillis()}|$message"
-        current.add(0, stamped)
-        putStringList(context, KEY_ACTION_LOGS, current.take(100))
-    }
-
-    fun getActionLogs(context: Context): List<String> = getStringList(context, KEY_ACTION_LOGS)
-
-    fun clearActionLogs(context: Context) {
-        prefs(context).edit().remove(KEY_ACTION_LOGS).apply()
-    }
-
-    fun removeRecentRepo(context: Context, fullName: String) {
-        val list = getStringList(context, KEY_RECENT_REPOS)
-        list.remove(fullName)
-        putStringList(context, KEY_RECENT_REPOS, list)
-    }
-
-    fun removePinnedRepo(context: Context, fullName: String) {
-        val list = getStringList(context, KEY_PINNED_REPOS)
-        list.remove(fullName)
-        putStringList(context, KEY_PINNED_REPOS, list)
-    }
-
-    fun addRecentRepo(context: Context, fullName: String) {
-        if (fullName.isBlank()) return
-        val list = getStringList(context, KEY_RECENT_REPOS)
-        list.remove(fullName)
-        list.add(0, fullName)
-        putStringList(context, KEY_RECENT_REPOS, list.take(20))
-    }
-
-    fun getRecentRepoNames(context: Context): List<String> = getStringList(context, KEY_RECENT_REPOS)
-
-    fun getPinnedRepoNames(context: Context): List<String> = getStringList(context, KEY_PINNED_REPOS)
-
-    fun isRepoPinned(context: Context, fullName: String): Boolean = getPinnedRepoNames(context).contains(fullName)
-
-    fun togglePinnedRepo(context: Context, fullName: String) {
-        if (fullName.isBlank()) return
-        val list = getStringList(context, KEY_PINNED_REPOS)
-        val pinned = if (list.contains(fullName)) {
-            list.remove(fullName)
-            false
-        } else {
-            list.add(0, fullName)
-            true
-        }
-        putStringList(context, KEY_PINNED_REPOS, list.distinct().take(30))
-        addActionLog(context, if (pinned) "Pinned $fullName" else "Unpinned $fullName")
-    }
-
-    fun setDefaultRepoTab(context: Context, value: String) {
-        prefs(context).edit().putString(KEY_DEFAULT_REPO_TAB, value).apply()
-    }
-
-    fun getDefaultRepoTab(context: Context): String =
-        prefs(context).getString(KEY_DEFAULT_REPO_TAB, "FILES") ?: "FILES"
-
-    fun setRememberLastBranchEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_REMEMBER_LAST_BRANCH, enabled).apply()
-    }
-
-    fun isRememberLastBranchEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_REMEMBER_LAST_BRANCH, true)
-
-    private fun branchKey(repoFullName: String): String =
-        KEY_LAST_BRANCH_PREFIX + repoFullName.replace("/", "__")
-
-    fun setLastBranchForRepo(context: Context, repoFullName: String, branch: String) {
-        prefs(context).edit().putString(branchKey(repoFullName), branch).apply()
-    }
-
-    fun getLastBranchForRepo(context: Context, repoFullName: String): String? =
-        prefs(context).getString(branchKey(repoFullName), null)
-
-    fun setEditorLineWrap(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_EDITOR_LINE_WRAP, enabled).apply()
-    }
-
-    fun getEditorLineWrap(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_EDITOR_LINE_WRAP, true)
-
-    fun setEditorLineNumbers(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_EDITOR_LINE_NUMBERS, enabled).apply()
-    }
-
-    fun getEditorLineNumbers(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_EDITOR_LINE_NUMBERS, true)
-
-    fun setEditorMonospace(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_EDITOR_MONOSPACE, enabled).apply()
-    }
-
-    fun getEditorMonospace(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_EDITOR_MONOSPACE, true)
-
-    private fun defaultGithubBasePath(): String =
-        File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git").absolutePath
-
-    fun setDownloadBasePath(context: Context, path: String) {
-        prefs(context).edit().putString(KEY_DOWNLOAD_PATH, path.trim()).apply()
-    }
-
-    fun getDownloadBasePath(context: Context): String =
-        prefs(context).getString(KEY_DOWNLOAD_PATH, defaultGithubBasePath())?.takeIf { it.isNotBlank() } ?: defaultGithubBasePath()
-
-    fun getDownloadBaseDir(context: Context): File =
-        File(getDownloadBasePath(context)).apply { mkdirs() }
-
-    fun setCloneBasePath(context: Context, path: String) {
-        prefs(context).edit().putString(KEY_CLONE_PATH, path.trim()).apply()
-    }
-
-    fun getCloneBasePath(context: Context): String =
-        prefs(context).getString(KEY_CLONE_PATH, defaultGithubBasePath())?.takeIf { it.isNotBlank() } ?: defaultGithubBasePath()
-
-    fun getCloneBaseDir(context: Context): File =
-        File(getCloneBasePath(context)).apply { mkdirs() }
-
-    fun setNotifUnreadOnly(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_NOTIF_UNREAD_ONLY, enabled).apply()
-    }
-
-    fun getNotifUnreadOnly(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_NOTIF_UNREAD_ONLY, false)
-
-    fun setNotifIssues(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_NOTIF_ISSUES, enabled).apply()
-    }
-
-    fun getNotifIssues(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_NOTIF_ISSUES, true)
-
-    fun setNotifPRs(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_NOTIF_PRS, enabled).apply()
-    }
-
-    fun getNotifPRs(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_NOTIF_PRS, true)
-
-    fun setNotifReleases(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_NOTIF_RELEASES, enabled).apply()
-    }
-
-    fun getNotifReleases(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_NOTIF_RELEASES, true)
-
-    fun setNotifDiscussions(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_NOTIF_DISCUSSIONS, enabled).apply()
-    }
-
-    fun getNotifDiscussions(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_NOTIF_DISCUSSIONS, true)
-
-    fun setNotifOther(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_NOTIF_OTHER, enabled).apply()
-    }
-
-    fun getNotifOther(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_NOTIF_OTHER, true)
-
-    fun setConfirmMergePREnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_CONFIRM_MERGE_PR, enabled).apply()
-    }
-
-    fun isConfirmMergePREnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_CONFIRM_MERGE_PR, true)
-
-    fun setConfirmCloseIssueEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_CONFIRM_CLOSE_ISSUE, enabled).apply()
-    }
-
-    fun isConfirmCloseIssueEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_CONFIRM_CLOSE_ISSUE, true)
-
-    fun setConfirmLogoutEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_CONFIRM_LOGOUT, enabled).apply()
-    }
-
-    fun isConfirmLogoutEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_CONFIRM_LOGOUT, true)
-
-    fun setConfirmClearCacheEnabled(context: Context, enabled: Boolean) {
-        prefs(context).edit().putBoolean(KEY_CONFIRM_CLEAR_CACHE, enabled).apply()
-    }
-
-    fun isConfirmClearCacheEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_CONFIRM_CLEAR_CACHE, true)
-
-    private fun storeDiagnostics(context: Context, code: Int, errorText: String, remaining: String?, limit: String?, reset: String?) {
-        prefs(context).edit()
-            .putString(KEY_LAST_API_ERROR, errorText.take(500))
-            .putInt(KEY_LAST_HTTP_CODE, code)
-            .putLong(KEY_LAST_SYNC_TIME, System.currentTimeMillis())
-            .putString(KEY_RATE_LIMIT_REMAINING, remaining ?: "")
-            .putString(KEY_RATE_LIMIT_LIMIT, limit ?: "")
-            .putString(KEY_RATE_LIMIT_RESET, reset ?: "")
-            .apply()
-    }
-
-    fun getLastApiError(context: Context): String = prefs(context).getString(KEY_LAST_API_ERROR, "") ?: ""
-    fun getLastHttpCode(context: Context): Int = prefs(context).getInt(KEY_LAST_HTTP_CODE, 0)
-    fun getLastSyncTime(context: Context): Long = prefs(context).getLong(KEY_LAST_SYNC_TIME, 0L)
-    fun getRateLimitRemaining(context: Context): String = prefs(context).getString(KEY_RATE_LIMIT_REMAINING, "") ?: ""
-    fun getRateLimitLimit(context: Context): String = prefs(context).getString(KEY_RATE_LIMIT_LIMIT, "") ?: ""
-    fun getRateLimitReset(context: Context): String = prefs(context).getString(KEY_RATE_LIMIT_RESET, "") ?: ""
-
-    fun clearAccountCache(context: Context) {
-        prefs(context).edit().remove(KEY_USER).apply()
-        addActionLog(context, "Cleared account cache")
-    }
-
-    fun clearRepoMemory(context: Context) {
-        prefs(context).edit().remove(KEY_RECENT_REPOS).remove(KEY_PINNED_REPOS).apply()
-        addActionLog(context, "Cleared repository memory")
-    }
-
-    fun clearBranchMemory(context: Context) {
-        val editor = prefs(context).edit()
-        prefs(context).all.keys.filter { it.startsWith(KEY_LAST_BRANCH_PREFIX) }.forEach { editor.remove(it) }
-        prefs(context).all.keys.filter { it.startsWith(KEY_REPO_OPEN_TAB_PREFIX) }.forEach { editor.remove(it) }
-        editor.apply()
-        addActionLog(context, "Cleared branch and per-repo tab memory")
-    }
-
-    fun clearNotificationFilters(context: Context) {
-        prefs(context).edit()
-            .remove(KEY_NOTIF_UNREAD_ONLY)
-            .remove(KEY_NOTIF_ISSUES)
-            .remove(KEY_NOTIF_PRS)
-            .remove(KEY_NOTIF_RELEASES)
-            .remove(KEY_NOTIF_DISCUSSIONS)
-            .remove(KEY_NOTIF_OTHER)
-            .apply()
-        addActionLog(context, "Reset notification filters")
-    }
-
-    fun clearDiagnostics(context: Context) {
-        prefs(context).edit()
-            .remove(KEY_LAST_API_ERROR)
-            .remove(KEY_LAST_HTTP_CODE)
-            .remove(KEY_LAST_SYNC_TIME)
-            .remove(KEY_RATE_LIMIT_REMAINING)
-            .remove(KEY_RATE_LIMIT_LIMIT)
-            .remove(KEY_RATE_LIMIT_RESET)
-            .apply()
-        addActionLog(context, "Cleared diagnostics")
-    }
-
-    suspend fun getRateLimit(context: Context): GHRateLimit? {
-        val r = request(context, "/rate_limit")
-        if (!r.success) return null
-        return try {
-            val root = JSONObject(r.body).getJSONObject("resources")
-            val core = root.getJSONObject("core")
-            GHRateLimit(
-                limit = core.optInt("limit", 0),
-                remaining = core.optInt("remaining", 0),
-                resetEpoch = core.optLong("reset", 0L),
-                used = core.optInt("used", 0)
-            )
-        } catch (_: Exception) {
-            null
-        }
-    }
-
     fun isLoggedIn(context: Context): Boolean = getToken(context).isNotBlank()
 
     fun logout(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .remove(KEY_TOKEN)
-            .remove(KEY_USER)
-            .remove(KEY_CURRENT_ACCOUNT_ID)
-            .apply()
-        addActionLog(context, "Signed out active session")
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
     }
 
     private suspend fun request(context: Context, endpoint: String, method: String = "GET", body: String? = null): ApiResult =
@@ -579,20 +54,14 @@ object GitHubManager {
                 }
 
                 val code = conn.responseCode
-                val remaining = conn.getHeaderField("X-RateLimit-Remaining")
-                val limit = conn.getHeaderField("X-RateLimit-Limit")
-                val reset = conn.getHeaderField("X-RateLimit-Reset")
                 val stream = if (code in 200..299) conn.inputStream else conn.errorStream
                 val text = stream?.bufferedReader()?.use { it.readText() } ?: ""
                 conn.disconnect()
-
-                storeDiagnostics(context, code, if (code in 200..299) "" else text, remaining, limit, reset)
 
                 if (code in 200..299) ApiResult(true, text, code)
                 else ApiResult(false, text, code)
             } catch (e: Exception) {
                 Log.e(TAG, "Request error: ${e.message}")
-                storeDiagnostics(context, -1, e.message ?: "Network error", null, null, null)
                 ApiResult(false, e.message ?: "Network error", -1)
             }
         }
@@ -613,7 +82,6 @@ object GitHubManager {
                 following = j.optInt("following", 0)
             )
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_USER, r.body).apply()
-            upsertStoredAccount(context, getToken(context), user, r.body)
             user
         } catch (e: Exception) { Log.e(TAG, "Parse user: ${e.message}"); null }
     }
@@ -644,46 +112,6 @@ object GitHubManager {
             val arr = JSONObject(r.body).getJSONArray("items")
             (0 until arr.length()).map { parseRepo(arr.getJSONObject(it)) }
         } catch (e: Exception) { emptyList() }
-    }
-
-    suspend fun getRepoByFullName(context: Context, fullName: String): GHRepo? {
-        if (fullName.isBlank() || !fullName.contains("/")) return null
-        val r = request(context, "/repos/$fullName")
-        if (!r.success) return null
-        return try {
-            parseRepo(JSONObject(r.body))
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    suspend fun getTokenScopes(context: Context): GHTokenScopes = withContext(Dispatchers.IO) {
-        try {
-            val token = getToken(context)
-            val conn = (URL("$API/user").openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                setRequestProperty("Accept", "application/vnd.github.v3+json")
-                setRequestProperty("User-Agent", "GlassFiles")
-                if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
-                connectTimeout = 15000
-                readTimeout = 15000
-            }
-            val code = conn.responseCode
-            val scopesRaw = conn.getHeaderField("X-OAuth-Scopes") ?: ""
-            val acceptedRaw = conn.getHeaderField("X-Accepted-OAuth-Scopes") ?: ""
-            val scopes = scopesRaw.split(",").map { it.trim() }.filter { it.isNotBlank() }
-            val accepted = acceptedRaw.split(",").map { it.trim() }.filter { it.isNotBlank() }
-            val body = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
-            conn.disconnect()
-            GHTokenScopes(
-                valid = code in 200..299,
-                scopes = scopes,
-                acceptedScopes = accepted,
-                message = if (code in 200..299) "OK" else body.ifBlank { "HTTP $code" }
-            )
-        } catch (e: Exception) {
-            GHTokenScopes(false, emptyList(), emptyList(), e.message ?: "Network error")
-        }
     }
 
     suspend fun createRepo(context: Context, name: String, description: String, isPrivate: Boolean): Boolean {
@@ -1020,8 +448,7 @@ object GitHubManager {
                 avatarUrl = j.optJSONObject("user")?.optString("avatar_url") ?: "",
                 createdAt = j.optString("created_at"), comments = j.optInt("comments", 0),
                 labels = labels, isPR = j.has("pull_request"),
-                assignee = j.optJSONObject("assignee")?.optString("login") ?: "",
-                milestoneTitle = j.optJSONObject("milestone")?.optString("title") ?: ""
+                assignee = j.optJSONObject("assignee")?.optString("login") ?: ""
             )
         } catch (e: Exception) { null }
     }
@@ -1497,73 +924,6 @@ object GitHubManager {
         return request(context, "/repos/$owner/$repo/milestones", "POST", body).success
     }
 
-    suspend fun getAssignees(context: Context, owner: String, repo: String): List<GHUserLite> {
-        val r = request(context, "/repos/$owner/$repo/assignees?per_page=100")
-        if (!r.success) return emptyList()
-        return try {
-            val arr = JSONArray(r.body)
-            (0 until arr.length()).map { i ->
-                val j = arr.getJSONObject(i)
-                GHUserLite(
-                    login = j.optString("login"),
-                    avatarUrl = j.optString("avatar_url", "")
-                )
-            }
-        } catch (_: Exception) { emptyList() }
-    }
-
-    suspend fun updateIssueMeta(
-        context: Context,
-        owner: String,
-        repo: String,
-        issueNumber: Int,
-        labels: List<String>? = null,
-        assignees: List<String>? = null,
-        milestoneNumber: Int? = null,
-        clearMilestone: Boolean = false
-    ): Boolean {
-        val body = JSONObject().apply {
-            if (labels != null) put("labels", JSONArray(labels))
-            if (assignees != null) put("assignees", JSONArray(assignees))
-            if (clearMilestone) put("milestone", JSONObject.NULL)
-            else if (milestoneNumber != null) put("milestone", milestoneNumber)
-        }.toString()
-        return request(context, "/repos/$owner/$repo/issues/$issueNumber", "PATCH", body).success
-    }
-
-    suspend fun getPullRequestFiles(context: Context, owner: String, repo: String, number: Int): List<GHPullFile> {
-        val r = request(context, "/repos/$owner/$repo/pulls/$number/files?per_page=100")
-        if (!r.success) return emptyList()
-        return try {
-            val arr = JSONArray(r.body)
-            (0 until arr.length()).map { i ->
-                val j = arr.getJSONObject(i)
-                GHPullFile(
-                    filename = j.optString("filename"),
-                    status = j.optString("status"),
-                    additions = j.optInt("additions", 0),
-                    deletions = j.optInt("deletions", 0),
-                    patch = j.optString("patch", "")
-                )
-            }
-        } catch (_: Exception) { emptyList() }
-    }
-
-    suspend fun submitPullRequestReview(
-        context: Context,
-        owner: String,
-        repo: String,
-        number: Int,
-        event: String,
-        bodyText: String
-    ): Boolean {
-        val body = JSONObject().apply {
-            put("event", event)
-            if (bodyText.isNotBlank()) put("body", bodyText)
-        }.toString()
-        return request(context, "/repos/$owner/$repo/pulls/$number/reviews", "POST", body).success
-    }
-
     suspend fun uploadDirectory(
         context: Context, owner: String, repo: String, branch: String,
         localDir: java.io.File, repoBasePath: String = "", message: String,
@@ -1586,224 +946,222 @@ object GitHubManager {
     }
 
 
-    suspend fun getAuthenticatedUserProfile(context: Context): GHAccountProfile? {
-        val r = request(context, "/user")
-        if (!r.success) return null
-        return try {
-            val j = JSONObject(r.body)
-            GHAccountProfile(
-                login = j.optString("login"),
-                name = j.optString("name", ""),
-                avatarUrl = j.optString("avatar_url", ""),
-                bio = j.optString("bio", ""),
-                company = j.optString("company", ""),
-                location = j.optString("location", ""),
-                blog = j.optString("blog", ""),
-                email = j.optString("email", ""),
-                twitterUsername = j.optString("twitter_username", ""),
-                hireable = !j.isNull("hireable") && j.optBoolean("hireable", false)
-            )
-        } catch (_: Exception) {
-            null
-        }
+    suspend fun getCurrentUserProfile(context: Context): GHUserProfile? {
+        val login = getCachedUser(context)?.login ?: getUser(context)?.login ?: return null
+        return getUserProfile(context, login)
     }
 
-    suspend fun updateAuthenticatedUserProfile(
+    suspend fun updateCurrentUserProfile(
         context: Context,
         name: String,
         bio: String,
         company: String,
         location: String,
-        blog: String,
-        twitterUsername: String = "",
-        hireable: Boolean? = null
-    ): GHAccountProfile? {
+        blog: String
+    ): Boolean {
         val body = JSONObject().apply {
             put("name", name)
             put("bio", bio)
             put("company", company)
             put("location", location)
             put("blog", blog)
-            if (twitterUsername.isNotBlank()) put("twitter_username", twitterUsername)
-            if (hireable != null) put("hireable", hireable)
         }.toString()
-        val r = request(context, "/user", "PATCH", body)
-        if (!r.success) return null
-        return try {
-            val j = JSONObject(r.body)
-            val minimal = GHUser(
-                login = j.optString("login"),
-                name = j.optString("name", ""),
-                avatarUrl = j.optString("avatar_url", ""),
-                bio = j.optString("bio", ""),
-                publicRepos = j.optInt("public_repos", 0),
-                privateRepos = j.optInt("total_private_repos", 0),
-                followers = j.optInt("followers", 0),
-                following = j.optInt("following", 0)
-            )
-            prefs(context).edit().putString(KEY_USER, r.body).apply()
-            upsertStoredAccount(context, getToken(context), minimal, r.body)
-            GHAccountProfile(
-                login = j.optString("login"),
-                name = j.optString("name", ""),
-                avatarUrl = j.optString("avatar_url", ""),
-                bio = j.optString("bio", ""),
-                company = j.optString("company", ""),
-                location = j.optString("location", ""),
-                blog = j.optString("blog", ""),
-                email = j.optString("email", ""),
-                twitterUsername = j.optString("twitter_username", ""),
-                hireable = !j.isNull("hireable") && j.optBoolean("hireable", false)
-            )
-        } catch (_: Exception) {
-            null
-        }
+        val ok = request(context, "/user", "PATCH", body).success
+        if (ok) getUser(context)
+        return ok
     }
 
-    suspend fun getUserEmails(context: Context): List<GHEmailAddress> {
-        val r = request(context, "/user/emails?per_page=100")
+    suspend fun getEmailEntries(context: Context): List<GHEmailEntry> {
+        val r = request(context, "/user/emails")
         if (!r.success) return emptyList()
         return try {
             val arr = JSONArray(r.body)
             (0 until arr.length()).map { i ->
                 val j = arr.getJSONObject(i)
-                GHEmailAddress(
+                GHEmailEntry(
                     email = j.optString("email"),
                     primary = j.optBoolean("primary", false),
                     verified = j.optBoolean("verified", false),
-                    visibility = if (j.isNull("visibility")) null else j.optString("visibility", null)
+                    visibility = j.optString("visibility", "")
                 )
             }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        } catch (_: Exception) { emptyList() }
     }
 
-    suspend fun addUserEmail(context: Context, email: String): Boolean {
-        val clean = email.trim()
-        if (clean.isBlank()) return false
-        val body = JSONObject().apply { put("emails", JSONArray().put(clean)) }.toString()
+    suspend fun addEmailAddress(context: Context, email: String): Boolean {
+        val body = JSONArray().put(email).toString()
         return request(context, "/user/emails", "POST", body).success
     }
 
-    suspend fun deleteUserEmail(context: Context, email: String): Boolean {
-        val clean = email.trim()
-        if (clean.isBlank()) return false
-        val body = JSONObject().apply { put("emails", JSONArray().put(clean)) }.toString()
-        return request(context, "/user/emails", "DELETE", body).let { it.code == 204 || it.success }
+    suspend fun deleteEmailAddress(context: Context, email: String): Boolean {
+        val body = JSONArray().put(email).toString()
+        return request(context, "/user/emails", "DELETE", body).success
     }
 
-    suspend fun setPrimaryEmailVisibility(context: Context, visibility: String): Boolean {
-        val value = if (visibility == "public") "public" else "private"
-        val body = JSONObject().apply { put("visibility", value) }.toString()
+    suspend fun setEmailVisibility(context: Context, visibility: String): Boolean {
+        val body = JSONObject().apply { put("visibility", visibility) }.toString()
         return request(context, "/user/email/visibility", "PATCH", body).success
     }
 
-    suspend fun getGitSshKeys(context: Context): List<GHKeyItem> {
-        val r = request(context, "/user/keys?per_page=100")
+    suspend fun getSshKeysNative(context: Context): List<GHUserKeyEntry> {
+        val r = request(context, "/user/keys")
         if (!r.success) return emptyList()
         return try {
             val arr = JSONArray(r.body)
             (0 until arr.length()).map { i ->
                 val j = arr.getJSONObject(i)
-                GHKeyItem(
-                    id = j.optLong("id"),
-                    title = j.optString("title"),
-                    key = j.optString("key"),
-                    createdAt = j.optString("created_at", ""),
-                    kind = "git_ssh",
-                    secondary = ""
-                )
+                GHUserKeyEntry(j.optLong("id"), j.optString("title"), j.optString("key"), j.optString("created_at", ""), "ssh")
             }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        } catch (_: Exception) { emptyList() }
     }
 
-    suspend fun addGitSshKey(context: Context, title: String, key: String): Boolean {
-        if (key.isBlank()) return false
-        val body = JSONObject().apply {
-            put("title", title.ifBlank { "SSH Key" })
-            put("key", key)
-        }.toString()
+    suspend fun getSshSigningKeysNative(context: Context): List<GHUserKeyEntry> {
+        val r = request(context, "/user/ssh_signing_keys")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHUserKeyEntry(j.optLong("id"), j.optString("title"), j.optString("key"), j.optString("created_at", ""), "ssh_signing")
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    suspend fun getGpgKeysNative(context: Context): List<GHUserKeyEntry> {
+        val r = request(context, "/user/gpg_keys")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHUserKeyEntry(j.optLong("id"), j.optString("name"), j.optString("public_key"), j.optString("created_at", ""), "gpg")
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    suspend fun addSshKeyNative(context: Context, title: String, key: String): Boolean {
+        val body = JSONObject().apply { put("title", title); put("key", key) }.toString()
         return request(context, "/user/keys", "POST", body).success
     }
 
-    suspend fun deleteGitSshKey(context: Context, keyId: Long): Boolean =
-        request(context, "/user/keys/$keyId", "DELETE").let { it.code == 204 || it.success }
-
-    suspend fun getSshSigningKeysNative(context: Context): List<GHKeyItem> {
-        val r = request(context, "/user/ssh_signing_keys?per_page=100")
-        if (!r.success) return emptyList()
-        return try {
-            val arr = JSONArray(r.body)
-            (0 until arr.length()).map { i ->
-                val j = arr.getJSONObject(i)
-                GHKeyItem(
-                    id = j.optLong("id"),
-                    title = j.optString("title"),
-                    key = j.optString("key"),
-                    createdAt = j.optString("created_at", ""),
-                    kind = "ssh_signing",
-                    secondary = ""
-                )
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
-
     suspend fun addSshSigningKeyNative(context: Context, title: String, key: String): Boolean {
-        if (key.isBlank()) return false
-        val body = JSONObject().apply {
-            put("title", title.ifBlank { "SSH Signing Key" })
-            put("key", key)
-        }.toString()
+        val body = JSONObject().apply { put("title", title); put("key", key) }.toString()
         return request(context, "/user/ssh_signing_keys", "POST", body).success
     }
 
-    suspend fun deleteSshSigningKeyNative(context: Context, keyId: Long): Boolean =
-        request(context, "/user/ssh_signing_keys/$keyId", "DELETE").let { it.code == 204 || it.success }
+    suspend fun addGpgKeyNative(context: Context, armoredKey: String): Boolean {
+        val body = JSONObject().apply { put("armored_public_key", armoredKey) }.toString()
+        return request(context, "/user/gpg_keys", "POST", body).success
+    }
 
-    suspend fun getGpgKeysNative(context: Context): List<GHGpgKeyItem> {
-        val r = request(context, "/user/gpg_keys?per_page=100")
+    suspend fun deleteSshKeyNative(context: Context, id: Long): Boolean =
+        request(context, "/user/keys/$id", "DELETE").let { it.code == 204 || it.success }
+
+    suspend fun deleteSshSigningKeyNative(context: Context, id: Long): Boolean =
+        request(context, "/user/ssh_signing_keys/$id", "DELETE").let { it.code == 204 || it.success }
+
+    suspend fun deleteGpgKeyNative(context: Context, id: Long): Boolean =
+        request(context, "/user/gpg_keys/$id", "DELETE").let { it.code == 204 || it.success }
+
+    suspend fun getSocialAccountsNative(context: Context): List<GHSocialAccountEntry> {
+        val r = request(context, "/user/social_accounts")
         if (!r.success) return emptyList()
         return try {
             val arr = JSONArray(r.body)
             (0 until arr.length()).map { i ->
                 val j = arr.getJSONObject(i)
-                val emailsArr = j.optJSONArray("emails")
-                val emails = mutableListOf<String>()
-                if (emailsArr != null) {
-                    for (e in 0 until emailsArr.length()) {
-                        emails.add(emailsArr.getJSONObject(e).optString("email"))
-                    }
-                }
-                GHGpgKeyItem(
-                    id = j.optLong("id"),
-                    name = j.optString("name"),
-                    keyId = j.optString("key_id"),
-                    publicKey = j.optString("public_key"),
-                    createdAt = j.optString("created_at", ""),
-                    emails = emails
-                )
+                GHSocialAccountEntry(j.optString("provider", "social"), j.optString("url"))
             }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        } catch (_: Exception) { emptyList() }
     }
 
-    suspend fun addGpgKeyNative(context: Context, name: String, armoredPublicKey: String): Boolean {
-        if (armoredPublicKey.isBlank()) return false
+    suspend fun addSocialAccountNative(context: Context, url: String): Boolean {
+        val body = JSONArray().put(url).toString()
+        return request(context, "/user/social_accounts", "POST", body).success
+    }
+
+    suspend fun deleteSocialAccountNative(context: Context, url: String): Boolean {
+        val body = JSONArray().put(url).toString()
+        return request(context, "/user/social_accounts", "DELETE", body).success
+    }
+
+    suspend fun getFollowersNative(context: Context): List<GHFollowerEntry> {
+        val r = request(context, "/user/followers?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHFollowerEntry(j.optString("login"), j.optString("avatar_url", ""))
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    suspend fun getFollowingNative(context: Context): List<GHFollowerEntry> {
+        val r = request(context, "/user/following?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHFollowerEntry(j.optString("login"), j.optString("avatar_url", ""))
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    suspend fun getBlockedUsersNative(context: Context): List<GHBlockedEntry> {
+        val r = request(context, "/user/blocks?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHBlockedEntry(j.optString("login"), j.optString("avatar_url", ""))
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    suspend fun blockUserNative(context: Context, username: String): Boolean =
+        request(context, "/user/blocks/${URLEncoder.encode(username, "UTF-8")}", "PUT", "").let { it.code == 204 || it.success }
+
+    suspend fun unblockUserNative(context: Context, username: String): Boolean =
+        request(context, "/user/blocks/${URLEncoder.encode(username, "UTF-8")}", "DELETE").let { it.code == 204 || it.success }
+
+    suspend fun getInteractionLimitNative(context: Context): GHInteractionLimitEntry? {
+        val r = request(context, "/user/interaction-limits")
+        if (!r.success || r.body.isBlank()) return null
+        return try {
+            val j = JSONObject(r.body)
+            GHInteractionLimitEntry(j.optString("limit"), j.optString("expires_at", "").ifBlank { null })
+        } catch (_: Exception) { null }
+    }
+
+    suspend fun setInteractionLimitNative(context: Context, limit: String, expiry: String): Boolean {
         val body = JSONObject().apply {
-            put("name", name.ifBlank { "GPG Key" })
-            put("armored_public_key", armoredPublicKey)
+            put("limit", limit)
+            put("expiry", expiry)
         }.toString()
-        return request(context, "/user/gpg_keys", "POST", body).success
+        return request(context, "/user/interaction-limits", "PUT", body).success
     }
 
-    suspend fun deleteGpgKeyNative(context: Context, keyId: Long): Boolean =
-        request(context, "/user/gpg_keys/$keyId", "DELETE").let { it.code == 204 || it.success }
+    suspend fun removeInteractionLimitNative(context: Context): Boolean =
+        request(context, "/user/interaction-limits", "DELETE").let { it.code == 204 || it.success }
+
+    suspend fun getRateLimitSummaryNative(context: Context): String {
+        val r = request(context, "/rate_limit")
+        if (!r.success || r.body.isBlank()) return "Unavailable"
+        return try {
+            val core = JSONObject(r.body).getJSONObject("resources").getJSONObject("core")
+            val remaining = core.optInt("remaining")
+            val limit = core.optInt("limit")
+            val reset = core.optLong("reset")
+            "$remaining / $limit · reset $reset"
+        } catch (_: Exception) { "Unavailable" }
+    }
+
+    fun clearGitHubUserCache(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_USER).apply()
+    }
 
     private fun parseRepo(j: JSONObject) = GHRepo(
         name = j.optString("name"),
@@ -1823,50 +1181,8 @@ object GitHubManager {
     data class ApiResult(val success: Boolean, val body: String, val code: Int)
 }
 
-
-data class GHAccountProfile(
-    val login: String,
-    val name: String,
-    val avatarUrl: String,
-    val bio: String,
-    val company: String,
-    val location: String,
-    val blog: String,
-    val email: String,
-    val twitterUsername: String,
-    val hireable: Boolean
-)
-
-data class GHEmailAddress(
-    val email: String,
-    val primary: Boolean,
-    val verified: Boolean,
-    val visibility: String?
-)
-
-data class GHKeyItem(
-    val id: Long,
-    val title: String,
-    val key: String,
-    val createdAt: String,
-    val kind: String,
-    val secondary: String
-)
-
-data class GHGpgKeyItem(
-    val id: Long,
-    val name: String,
-    val keyId: String,
-    val publicKey: String,
-    val createdAt: String,
-    val emails: List<String>
-)
-
 data class GHUser(val login: String, val name: String, val avatarUrl: String, val bio: String,
     val publicRepos: Int, val privateRepos: Int, val followers: Int, val following: Int)
-
-data class GHTokenScopes(val valid: Boolean, val scopes: List<String>, val acceptedScopes: List<String>, val message: String)
-data class GHRateLimit(val limit: Int, val remaining: Int, val resetEpoch: Long, val used: Int)
 
 data class GHRepo(val name: String, val fullName: String, val description: String, val language: String,
     val stars: Int, val forks: Int, val isPrivate: Boolean, val isFork: Boolean, val defaultBranch: String,
@@ -1879,7 +1195,7 @@ data class GHIssue(val number: Int, val title: String, val state: String, val au
 
 data class GHIssueDetail(val number: Int, val title: String, val body: String, val state: String,
     val author: String, val avatarUrl: String, val createdAt: String, val comments: Int,
-    val labels: List<String>, val isPR: Boolean, val assignee: String, val milestoneTitle: String = "")
+    val labels: List<String>, val isPR: Boolean, val assignee: String)
 
 data class GHContent(val name: String, val path: String, val type: String, val size: Long,
     val downloadUrl: String, val sha: String)
@@ -1935,6 +1251,10 @@ data class GHLabel(val name: String, val color: String, val description: String)
 data class GHMilestone(val number: Int, val title: String, val description: String, val state: String,
     val openIssues: Int, val closedIssues: Int, val dueOn: String)
 
-data class GHUserLite(val login: String, val avatarUrl: String)
 
-data class GHPullFile(val filename: String, val status: String, val additions: Int, val deletions: Int, val patch: String)
+data class GHEmailEntry(val email: String, val primary: Boolean, val verified: Boolean, val visibility: String)
+data class GHUserKeyEntry(val id: Long, val title: String, val key: String, val createdAt: String, val kind: String)
+data class GHSocialAccountEntry(val provider: String, val url: String)
+data class GHFollowerEntry(val login: String, val avatarUrl: String)
+data class GHBlockedEntry(val login: String, val avatarUrl: String)
+data class GHInteractionLimitEntry(val limit: String, val expiry: String?)
