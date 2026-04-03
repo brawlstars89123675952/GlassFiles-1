@@ -304,13 +304,22 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
 
     LaunchedEffect(runId) { refreshAll() }
 
-    LaunchedEffect(jobs) {
+    LaunchedEffect(jobs, expandedJobId, expandedStepKey) {
         while (true) {
             val hasLive = jobs.any { it.status == "queued" || it.status == "in_progress" }
             nowMs = System.currentTimeMillis()
             if (hasLive) {
                 delay(1000)
-                if (nowMs % 5000L < 1200L) refreshAll()
+                if (nowMs % 3000L < 1100L) {
+                    refreshAll()
+                    val expandedLiveJob = jobs.firstOrNull {
+                        (it.id == expandedJobId || expandedStepKey?.startsWith("${it.id}:") == true) &&
+                            (it.status == "queued" || it.status == "in_progress")
+                    }
+                    if (expandedLiveJob != null) {
+                        refreshJobLogsNow(context, repo, expandedLiveJob, jobLogs, jobStepLogs)
+                    }
+                }
             } else {
                 delay(1500)
             }
@@ -369,14 +378,14 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                     val failed = jobs.firstOrNull { it.conclusion == "failure" }
                     if (failed != null) {
                         expandedJobId = failed.id
-                        ensureJobLogsLoaded(scope, context, repo, failed, jobLogs, jobStepLogs) { loadingJobId = it }
+                        ensureJobLogsLoaded(scope, context, repo, failed, jobLogs, jobStepLogs, force = true) { loadingJobId = it }
                     }
                 }
                 ActionsFilterChip("Running logs", false) {
                     val running = jobs.firstOrNull { it.status == "queued" || it.status == "in_progress" }
                     if (running != null) {
                         expandedJobId = running.id
-                        ensureJobLogsLoaded(scope, context, repo, running, jobLogs, jobStepLogs) { loadingJobId = it }
+                        ensureJobLogsLoaded(scope, context, repo, running, jobLogs, jobStepLogs, force = true) { loadingJobId = it }
                     }
                 }
             }
@@ -442,7 +451,7 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                                     Modifier.fillMaxWidth().clickable {
                                         expandedStepKey = if (expandedStepKey == stepKey) null else stepKey
                                         if (jobLogs[job.id] == null) {
-                                            ensureJobLogsLoaded(scope, context, repo, job, jobLogs, jobStepLogs) { loadingJobId = it }
+                                            ensureJobLogsLoaded(scope, context, repo, job, jobLogs, jobStepLogs, force = job.status == "queued" || job.status == "in_progress") { loadingJobId = it }
                                         }
                                     }.padding(start = 8.dp, top = 3.dp, bottom = 3.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -453,6 +462,12 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                                     Text(displayStepStatus(step), fontSize = 10.sp, color = stepStatusColor(step))
                                 }
                                 if (expandedStepKey == stepKey) {
+                                    val liveMessage = when (displayStepStatus(step)) {
+                                        "queued" -> "Log not available yet."
+                                        "running" -> "Waiting for live log..."
+                                        else -> "No step log captured."
+                                    }
+                                    val shownStepLog = compactLogForDisplay(stepLog ?: liveMessage)
                                     Box(
                                         Modifier.fillMaxWidth().padding(start = 24.dp, top = 4.dp, bottom = 6.dp)
                                             .clip(RoundedCornerShape(8.dp)).background(Color(0xFF0D1117)).padding(8.dp)
@@ -460,14 +475,16 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                                         if (jobLogs[job.id] == null || loadingJobId == job.id) {
                                             CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
                                         } else {
-                                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                                                Text(
-                                                    stepLog ?: "No dedicated log section found for this step.",
-                                                    fontSize = 10.sp,
-                                                    fontFamily = FontFamily.Monospace,
-                                                    color = Color(0xFFC9D1D9),
-                                                    lineHeight = 14.sp
-                                                )
+                                            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
+                                                item {
+                                                    Text(
+                                                        shownStepLog,
+                                                        fontSize = 9.sp,
+                                                        fontFamily = FontFamily.Monospace,
+                                                        color = Color(0xFFC9D1D9),
+                                                        lineHeight = 13.sp
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -485,7 +502,7 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                                     expandedJobId = null
                                 } else {
                                     expandedJobId = job.id
-                                    ensureJobLogsLoaded(scope, context, repo, job, jobLogs, jobStepLogs) { loadingJobId = it }
+                                    ensureJobLogsLoaded(scope, context, repo, job, jobLogs, jobStepLogs, force = job.status == "queued" || job.status == "in_progress") { loadingJobId = it }
                                 }
                             }
                             if (jobLogs[job.id] != null) {
@@ -510,11 +527,11 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                                     item {
                                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                                             Text(
-                                                jobLogs[job.id]!!,
-                                                fontSize = 10.sp,
+                                                compactLogForDisplay(jobLogs[job.id]!!),
+                                                fontSize = 9.sp,
                                                 fontFamily = FontFamily.Monospace,
                                                 color = Color(0xFFC9D1D9),
-                                                lineHeight = 14.sp
+                                                lineHeight = 13.sp
                                             )
                                         }
                                     }
@@ -591,9 +608,10 @@ private fun ensureJobLogsLoaded(
     job: GHJob,
     jobLogs: MutableMap<Long, String>,
     jobStepLogs: MutableMap<Long, Map<Int, String>>,
+    force: Boolean = false,
     setLoading: (Long?) -> Unit
 ) {
-    if (jobLogs[job.id] != null) return
+    if (!force && jobLogs[job.id] != null) return
     scope.launch {
         setLoading(job.id)
         val log = GitHubManager.getJobLogs(context, repo.owner, repo.name, job.id)
@@ -603,27 +621,122 @@ private fun ensureJobLogsLoaded(
     }
 }
 
+private suspend fun refreshJobLogsNow(
+    context: android.content.Context,
+    repo: GHRepo,
+    job: GHJob,
+    jobLogs: MutableMap<Long, String>,
+    jobStepLogs: MutableMap<Long, Map<Int, String>>
+) {
+    val log = GitHubManager.getJobLogs(context, repo.owner, repo.name, job.id)
+    jobLogs[job.id] = log
+    jobStepLogs[job.id] = splitLogsBySteps(job, log)
+}
+
 private fun splitLogsBySteps(job: GHJob, raw: String): Map<Int, String> {
     if (raw.isBlank()) return emptyMap()
     val lines = raw.lines()
-    val stepMatches = mutableMapOf<Int, MutableList<String>>()
+    val stepStarts = lines.mapIndexedNotNull { index, line ->
+        val n = normalizeLogLine(line)
+        if (looksLikeStepBoundary(n)) index else null
+    }
+    val result = linkedMapOf<Int, String>()
     val steps = job.steps
-    for ((index, step) in steps.withIndex()) {
-        val startNames = listOf(step.name, "Run ${step.name}")
-        var start = lines.indexOfFirst { line -> startNames.any { n -> n.isNotBlank() && line.contains(n, ignoreCase = true) } }
-        if (start < 0 && step.number - 1 in lines.indices) start = step.number - 1
-        val end = if (index < steps.lastIndex) {
-            val next = steps[index + 1]
-            lines.indexOfFirst { line ->
-                listOf(next.name, "Run ${next.name}").any { n -> n.isNotBlank() && line.contains(n, ignoreCase = true) }
-            }
-        } else lines.size
-        if (start >= 0) {
-            val realEnd = if (end > start) end else lines.size
-            stepMatches[step.number] = lines.subList(start, realEnd).toMutableList()
+    if (steps.isEmpty()) return emptyMap()
+
+    if (stepStarts.isEmpty()) {
+        // Fallback: assign entire log only to current running/completed step nearest to the end.
+        val target = steps.lastOrNull { displayStepStatus(it) !in setOf("queued", "pending") } ?: steps.first()
+        result[target.number] = raw.trim()
+        return result
+    }
+
+    val preamble = lines.subList(0, stepStarts.first()).joinToString("\n").trim()
+    var sectionOffset = 0
+    if (preamble.isNotBlank()) {
+        result[steps.first().number] = preamble
+        sectionOffset = 1
+    }
+
+    val sections = mutableListOf<String>()
+    for (i in stepStarts.indices) {
+        val s = stepStarts[i]
+        val e = if (i < stepStarts.lastIndex) stepStarts[i + 1] else lines.size
+        sections += lines.subList(s, e).joinToString("\n").trim()
+    }
+
+    var sectionIndex = 0
+    for (stepIndex in sectionOffset until steps.size) {
+        if (sectionIndex >= sections.size) break
+        val step = steps[stepIndex]
+        val currentSection = sections[sectionIndex]
+        val currentBoundary = normalizeLogLine(currentSection.lineSequence().firstOrNull().orEmpty())
+        val matchedByName = stepBoundaryMatchesStep(currentBoundary, step.name)
+        if (matchedByName || stepIndex == sectionOffset) {
+            result[step.number] = currentSection
+            sectionIndex++
+        } else {
+            // Sequence fallback
+            result[step.number] = currentSection
+            sectionIndex++
         }
     }
-    return stepMatches.mapValues { (_, v) -> v.joinToString("\n").trim().ifBlank { "No log lines found." } }
+
+    // If there are extra sections, append them to the last non-queued step.
+    if (sectionIndex < sections.size) {
+        val lastStepNum = steps.lastOrNull { result.containsKey(it.number) }?.number ?: steps.last().number
+        val extra = sections.drop(sectionIndex).joinToString("\n\n")
+        result[lastStepNum] = listOfNotNull(result[lastStepNum], extra).joinToString("\n\n").trim()
+    }
+
+    return result.mapValues { (_, value) -> value.trim() }.filterValues { it.isNotBlank() }
+}
+
+private fun normalizeLogLine(line: String): String {
+    var out = line.trim()
+    out = out.replace(Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\s*"), "")
+    return out
+}
+
+private fun looksLikeStepBoundary(normalized: String): Boolean {
+    return normalized.startsWith("##[group]Run ") ||
+        normalized.startsWith("##[group]Post ") ||
+        normalized.startsWith("##[group]Complete job")
+}
+
+private fun stepBoundaryMatchesStep(boundary: String, stepName: String): Boolean {
+    val s = stepName.lowercase()
+    val b = boundary.lowercase()
+    return when {
+        s == "checkout" -> "checkout" in b
+        s.startsWith("set up jdk") -> "setup-java" in b || "jdk" in b || "java" in b
+        s.contains("android sdk") -> "setup-android" in b || "android-actions" in b || "android sdk" in b
+        s.contains("ndk") || s.contains("cmake") -> "ndk" in b || "cmake" in b
+        s.contains("cache gradle") -> "cache" in b && "gradle" in b
+        s.contains("create debug keystore") -> "keystore" in b
+        s.contains("build debug apk") -> "assembledebug" in b || "debug apk" in b
+        s.contains("build release apk") -> "assemblerelease" in b || "release apk" in b
+        s.contains("upload debug apk") -> "upload-artifact" in b || "debug apk" in b
+        s.contains("upload release apk") -> "upload-artifact" in b || "release apk" in b
+        s.startsWith("post ") -> b.startsWith("##[group]post ")
+        s == "complete job" -> "complete job" in b
+        else -> s.isNotBlank() && b.contains(s)
+    }
+}
+
+private fun compactLogForDisplay(raw: String): String {
+    return raw.lineSequence().map { line ->
+        val m = Regex("^(\\d{4}-\\d{2}-\\d{2})T(\\d{2}:\\d{2}:\\d{2})(?:\\.\\d+)?Z\\s*(.*)$").find(line)
+        val cleaned = if (m != null) {
+            "${m.groupValues[2]}  ${m.groupValues[3]}"
+        } else line
+        cleaned
+            .replace("##[group]", "")
+            .replace("##[endgroup]", "")
+            .replace("##[warning]", "warning: ")
+            .replace("##[error]", "error: ")
+            .trimEnd()
+    }.joinToString("\n").trim()
 }
 
 private suspend fun deleteArtifactDirect(context: android.content.Context, owner: String, repo: String, artifactId: Long): Boolean =
