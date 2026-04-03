@@ -96,7 +96,7 @@ internal fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onCl
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var selectedTab by remember { mutableStateOf(NativeSettingsTab.PROFILE) }
+    var selectedScreen by remember { mutableStateOf<NativeSettingsTab?>(null) }
     var loading by remember { mutableStateOf(false) }
 
     var profile by remember { mutableStateOf<GHAccountProfile?>(null) }
@@ -190,8 +190,46 @@ internal fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onCl
         loading = false
     }
 
-    LaunchedEffect(selectedTab, includeReadNotifications, keyTab) {
-        when (selectedTab) {
+    LaunchedEffect(selectedScreen, includeReadNotifications, keyTab) {
+    when (selectedScreen) {
+        null -> loadProfile()
+        NativeSettingsTab.PROFILE -> loadProfile()
+        NativeSettingsTab.EMAILS -> loadEmails()
+        NativeSettingsTab.NOTIFICATIONS -> loadNotifications()
+        NativeSettingsTab.KEYS -> loadKeys()
+        NativeSettingsTab.ORGANIZATIONS -> loadOrgs()
+        NativeSettingsTab.REPOSITORIES -> loadRepos()
+        NativeSettingsTab.DEVELOPER -> loadDeveloper()
+        NativeSettingsTab.UNSUPPORTED -> loading = false
+    }
+}
+
+    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+    GHTopBar(
+        if (selectedScreen == null) "GitHub Settings" else settingsScreenTitle(selectedScreen!!),
+        onBack = { if (selectedScreen == null) onBack() else selectedScreen = null },
+        onClose = onClose
+    )
+
+    profile?.let { p ->
+        val safeName = p.name.takeUnless { it.isBlank() || it == "null" } ?: p.login
+        val safeEmail = p.email.takeUnless { it.isBlank() || it == "null" }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
+                .clip(RoundedCornerShape(14.dp)).background(SurfaceWhite).padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(p.avatarUrl, p.login, Modifier.size(52.dp).clip(CircleShape))
+            Column(Modifier.weight(1f)) {
+                Text(safeName, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text("@${p.login}", color = TextSecondary, fontSize = 13.sp)
+                if (safeEmail != null) Text(safeEmail, color = TextTertiary, fontSize = 11.sp)
+            }
+            IconButton(onClick = {
+    scope.launch {
+        when (selectedScreen) {
+            null -> loadProfile()
             NativeSettingsTab.PROFILE -> loadProfile()
             NativeSettingsTab.EMAILS -> loadEmails()
             NativeSettingsTab.NOTIFICATIONS -> loadNotifications()
@@ -199,63 +237,34 @@ internal fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onCl
             NativeSettingsTab.ORGANIZATIONS -> loadOrgs()
             NativeSettingsTab.REPOSITORIES -> loadRepos()
             NativeSettingsTab.DEVELOPER -> loadDeveloper()
-            NativeSettingsTab.UNSUPPORTED -> loading = false
+            NativeSettingsTab.UNSUPPORTED -> Unit
+        }
+    }
+}) {
+                if (loading) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
+                else Icon(Icons.Rounded.Refresh, null, tint = Blue)
+            }
         }
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar("GitHub Settings", onBack = onBack, onClose = onClose)
 
-        profile?.let { p ->
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
-                    .clip(RoundedCornerShape(14.dp)).background(SurfaceWhite).padding(14.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AsyncImage(p.avatarUrl, p.login, Modifier.size(52.dp).clip(CircleShape))
-                Column(Modifier.weight(1f)) {
-                    Text(p.name.ifBlank { p.login }, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text("@${p.login}", color = TextSecondary, fontSize = 13.sp)
-                    if (p.email.isNotBlank()) Text(p.email, color = TextTertiary, fontSize = 11.sp)
+        when (selectedScreen) {
+            null -> SettingsHomeScreen(
+                currentToken = GitHubManager.getToken(context),
+                currentDownloadPath = GitHubManager.getDownloadBasePath(context),
+                currentClonePath = GitHubManager.getCloneBasePath(context),
+                onOpenScreen = { selectedScreen = it },
+                onChangeToken = { showTokenDialog = true },
+                onSignOut = onLogout,
+                onClearCache = {
+                    GitHubManager.clearAccountCache(context)
+                    GitHubManager.clearRepoMemory(context)
+                    GitHubManager.clearBranchMemory(context)
+                    GitHubManager.clearDiagnostics(context)
+                    GitHubManager.clearActionLogs(context)
+                    Toast.makeText(context, "GitHub cache cleared", Toast.LENGTH_SHORT).show()
                 }
-                IconButton(onClick = {
-                    scope.launch {
-                        when (selectedTab) {
-                            NativeSettingsTab.PROFILE -> loadProfile()
-                            NativeSettingsTab.EMAILS -> loadEmails()
-                            NativeSettingsTab.NOTIFICATIONS -> loadNotifications()
-                            NativeSettingsTab.KEYS -> loadKeys()
-                            NativeSettingsTab.ORGANIZATIONS -> loadOrgs()
-                            NativeSettingsTab.REPOSITORIES -> loadRepos()
-                            NativeSettingsTab.DEVELOPER -> loadDeveloper()
-                            NativeSettingsTab.UNSUPPORTED -> Unit
-                        }
-                    }
-                }) {
-                    if (loading) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
-                    else Icon(Icons.Rounded.Refresh, null, tint = Blue)
-                }
-            }
-        }
-
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            NativeTabChip("Profile", selectedTab == NativeSettingsTab.PROFILE) { selectedTab = NativeSettingsTab.PROFILE }
-            NativeTabChip("Emails", selectedTab == NativeSettingsTab.EMAILS) { selectedTab = NativeSettingsTab.EMAILS }
-            NativeTabChip("Notifications", selectedTab == NativeSettingsTab.NOTIFICATIONS) { selectedTab = NativeSettingsTab.NOTIFICATIONS }
-            NativeTabChip("Keys", selectedTab == NativeSettingsTab.KEYS) { selectedTab = NativeSettingsTab.KEYS }
-            NativeTabChip("Organizations", selectedTab == NativeSettingsTab.ORGANIZATIONS) { selectedTab = NativeSettingsTab.ORGANIZATIONS }
-            NativeTabChip("Repositories", selectedTab == NativeSettingsTab.REPOSITORIES) { selectedTab = NativeSettingsTab.REPOSITORIES }
-            NativeTabChip("Developer", selectedTab == NativeSettingsTab.DEVELOPER) { selectedTab = NativeSettingsTab.DEVELOPER }
-            NativeTabChip("Unsupported", selectedTab == NativeSettingsTab.UNSUPPORTED) { selectedTab = NativeSettingsTab.UNSUPPORTED }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        when (selectedTab) {
+            )
             NativeSettingsTab.PROFILE -> LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
                 item {
                     NativeSection("Profile") {
@@ -526,7 +535,7 @@ internal fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onCl
                         icon = Icons.Rounded.Storage,
                         title = repo.fullName,
                         subtitle = listOf(repo.language, repo.updatedAt.take(10)).filter { it.isNotBlank() }.joinToString(" • "),
-                        body = repo.description,
+                        body = repo.description.takeUnless { it.isBlank() || it == "null" } ?: "",
                         actionLabel = if (GitHubManager.isRepoPinned(context, repo.fullName)) "Unpin" else "Pin",
                         onAction = {
                             GitHubManager.togglePinnedRepo(context, repo.fullName)
@@ -642,6 +651,135 @@ internal fun GitHubSettingsScreen(onBack: () -> Unit, onLogout: () -> Unit, onCl
             }
         )
     }
+}
+
+
+private fun settingsScreenTitle(screen: NativeSettingsTab): String = when (screen) {
+    NativeSettingsTab.PROFILE -> "Profile"
+    NativeSettingsTab.EMAILS -> "Emails"
+    NativeSettingsTab.NOTIFICATIONS -> "Notifications"
+    NativeSettingsTab.KEYS -> "Keys"
+    NativeSettingsTab.ORGANIZATIONS -> "Organizations"
+    NativeSettingsTab.REPOSITORIES -> "Repositories"
+    NativeSettingsTab.DEVELOPER -> "Developer settings"
+    NativeSettingsTab.UNSUPPORTED -> "Unsupported"
+}
+
+@Composable
+private fun SettingsHomeScreen(
+    currentToken: String,
+    currentDownloadPath: String,
+    currentClonePath: String,
+    onOpenScreen: (NativeSettingsTab) -> Unit,
+    onChangeToken: () -> Unit,
+    onSignOut: () -> Unit,
+    onClearCache: () -> Unit
+) {
+    val tokenPreview = remember(currentToken) {
+        when {
+            currentToken.isBlank() -> "Not set"
+            currentToken.length <= 8 -> currentToken
+            else -> currentToken.take(4) + "••••••••"
+        }
+    }
+
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text("Account", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            Column(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(SurfaceWhite)
+            ) {
+                SettingsHomeRow(Icons.Rounded.AccountCircle, "Profile", "Name, bio, company, location") { onOpenScreen(NativeSettingsTab.PROFILE) }
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Email, "Emails", "Primary visibility, add, delete") { onOpenScreen(NativeSettingsTab.EMAILS) }
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Notifications, "Notifications", "Unread, mark read, thread state") { onOpenScreen(NativeSettingsTab.NOTIFICATIONS) }
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Key, "Keys", "SSH, SSH signing, GPG") { onOpenScreen(NativeSettingsTab.KEYS) }
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Business, "Organizations", "My organizations") { onOpenScreen(NativeSettingsTab.ORGANIZATIONS) }
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Storage, "Repositories", "Pinned, recent, my repositories") { onOpenScreen(NativeSettingsTab.REPOSITORIES) }
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Security, "Developer settings", "Token scopes, rate limit, diagnostics") { onOpenScreen(NativeSettingsTab.DEVELOPER) }
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Lock, "Unsupported", "GitHub account pages not exposed cleanly by API") { onOpenScreen(NativeSettingsTab.UNSUPPORTED) }
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Key, "Token", tokenPreview) { onChangeToken() }
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Delete, "Sign out", "Disconnect current GitHub session", actionTint = Color(0xFFFF3B30)) { onSignOut() }
+            }
+        }
+        item {
+            Text("Paths & cache", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            Column(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(SurfaceWhite)
+            ) {
+                SettingsHomeRow(Icons.Rounded.Storage, "Download path", currentDownloadPath)
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Storage, "Clone path", currentClonePath)
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Delete, "Clear cache", "Account, repos, branches, diagnostics", actionTint = Color(0xFFFF3B30)) { onClearCache() }
+            }
+        }
+        item {
+            Text("About GitHub integration", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            Column(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(SurfaceWhite)
+            ) {
+                SettingsHomeRow(Icons.Rounded.Check, "Full GitHub client inside Glass Files", "Native GitHub module")
+                SettingsDivider()
+                SettingsHomeRow(Icons.Rounded.Check, "Version", "1.0")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsHomeRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String = "",
+    actionTint: Color = TextPrimary,
+    onClick: (() -> Unit)? = null
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, Modifier.size(20.dp), tint = if (actionTint == TextPrimary) Blue else actionTint)
+        Column(Modifier.weight(1f)) {
+            Text(title, color = actionTint, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(subtitle, color = TextTertiary, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsDivider() {
+    Box(Modifier.fillMaxWidth().padding(start = 46.dp, end = 14.dp).height(0.5.dp).background(SeparatorColor))
 }
 
 @Composable
