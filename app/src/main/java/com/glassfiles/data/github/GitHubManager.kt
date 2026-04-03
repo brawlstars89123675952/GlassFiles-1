@@ -448,7 +448,8 @@ object GitHubManager {
                 avatarUrl = j.optJSONObject("user")?.optString("avatar_url") ?: "",
                 createdAt = j.optString("created_at"), comments = j.optInt("comments", 0),
                 labels = labels, isPR = j.has("pull_request"),
-                assignee = j.optJSONObject("assignee")?.optString("login") ?: ""
+                assignee = j.optJSONObject("assignee")?.optString("login") ?: "",
+                milestoneTitle = j.optJSONObject("milestone")?.optString("title") ?: ""
             )
         } catch (e: Exception) { null }
     }
@@ -924,6 +925,43 @@ object GitHubManager {
         return request(context, "/repos/$owner/$repo/milestones", "POST", body).success
     }
 
+    suspend fun getAssignees(context: Context, owner: String, repo: String): List<GHUserLite> {
+        val r = request(context, "/repos/$owner/$repo/assignees")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i -> val j = arr.getJSONObject(i)
+                GHUserLite(j.optString("login"), j.optString("avatar_url", ""))
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    suspend fun updateIssueMeta(context: Context, owner: String, repo: String, issueNumber: Int, labels: List<String>, assignees: List<String>, milestoneNumber: Int?, clearMilestone: Boolean = false): Boolean {
+        val body = JSONObject().apply {
+            put("labels", JSONArray(labels))
+            put("assignees", JSONArray(assignees))
+            if (clearMilestone) put("milestone", JSONObject.NULL)
+            else if (milestoneNumber != null) put("milestone", milestoneNumber)
+        }.toString()
+        return request(context, "/repos/$owner/$repo/issues/$issueNumber", "PATCH", body).success
+    }
+
+    suspend fun submitPullRequestReview(context: Context, owner: String, repo: String, number: Int, event: String, body: String = ""): Boolean {
+        val json = JSONObject().apply { put("event", event); if (body.isNotBlank()) put("body", body) }.toString()
+        return request(context, "/repos/$owner/$repo/pulls/$number/reviews", "POST", json).success
+    }
+
+    suspend fun getPullRequestFiles(context: Context, owner: String, repo: String, number: Int): List<GHPullFile> {
+        val r = request(context, "/repos/$owner/$repo/pulls/$number/files?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i -> val j = arr.getJSONObject(i)
+                GHPullFile(j.optString("filename"), j.optString("status"), j.optInt("additions", 0), j.optInt("deletions", 0), j.optString("patch", ""))
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
     suspend fun uploadDirectory(
         context: Context, owner: String, repo: String, branch: String,
         localDir: java.io.File, repoBasePath: String = "", message: String,
@@ -1195,7 +1233,7 @@ data class GHIssue(val number: Int, val title: String, val state: String, val au
 
 data class GHIssueDetail(val number: Int, val title: String, val body: String, val state: String,
     val author: String, val avatarUrl: String, val createdAt: String, val comments: Int,
-    val labels: List<String>, val isPR: Boolean, val assignee: String)
+    val labels: List<String>, val isPR: Boolean, val assignee: String, val milestoneTitle: String = "")
 
 data class GHContent(val name: String, val path: String, val type: String, val size: Long,
     val downloadUrl: String, val sha: String)
@@ -1258,3 +1296,5 @@ data class GHSocialAccountEntry(val provider: String, val url: String)
 data class GHFollowerEntry(val login: String, val avatarUrl: String)
 data class GHBlockedEntry(val login: String, val avatarUrl: String)
 data class GHInteractionLimitEntry(val limit: String, val expiry: String?)
+data class GHUserLite(val login: String, val avatarUrl: String = "")
+data class GHPullFile(val filename: String, val status: String, val additions: Int, val deletions: Int, val patch: String)
