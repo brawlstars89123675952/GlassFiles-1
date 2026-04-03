@@ -657,7 +657,7 @@ private fun NativeTabChip(label: String, selected: Boolean, onClick: () -> Unit)
 }
 
 @Composable
-private fun NativeSection(title: String, content: @Composable Column.() -> Unit) {
+private fun NativeSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SurfaceWhite).padding(14.dp)) {
         Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
