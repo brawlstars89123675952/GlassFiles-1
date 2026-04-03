@@ -16,11 +16,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -28,7 +26,7 @@ import androidx.compose.material.icons.rounded.Article
 import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.CopyAll
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -467,7 +465,7 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                                 }
                             }
                             if (jobLogs[job.id] != null) {
-                                Chip(Icons.Rounded.CopyAll, "Copy logs") {
+                                Chip(Icons.Rounded.ContentCopy, "Copy logs") {
                                     val clip = android.content.ClipData.newPlainText("logs", jobLogs[job.id])
                                     (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
                                     Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
@@ -482,16 +480,21 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                             Spacer(Modifier.height(8.dp))
                             Box(
                                 Modifier.fillMaxWidth().heightIn(max = 420.dp).clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF0D1117)).verticalScroll(rememberScrollState())
-                                    .horizontalScroll(rememberScrollState()).padding(10.dp)
+                                    .background(Color(0xFF0D1117)).padding(10.dp)
                             ) {
-                                Text(
-                                    jobLogs[job.id]!!,
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = Color(0xFFC9D1D9),
-                                    lineHeight = 14.sp
-                                )
+                                LazyColumn(Modifier.fillMaxWidth()) {
+                                    item {
+                                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                                            Text(
+                                                jobLogs[job.id]!!,
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = Color(0xFFC9D1D9),
+                                                lineHeight = 14.sp
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
