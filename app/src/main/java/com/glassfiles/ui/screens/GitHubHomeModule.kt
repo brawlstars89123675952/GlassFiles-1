@@ -62,33 +62,24 @@ internal fun LoginScreen(onBack: () -> Unit, onMinimize: () -> Unit, onClose: ((
 }
 
 @Composable
-internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Unit, onClose: (() -> Unit)? = null, onLogout: () -> Unit, onRepoClick: (GHRepo) -> Unit, onGists: () -> Unit, onSettings: () -> Unit) {
+internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Unit, onClose: (() -> Unit)? = null, onLogout: () -> Unit, onRepoClick: (GHRepo) -> Unit, onGists: () -> Unit, onSettings: () -> Unit, onNotifications: () -> Unit = {}, onProfile: (String) -> Unit = {}) {
     val context = LocalContext.current; val scope = rememberCoroutineScope()
     var repos by remember { mutableStateOf<List<GHRepo>>(emptyList()) }; var loading by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }; var showCreate by remember { mutableStateOf(false) }
     var searchPublic by remember { mutableStateOf(false) }; var publicResults by remember { mutableStateOf<List<GHRepo>>(emptyList()) }
-    var showNotifications by remember { mutableStateOf(false) }
     var showStarred by remember { mutableStateOf(false) }
     var showOrgs by remember { mutableStateOf(false) }
-    var viewProfile by remember { mutableStateOf<String?>(null) }
     var reposPage by remember { mutableIntStateOf(1) }; var reposHasMore by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { val r = GitHubManager.getRepos(context, 1); repos = r; reposHasMore = r.size >= 30; loading = false }
     LaunchedEffect(query, searchPublic) { if (searchPublic && query.length >= 2) publicResults = GitHubManager.searchRepos(context, query) }
     val filtered = remember(repos, query, searchPublic) {
         if (searchPublic) publicResults else if (query.isNotBlank()) repos.filter { it.name.contains(query, true) || it.description.contains(query, true) } else repos
     }
-    if (showNotifications) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Notifications temporarily unavailable", color = TextTertiary, fontSize = 14.sp)
-    }
-    return
-}
     if (showStarred) { StarredScreen(onBack = { showStarred = false }, onRepoClick = { showStarred = false; onRepoClick(it) }); return }
     if (showOrgs) { OrgsScreen(onBack = { showOrgs = false }, onRepoClick = { showOrgs = false; onRepoClick(it) }); return }
-    if (viewProfile != null) { ProfileScreen(username = viewProfile!!, onBack = { viewProfile = null }, onRepoClick = { viewProfile = null; onRepoClick(it) }); return }
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         GHTopBar("GitHub", onBack = onBack, onMinimize = onMinimize, onClose = onClose) {
-            IconButton(onClick = { showNotifications = true }) { Icon(Icons.Rounded.Notifications, null, Modifier.size(20.dp), tint = Blue) }
+            IconButton(onClick = onNotifications) { Icon(Icons.Rounded.Notifications, null, Modifier.size(20.dp), tint = Blue) }
             IconButton(onClick = onGists) { Icon(Icons.Rounded.Description, null, Modifier.size(20.dp), tint = Blue) }
             IconButton(onClick = { showCreate = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue) }
             IconButton(onClick = onSettings) { Icon(Icons.Rounded.Settings, null, Modifier.size(20.dp), tint = TextSecondary) }
@@ -110,7 +101,7 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     QuickChip(Icons.Rounded.Star, Strings.ghStarredRepos) { showStarred = true }
                     QuickChip(Icons.Rounded.Business, Strings.ghOrganizations) { showOrgs = true }
-                    QuickChip(Icons.Rounded.Person, Strings.ghProfile) { if (user != null) viewProfile = user.login }
+                    QuickChip(Icons.Rounded.Person, Strings.ghProfile) { if (user != null) onProfile(user.login) }
                 }
             }
             item { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

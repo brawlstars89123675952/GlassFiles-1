@@ -34,7 +34,7 @@ object GitHubManager {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
     }
 
-    private suspend fun request(context: Context, endpoint: String, method: String = "GET", body: String? = null): ApiResult =
+    private suspend fun request(context: Context, endpoint: String, method: String = "GET", body: String? = null, extraHeaders: Map<String, String> = emptyMap()): ApiResult =
         withContext(Dispatchers.IO) {
             try {
                 val token = getToken(context)
@@ -43,6 +43,7 @@ object GitHubManager {
                     requestMethod = method
                     setRequestProperty("Accept", "application/vnd.github.v3+json")
                     setRequestProperty("User-Agent", "GlassFiles")
+                    extraHeaders.forEach { (k, v) -> setRequestProperty(k, v) }
                     if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
                     if (body != null) {
                         doOutput = true
@@ -1631,7 +1632,7 @@ object GitHubManager {
     }
 
     suspend fun addIssueReaction(context: Context, owner: String, repo: String, issueNumber: Int, content: String): Boolean {
-        val body = JSONObject().apply { put("content", content) }
+        val body = JSONObject().apply { put("content", content) }.toString()
         val r = request(context, "/repos/$owner/$repo/issues/$issueNumber/reactions", "POST", body)
         return r.success
     }
@@ -1646,7 +1647,7 @@ object GitHubManager {
     // ═══════════════════════════════════
 
     suspend fun getIssueTimeline(context: Context, owner: String, repo: String, issueNumber: Int): List<GHTimelineEvent> {
-        val r = request(context, "/repos/$owner/$repo/issues/$issueNumber/timeline?per_page=100", headers = mapOf("Accept" to "application/vnd.github.mockingbird-preview+json"))
+        val r = request(context, "/repos/$owner/$repo/issues/$issueNumber/timeline?per_page=100", extraHeaders = mapOf("Accept" to "application/vnd.github.mockingbird-preview+json"))
         if (!r.success) return emptyList()
         return try {
             val arr = JSONArray(r.body)
@@ -1695,7 +1696,7 @@ object GitHubManager {
             put("config", configJson)
             put("events", JSONArray(events))
             put("active", active)
-        }
+        }.toString()
         val r = request(context, "/repos/$owner/$repo/hooks", "POST", body)
         return r.success
     }
@@ -1710,7 +1711,7 @@ object GitHubManager {
     // ═══════════════════════════════════
 
     suspend fun getDiscussions(context: Context, owner: String, repo: String): List<GHDiscussion> {
-        val r = request(context, "/repos/$owner/$repo/discussions?per_page=100", headers = mapOf("Accept" to "application/vnd.github.echo-preview+json"))
+        val r = request(context, "/repos/$owner/$repo/discussions?per_page=100", extraHeaders = mapOf("Accept" to "application/vnd.github.echo-preview+json"))
         if (!r.success) return emptyList()
         return try {
             val arr = JSONArray(r.body)
@@ -1734,8 +1735,8 @@ object GitHubManager {
             put("title", title)
             put("body", body)
             put("category_id", categoryId)
-        }
-        val r = request(context, "/repos/$owner/$repo/discussions", "POST", reqBody, headers = mapOf("Accept" to "application/vnd.github.echo-preview+json"))
+        }.toString()
+        val r = request(context, "/repos/$owner/$repo/discussions", "POST", reqBody, extraHeaders = mapOf("Accept" to "application/vnd.github.echo-preview+json"))
         return r.success
     }
 
@@ -1762,7 +1763,7 @@ object GitHubManager {
     // ═══════════════════════════════════
 
     suspend fun getRulesets(context: Context, owner: String, repo: String): List<GHRuleset> {
-        val r = request(context, "/repos/$owner/$repo/rulesets?per_page=100", headers = mapOf("Accept" to "application/vnd.github+json"))
+        val r = request(context, "/repos/$owner/$repo/rulesets?per_page=100", extraHeaders = mapOf("Accept" to "application/vnd.github+json"))
         if (!r.success) return emptyList()
         return try {
             val arr = JSONArray(r.body)
@@ -1783,7 +1784,7 @@ object GitHubManager {
     // ═══════════════════════════════════
 
     suspend fun getDependabotAlerts(context: Context, owner: String, repo: String): List<GHDependabotAlert> {
-        val r = request(context, "/repos/$owner/$repo/dependabot/alerts?per_page=100", headers = mapOf("Accept" to "application/vnd.github+json"))
+        val r = request(context, "/repos/$owner/$repo/dependabot/alerts?per_page=100", extraHeaders = mapOf("Accept" to "application/vnd.github+json"))
         if (!r.success) return emptyList()
         return try {
             val arr = JSONArray(r.body)
@@ -1802,7 +1803,6 @@ object GitHubManager {
             }
         } catch (e: Exception) { emptyList() }
     }
-}
 
     private fun parseRepo(j: JSONObject) = GHRepo(
         name = j.optString("name"),

@@ -114,7 +114,7 @@ internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -
     val safeEditingFile = editingFile
     val safeFileContent = fileContent
     if (safeEditingFile != null && safeFileContent != null) {
-        CodeEditorScreen(
+        com.glassfiles.ui.screens.CodeEditorScreen(
             repoOwner = repo.owner,
             repoName = repo.name,
             file = safeEditingFile,
@@ -130,7 +130,7 @@ internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -
     
     // Releases screen
     if (selectedTab == RepoTab.RELEASES && releases.isNotEmpty()) {
-        ReleasesScreen(
+        com.glassfiles.ui.screens.ReleasesScreen(
             repoOwner = repo.owner,
             repoName = repo.name,
             onBack = { selectedTab = RepoTab.FILES },

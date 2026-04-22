@@ -4,6 +4,8 @@ import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -23,6 +25,7 @@ import com.glassfiles.data.Strings
 import com.glassfiles.data.github.GHCommitDetail
 import com.glassfiles.data.github.GHDiffFile
 import com.glassfiles.data.github.GHPullFile
+import com.glassfiles.data.github.GHReviewComment
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
@@ -90,11 +93,10 @@ fun DiffViewerScreen(
         )
 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
-            items(files.size) { index ->
-                val file = files[index]
+            items(files) { file ->
                 val fileComments = comments.filter { it.path == file.filename }
-                DiffFileCard(file, index + 1, files.size, fileComments.size) { selectedFile = file }
-                if (index < files.lastIndex) Spacer(Modifier.height(8.dp))
+                DiffFileCard(file, files.indexOf(file) + 1, files.size, fileComments.size) { selectedFile = file }
+                if (file != files.lastOrNull()) Spacer(Modifier.height(8.dp))
             }
         }
     }
@@ -178,11 +180,10 @@ private fun FileDiffScreen(
             Modifier.fillMaxSize().padding(horizontal = 8.dp),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            items(lines.size) { index ->
-                val line = lines[index]
+            items(lines) { line ->
                 val lineNum = when (line) {
-                    is DiffLine.Added -> line.lineNum
-                    is DiffLine.Context -> line.newLineNum
+                    is PatchDiffLine.Added -> line.lineNum
+                    is PatchDiffLine.Context -> line.newLineNum
                     else -> 0
                 }
                 val lineComments = if (lineNum > 0) comments.filter { it.line == lineNum } else emptyList()
@@ -297,23 +298,65 @@ private fun parseDiffLines(patch: String): List<DiffLine> {
     return result
 }
 
-sealed class DiffLine {
-    data class Header(val text: String) : DiffLine()
-    data class Added(val text: String, val lineNum: Int) : DiffLine()
-    data class Removed(val text: String, val lineNum: Int) : DiffLine()
-    data class Context(val text: String, val oldLineNum: Int, val newLineNum: Int) : DiffLine()
-    data class NoNewline(val text: String) : DiffLine()
+sealed class PatchDiffLine {
+    data class Header(val text: String) : PatchDiffLine()
+    data class Added(val text: String, val lineNum: Int) : PatchDiffLine()
+    data class Removed(val text: String, val lineNum: Int) : PatchDiffLine()
+    data class Context(val text: String, val oldLineNum: Int, val newLineNum: Int) : PatchDiffLine()
+    data class NoNewline(val text: String) : PatchDiffLine()
+}
+
+private fun parseDiffLines(patch: String): List<PatchDiffLine> {
+    val result = mutableListOf<PatchDiffLine>()
+    val lines = patch.lines()
+    var oldLine = 0
+    var newLine = 0
+    var inHunk = false
+
+    for (line in lines) {
+        when {
+            line.startsWith("@@") -> {
+                inHunk = true
+                val match = Regex("@@ -(\\d+).*?\\+(\\d+)").find(line)
+                oldLine = match?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                newLine = match?.groupValues?.get(2)?.toIntOrNull() ?: 0
+                result.add(PatchDiffLine.Header(line))
+            }
+            line.startsWith("+") -> {
+                if (inHunk) {
+                    result.add(PatchDiffLine.Added(line.drop(1), newLine))
+                    newLine++
+                }
+            }
+            line.startsWith("-") -> {
+                if (inHunk) {
+                    result.add(PatchDiffLine.Removed(line.drop(1), oldLine))
+                    oldLine++
+                }
+            }
+            line.startsWith(" ") -> {
+                if (inHunk) {
+                    result.add(PatchDiffLine.Context(line.drop(1), oldLine, newLine))
+                    oldLine++
+                    newLine++
+                }
+            }
+            line.startsWith("\\") -> result.add(PatchDiffLine.NoNewline(line))
+            else -> result.add(PatchDiffLine.Context(line, oldLine, newLine))
+        }
+    }
+    return result
 }
 
 @Composable
-private fun DiffLineItem(line: DiffLine, viewMode: DiffViewMode, onAddComment: (() -> Unit)? = null) {
+private fun DiffLineItem(line: PatchDiffLine, viewMode: DiffViewMode, onAddComment: (() -> Unit)? = null) {
     when (line) {
-        is DiffLine.Header -> {
+        is PatchDiffLine.Header -> {
             Box(Modifier.fillMaxWidth().background(Color(0xFF2C2C2E)).padding(horizontal = 8.dp, vertical = 4.dp)) {
                 Text(line.text, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFF8E8E93))
             }
         }
-        is DiffLine.Added -> {
+        is PatchDiffLine.Added -> {
             Row(
                 Modifier.fillMaxWidth().background(Color(0x0D34C759))
                     .clickable(enabled = onAddComment != null) { onAddComment?.invoke() }
@@ -327,13 +370,13 @@ private fun DiffLineItem(line: DiffLine, viewMode: DiffViewMode, onAddComment: (
                 }
             }
         }
-        is DiffLine.Removed -> {
+        is PatchDiffLine.Removed -> {
             Row(Modifier.fillMaxWidth().background(Color(0x0DFF3B30)).padding(horizontal = 8.dp, vertical = 2.dp)) {
                 Text("-${line.lineNum}", modifier = Modifier.width(40.dp), fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFFFF3B30))
                 Text(line.text, modifier = Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = TextPrimary)
             }
         }
-        is DiffLine.Context -> {
+        is PatchDiffLine.Context -> {
             Row(
                 Modifier.fillMaxWidth()
                     .clickable(enabled = onAddComment != null) { onAddComment?.invoke() }
@@ -347,7 +390,7 @@ private fun DiffLineItem(line: DiffLine, viewMode: DiffViewMode, onAddComment: (
                 }
             }
         }
-        is DiffLine.NoNewline -> {
+        is PatchDiffLine.NoNewline -> {
             Text(line.text, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFFFF9500))
         }
     }
@@ -394,8 +437,7 @@ fun PRReviewCommentsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(comments.size) { index ->
-                    val comment = comments[index]
+                items(comments) { comment ->
                     Column(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)
                     ) {

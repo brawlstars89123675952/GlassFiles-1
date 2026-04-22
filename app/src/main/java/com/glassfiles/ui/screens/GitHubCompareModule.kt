@@ -40,7 +40,7 @@ internal fun CompareCommitsScreen(
     var branches by remember { mutableStateOf<List<String>>(emptyList()) }
 
     LaunchedEffect(Unit) {
-        branches = GitHubManager.getBranches(context, repoOwner, repoName).map { it.name }
+        branches = GitHubManager.getBranches(context, repoOwner, repoName)
     }
 
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {

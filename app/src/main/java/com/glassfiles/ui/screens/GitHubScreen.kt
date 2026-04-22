@@ -48,13 +48,18 @@ fun GitHubScreen(onBack: () -> Unit, onMinimize: () -> Unit = {}, onClose: (() -
     var selectedRepo by remember { mutableStateOf<GHRepo?>(null) }
     var showGists by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showNotifications by remember { mutableStateOf(false) }
+    var showProfile by remember { mutableStateOf<String?>(null) }
+    
     LaunchedEffect(isLoggedIn) { if (isLoggedIn) user = GitHubManager.getUser(context) }
     when {
         !isLoggedIn -> LoginScreen(onBack, onMinimize, onClose) { GitHubManager.saveToken(context, it); isLoggedIn = true }
         showSettings -> GitHubSettingsScreen(onBack = { showSettings = false }, onLogout = { GitHubManager.logout(context); isLoggedIn = false; user = null; showSettings = false }, onClose = onClose)
         showGists -> GistsScreen({ showGists = false }, onMinimize, onClose)
+        showNotifications -> NotificationsScreen(onBack = { showNotifications = false })
+        showProfile != null -> ProfileScreen(username = showProfile!!, onBack = { showProfile = null }, onRepoClick = { selectedRepo = it })
         selectedRepo != null -> RepoDetailScreen(selectedRepo!!, { selectedRepo = null }, onMinimize, onClose)
-        else -> ReposScreen(user, onBack, onMinimize, onClose, { GitHubManager.logout(context); isLoggedIn = false; user = null }, { selectedRepo = it }, { showGists = true }, { showSettings = true })
+        else -> ReposScreen(user, onBack, onMinimize, onClose, { GitHubManager.logout(context); isLoggedIn = false; user = null }, { selectedRepo = it }, { showGists = true }, { showSettings = true }, { showNotifications = true }, { showProfile = it })
     }
     }
 }

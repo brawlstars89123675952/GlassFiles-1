@@ -180,7 +180,7 @@ internal fun BranchProtectionScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(
-                                if (enabled) Icons.Rounded.Shield else Icons.Rounded.ShieldOutlined,
+                                if (enabled) Icons.Rounded.Shield else Icons.Rounded.Shield,
                                 null,
                                 Modifier.size(24.dp),
                                 tint = if (enabled) Color(0xFF34C759) else TextSecondary
@@ -405,5 +405,39 @@ private fun ContextChip(name: String, onRemove: () -> Unit) {
             Modifier.size(14.dp).clickable { onRemove() },
             tint = Blue
         )
+    }
+}
+
+@Composable
+private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(16.dp)
+    ) { content() }
+}
+
+@Composable
+private fun SectionHeader(title: String, color: Color = TextPrimary) {
+    Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = color, modifier = Modifier.padding(bottom = 8.dp))
+}
+
+@Composable
+private fun ToggleRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String? = null,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(icon, null, Modifier.size(22.dp), tint = if (checked) Blue else TextSecondary)
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 14.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
+            if (subtitle != null) Text(subtitle, fontSize = 11.sp, color = TextTertiary)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = Blue, checkedTrackColor = Blue.copy(0.3f)))
     }
 }

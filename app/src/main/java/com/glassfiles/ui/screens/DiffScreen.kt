@@ -191,6 +191,7 @@ private fun DiffLineRow(line: DiffLine) {
         is DiffLine.Added -> DiffRowData(Color(0xFF4CAF50).copy(0.08f), "+", Color(0xFF2E7D32), line.text, "${line.lineNum}")
         is DiffLine.Removed -> DiffRowData(Color(0xFFF44336).copy(0.08f), "-", Color(0xFFC62828), line.text, "${line.lineNum}")
         is DiffLine.Same -> DiffRowData(Color.Transparent, " ", TextSecondary, line.text, "${line.lineNum1}")
+        else -> DiffRowData(Color.Transparent, " ", TextSecondary, "", "")
     }
 
     Row(
