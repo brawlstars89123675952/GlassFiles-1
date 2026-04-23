@@ -168,6 +168,10 @@
   - generic error toast больше не провоцируется временным отсутствием step logs у active jobs
   - null/empty check annotations и пустые check items скрыты из run details
 
+- Выполнен compile-fix после CI-ошибки по live-log patch:
+  - добавлены недостающие imports `android.content.Context` и `kotlinx.coroutines.CoroutineScope` в `GitHubActionsModule.kt`
+  - восстановлены imports `TextTertiary` и `java.io.File`, случайно затронутые при точечном import-edit pass
+
 ### Важно
 - По просьбе пользователя server-side сборки/compile checks больше не запускать.
 - Фокус только на реальной доработке UI/UX и функциональности GitHub-модулей внутри проекта.
