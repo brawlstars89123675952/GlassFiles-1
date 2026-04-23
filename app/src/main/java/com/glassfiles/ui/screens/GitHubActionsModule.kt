@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Article
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -31,15 +34,19 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.FilterList
+import androidx.compose.material.icons.rounded.FlashOn
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,11 +67,13 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.GHArtifact
 import com.glassfiles.data.github.GHJob
 import com.glassfiles.data.github.GHRepo
 import com.glassfiles.data.github.GHStep
+import com.glassfiles.data.github.GHWorkflow
 import com.glassfiles.data.github.GHWorkflowRun
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.theme.Blue
@@ -99,23 +108,42 @@ internal fun ActionsTab(
     var onlyMine by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(ActionsRunFilter.ALL) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var workflows by remember { mutableStateOf<List<GHWorkflow>>(emptyList()) }
+    var selectedWorkflowId by remember { mutableStateOf<Long?>(null) }
+    var selectedBranch by remember(repo.owner, repo.name) { mutableStateOf(repo.defaultBranch) }
+    var dispatchInputsText by remember { mutableStateOf("") }
+    var dispatching by remember { mutableStateOf(false) }
 
-    suspend fun refreshRuns() {
+    suspend fun refreshEverything() {
         refreshing = true
-        liveRuns = GitHubManager.getWorkflowRuns(context, repo.owner, repo.name)
-        refreshing = false
+        try {
+            val fetchedWorkflows = GitHubManager.getWorkflows(context, repo.owner, repo.name)
+            workflows = fetchedWorkflows
+            if (selectedWorkflowId != null && fetchedWorkflows.none { it.id == selectedWorkflowId }) {
+                selectedWorkflowId = null
+            }
+            liveRuns = GitHubManager.getWorkflowRuns(context, repo.owner, repo.name, selectedWorkflowId)
+        } finally {
+            refreshing = false
+        }
     }
 
-    LaunchedEffect(runs) { liveRuns = runs }
+    LaunchedEffect(runs, selectedWorkflowId) {
+        if (selectedWorkflowId == null) liveRuns = runs
+    }
 
-    LaunchedEffect(liveRuns) {
+    LaunchedEffect(repo.owner, repo.name) {
+        workflows = GitHubManager.getWorkflows(context, repo.owner, repo.name)
+    }
+
+    LaunchedEffect(liveRuns, selectedWorkflowId) {
         while (true) {
             val hasLive = liveRuns.any { it.status == "queued" || it.status == "in_progress" }
             nowMs = System.currentTimeMillis()
             if (hasLive) {
                 delay(1000)
                 if (nowMs % 5000L < 1200L) {
-                    liveRuns = GitHubManager.getWorkflowRuns(context, repo.owner, repo.name)
+                    liveRuns = GitHubManager.getWorkflowRuns(context, repo.owner, repo.name, selectedWorkflowId)
                 }
             } else {
                 delay(1500)
@@ -146,7 +174,64 @@ internal fun ActionsTab(
         }
     }
 
+    val activeCount = remember(liveRuns) { liveRuns.count { it.status == "queued" || it.status == "in_progress" } }
+    val successCount = remember(liveRuns) { liveRuns.count { it.conclusion == "success" } }
+    val failedCount = remember(liveRuns) { liveRuns.count { it.conclusion == "failure" } }
+    val cancelledCount = remember(liveRuns) { liveRuns.count { it.conclusion == "cancelled" } }
+    val groupedRuns = remember(filteredRuns) { filteredRuns.groupBy { it.name.ifBlank { "Unnamed workflow" } } }
+
     Column(Modifier.fillMaxSize()) {
+        ActionsOverviewHeader(
+            workflows = workflows,
+            selectedWorkflowId = selectedWorkflowId,
+            onSelectWorkflow = { workflowId ->
+                selectedWorkflowId = workflowId
+                scope.launch {
+                    refreshing = true
+                    liveRuns = GitHubManager.getWorkflowRuns(context, repo.owner, repo.name, workflowId)
+                    refreshing = false
+                }
+            },
+            activeCount = activeCount,
+            successCount = successCount,
+            failedCount = failedCount,
+            cancelledCount = cancelledCount,
+            totalRuns = liveRuns.size,
+            selectedBranch = selectedBranch,
+            onBranchChange = { selectedBranch = it },
+            dispatchInputsText = dispatchInputsText,
+            onDispatchInputsChange = { dispatchInputsText = it },
+            dispatching = dispatching,
+            onDispatch = {
+                val workflowId = selectedWorkflowId ?: workflows.firstOrNull()?.id
+                if (workflowId == null) {
+                    Toast.makeText(context, Strings.ghNoWorkflows, Toast.LENGTH_SHORT).show()
+                } else if (selectedBranch.isBlank()) {
+                    Toast.makeText(context, "Branch required", Toast.LENGTH_SHORT).show()
+                } else {
+                    dispatching = true
+                    scope.launch {
+                        try {
+                            val ok = GitHubManager.dispatchWorkflow(
+                                context = context,
+                                owner = repo.owner,
+                                repo = repo.name,
+                                workflowId = workflowId,
+                                branch = selectedBranch,
+                                inputs = parseDispatchInputs(dispatchInputsText)
+                            )
+                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                            if (ok) refreshEverything()
+                        } finally {
+                            dispatching = false
+                        }
+                    }
+                }
+            },
+            refreshing = refreshing,
+            onRefresh = { scope.launch { refreshEverything() } }
+        )
+
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -167,7 +252,7 @@ internal fun ActionsTab(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-            IconButton(onClick = { scope.launch { refreshRuns() } }) {
+            IconButton(onClick = { scope.launch { refreshEverything() } }) {
                 if (refreshing) {
                     CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
                 } else {
@@ -195,82 +280,366 @@ internal fun ActionsTab(
                 Text("No workflow runs", color = TextTertiary, fontSize = 14.sp)
             }
         } else {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)) {
-                items(filteredRuns) { run ->
-                    val statusColor = when {
-                        run.status == "queued" -> Color(0xFFFF9500)
-                        run.status == "in_progress" -> Blue
-                        run.conclusion == "success" -> Color(0xFF34C759)
-                        run.conclusion == "failure" -> Color(0xFFFF3B30)
-                        run.conclusion == "cancelled" -> Color(0xFF8E8E93)
-                        else -> TextTertiary
-                    }
-                    val live = run.status == "queued" || run.status == "in_progress"
-                    val elapsed = calcRunDuration(run, nowMs)
-                    Row(
-                        Modifier.fillMaxWidth().clickable { onRunClick(run) }
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            when {
-                                run.status == "queued" -> Icons.Rounded.Schedule
-                                run.status == "in_progress" -> Icons.Rounded.Refresh
-                                run.conclusion == "success" -> Icons.Rounded.CheckCircle
-                                run.conclusion == "failure" -> Icons.Rounded.Error
-                                run.conclusion == "cancelled" -> Icons.Rounded.Cancel
-                                else -> Icons.Rounded.Article
-                            },
-                            null,
-                            Modifier.size(20.dp),
-                            tint = statusColor
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 16.dp)
+            ) {
+                groupedRuns.forEach { (workflowName, workflowRuns) ->
+                    item {
+                        WorkflowRunGroupHeader(
+                            workflowName = workflowName,
+                            runs = workflowRuns,
+                            selected = workflowRuns.any { it.workflowId == selectedWorkflowId },
+                            onSelect = {
+                                selectedWorkflowId = workflowRuns.firstOrNull()?.workflowId
+                                scope.launch {
+                                    refreshing = true
+                                    liveRuns = GitHubManager.getWorkflowRuns(context, repo.owner, repo.name, selectedWorkflowId)
+                                    refreshing = false
+                                }
+                            }
                         )
-                        Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(run.name, fontSize = 14.sp, color = TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                if (live) {
-                                    Box(Modifier.clip(RoundedCornerShape(6.dp)).background(statusColor.copy(alpha = 0.12f)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                                        Text("LIVE", color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("#${run.runNumber}", fontSize = 11.sp, color = TextTertiary)
-                                Text(run.branch, fontSize = 11.sp, color = Blue)
-                                Text(run.event, fontSize = 11.sp, color = TextSecondary)
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(run.actor, fontSize = 10.sp, color = TextSecondary)
-                                Text(if (elapsed.isBlank()) run.updatedAt.take(19).replace("T", " ") else elapsed, fontSize = 10.sp, color = if (live) Blue else TextTertiary)
-                            }
-                            Spacer(Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (run.status == "in_progress" || run.status == "queued") {
-                                    Chip(Icons.Rounded.Cancel, Strings.cancel, Color(0xFFFF3B30)) {
-                                        scope.launch {
-                                            val ok = GitHubManager.cancelWorkflowRun(context, repo.owner, repo.name, run.id)
-                                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                            refreshRuns()
-                                        }
-                                    }
-                                }
-                                if (run.status == "completed") {
-                                    Chip(Icons.Rounded.Refresh, Strings.ghRerun) {
-                                        scope.launch {
-                                            val ok = GitHubManager.rerunWorkflow(context, repo.owner, repo.name, run.id)
-                                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                            refreshRuns()
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
-                    Box(Modifier.fillMaxWidth().padding(start = 46.dp).height(0.5.dp).background(SeparatorColor))
+                    items(workflowRuns) { run ->
+                        ModernRunCard(
+                            run = run,
+                            nowMs = nowMs,
+                            onRunClick = { onRunClick(run) },
+                            onCancel = {
+                                scope.launch {
+                                    val ok = GitHubManager.cancelWorkflowRun(context, repo.owner, repo.name, run.id)
+                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                    refreshEverything()
+                                }
+                            },
+                            onRerun = {
+                                scope.launch {
+                                    val ok = GitHubManager.rerunWorkflow(context, repo.owner, repo.name, run.id)
+                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                    refreshEverything()
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ActionsOverviewHeader(
+    workflows: List<GHWorkflow>,
+    selectedWorkflowId: Long?,
+    onSelectWorkflow: (Long?) -> Unit,
+    activeCount: Int,
+    successCount: Int,
+    failedCount: Int,
+    cancelledCount: Int,
+    totalRuns: Int,
+    selectedBranch: String,
+    onBranchChange: (String) -> Unit,
+    dispatchInputsText: String,
+    onDispatchInputsChange: (String) -> Unit,
+    dispatching: Boolean,
+    onDispatch: () -> Unit,
+    refreshing: Boolean,
+    onRefresh: () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(SurfaceLight)
+            .padding(top = 8.dp)
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            StatCard("Total", totalRuns.toString(), Icons.Rounded.Timeline, Blue)
+            StatCard("Active", activeCount.toString(), Icons.Rounded.FlashOn, Color(0xFF58A6FF))
+            StatCard("Success", successCount.toString(), Icons.Rounded.CheckCircle, Color(0xFF34C759))
+            StatCard("Failed", failedCount.toString(), Icons.Rounded.Error, Color(0xFFFF3B30))
+            StatCard("Cancelled", cancelledCount.toString(), Icons.Rounded.Cancel, Color(0xFF8E8E93))
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(SurfaceWhite)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Rounded.AutoAwesome, null, tint = Blue)
+                    Text("Workflow control", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                }
+                IconButton(onClick = onRefresh) {
+                    if (refreshing) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
+                    else Icon(Icons.Rounded.Refresh, null, tint = Blue)
+                }
+            }
+
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ActionsFilterChip("All workflows", selectedWorkflowId == null) { onSelectWorkflow(null) }
+                if (workflows.isEmpty()) {
+                    ActionsFilterChip(Strings.ghNoWorkflows, false) {}
+                } else {
+                    workflows.forEach { workflow ->
+                        val selected = workflow.id == selectedWorkflowId
+                        ActionsFilterChip(
+                            workflow.name.ifBlank { workflow.path.substringAfterLast('/') },
+                            selected
+                        ) { onSelectWorkflow(workflow.id) }
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = selectedBranch,
+                onValueChange = onBranchChange,
+                label = { Text("Branch / ref") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = dispatchInputsText,
+                onValueChange = onDispatchInputsChange,
+                label = { Text("Dispatch inputs") },
+                supportingText = { Text("Format: key=value, one per line", fontSize = 11.sp) },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+                maxLines = 6
+            )
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onDispatch, enabled = !dispatching && workflows.isNotEmpty()) {
+                    if (dispatching) {
+                        CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Rounded.PlayArrow, null, tint = Blue)
+                        Spacer(Modifier.width(6.dp))
+                        Text(Strings.ghRunWorkflow, color = Blue)
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+    }
+}
+
+@Composable
+private fun StatCard(label: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color) {
+    Column(
+        Modifier
+            .width(118.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(SurfaceWhite)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
+            Text(label, fontSize = 12.sp, color = TextSecondary)
+        }
+        Text(value, fontSize = 22.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun WorkflowRunGroupHeader(
+    workflowName: String,
+    runs: List<GHWorkflowRun>,
+    selected: Boolean,
+    onSelect: () -> Unit
+) {
+    val active = runs.count { it.status == "queued" || it.status == "in_progress" }
+    val failed = runs.count { it.conclusion == "failure" }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp, bottom = 8.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (selected) Blue.copy(alpha = 0.08f) else SurfaceWhite)
+            .clickable(onClick = onSelect)
+            .padding(12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Rounded.Timeline, null, tint = if (selected) Blue else TextSecondary, modifier = Modifier.size(18.dp))
+            Text(workflowName, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
+            if (selected) MiniActionsBadge("Selected", Blue)
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            MiniActionsBadge("${runs.size} runs", TextSecondary)
+            if (active > 0) MiniActionsBadge("$active live", Blue)
+            if (failed > 0) MiniActionsBadge("$failed failed", Color(0xFFFF3B30))
+        }
+    }
+}
+
+@Composable
+private fun ModernRunCard(
+    run: GHWorkflowRun,
+    nowMs: Long,
+    onRunClick: () -> Unit,
+    onCancel: () -> Unit,
+    onRerun: () -> Unit
+) {
+    val statusColor = runStatusColor(run)
+    val live = run.status == "queued" || run.status == "in_progress"
+    val elapsed = calcRunDuration(run, nowMs)
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(SurfaceWhite)
+            .clickable(onClick = onRunClick)
+            .padding(14.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+            if (run.actorAvatar.isNotBlank()) {
+                AsyncImage(
+                    model = run.actorAvatar,
+                    contentDescription = run.actor,
+                    modifier = Modifier.size(36.dp).clip(CircleShape)
+                )
+            } else {
+                Box(
+                    Modifier.size(36.dp).clip(CircleShape).background(statusColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(runStatusIcon(run), null, tint = statusColor, modifier = Modifier.size(18.dp))
+                }
+            }
+
+            Column(Modifier.weight(1f)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(run.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (live) MiniActionsBadge("LIVE", statusColor)
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MiniActionsBadge("#${run.runNumber}", TextSecondary)
+                    MiniActionsBadge(run.branch.ifBlank { "unknown" }, Blue)
+                    MiniActionsBadge(run.event.ifBlank { "event" }, Color(0xFFBF5AF2))
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    buildRunSummary(run, elapsed),
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    lineHeight = 17.sp
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            MiniActionsBadge(displayRunStatus(run), statusColor)
+            if (elapsed.isNotBlank()) MiniActionsBadge(elapsed, if (live) Blue else TextSecondary)
+            if (run.actor.isNotBlank()) MiniActionsBadge(run.actor, TextSecondary)
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (live) {
+                Chip(Icons.Rounded.Cancel, Strings.cancel, Color(0xFFFF3B30)) { onCancel() }
+            } else {
+                Chip(Icons.Rounded.Refresh, Strings.ghRerun) { onRerun() }
+            }
+            Chip(Icons.Rounded.Article, "Open") { onRunClick() }
+        }
+    }
+}
+
+private fun parseDispatchInputs(raw: String): Map<String, String> {
+    return raw.lines().mapNotNull { line ->
+        val trimmed = line.trim()
+        if (trimmed.isBlank()) return@mapNotNull null
+        val idx = trimmed.indexOf('=')
+        if (idx <= 0) return@mapNotNull null
+        val key = trimmed.substring(0, idx).trim()
+        val value = trimmed.substring(idx + 1).trim()
+        if (key.isBlank()) null else key to value
+    }.toMap()
+}
+
+private fun displayRunStatus(run: GHWorkflowRun): String {
+    return when {
+        run.status == "queued" -> "queued"
+        run.status == "in_progress" -> "running"
+        run.conclusion == "success" -> "success"
+        run.conclusion == "failure" -> "failed"
+        run.conclusion == "cancelled" -> "cancelled"
+        run.status == "completed" -> "completed"
+        else -> run.status.ifBlank { "unknown" }
+    }
+}
+
+private fun buildRunSummary(run: GHWorkflowRun, elapsed: String): String {
+    val parts = mutableListOf<String>()
+    if (run.actor.isNotBlank()) parts += "by ${run.actor}"
+    if (run.updatedAt.isNotBlank()) parts += run.updatedAt.take(19).replace('T', ' ')
+    if (elapsed.isNotBlank()) parts += elapsed
+    return parts.joinToString(" • ")
+}
+
+private fun runStatusColor(run: GHWorkflowRun): Color = when {
+    run.status == "queued" -> Color(0xFFFF9500)
+    run.status == "in_progress" -> Blue
+    run.conclusion == "success" -> Color(0xFF34C759)
+    run.conclusion == "failure" -> Color(0xFFFF3B30)
+    run.conclusion == "cancelled" -> Color(0xFF8E8E93)
+    else -> TextTertiary
+}
+
+private fun runStatusIcon(run: GHWorkflowRun) = when {
+    run.status == "queued" -> Icons.Rounded.Schedule
+    run.status == "in_progress" -> Icons.Rounded.Refresh
+    run.conclusion == "success" -> Icons.Rounded.CheckCircle
+    run.conclusion == "failure" -> Icons.Rounded.Error
+    run.conclusion == "cancelled" -> Icons.Rounded.Cancel
+    else -> Icons.Rounded.Warning
+}
+
+@Composable
+private fun MiniActionsBadge(text: String, color: Color) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(text, fontSize = 11.sp, color = color, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -410,7 +779,7 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                 Icon(Icons.Rounded.Search, null, tint = Blue)
             }
 
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
                 items(filteredJobs) { job ->
                     val jColor = when {
                         job.status == "queued" || job.status == "in_progress" -> Blue
@@ -645,7 +1014,6 @@ private fun splitLogsBySteps(job: GHJob, raw: String): Map<Int, String> {
     if (steps.isEmpty()) return emptyMap()
 
     if (stepStarts.isEmpty()) {
-        // Fallback: assign entire log only to current running/completed step nearest to the end.
         val target = steps.lastOrNull { displayStepStatus(it) !in setOf("queued", "pending") } ?: steps.first()
         result[target.number] = raw.trim()
         return result
@@ -676,13 +1044,11 @@ private fun splitLogsBySteps(job: GHJob, raw: String): Map<Int, String> {
             result[step.number] = currentSection
             sectionIndex++
         } else {
-            // Sequence fallback
             result[step.number] = currentSection
             sectionIndex++
         }
     }
 
-    // If there are extra sections, append them to the last non-queued step.
     if (sectionIndex < sections.size) {
         val lastStepNum = steps.lastOrNull { result.containsKey(it.number) }?.number ?: steps.last().number
         val extra = sections.drop(sectionIndex).joinToString("\n\n")
@@ -795,8 +1161,6 @@ private fun formatDuration(ms: Long): String {
     }
 }
 
-
-
 private fun displayStepStatus(step: GHStep): String {
     val c = step.conclusion.trim().lowercase()
     val s = step.status.trim().lowercase()
@@ -829,6 +1193,17 @@ private fun stepStatusColor(step: GHStep): Color {
         "queued" -> Color(0xFFFF9500)
         "completed" -> Color(0xFF8E8E93)
         else -> Color(0xFFFF9500)
+    }
+}
+
+private fun ghFmtSize(bytes: Long): String {
+    if (bytes <= 0L) return "0 B"
+    val kb = 1024.0
+    val mb = kb * 1024.0
+    return when {
+        bytes >= mb -> String.format(Locale.US, "%.1f MB", bytes / mb)
+        bytes >= kb -> String.format(Locale.US, "%.1f KB", bytes / kb)
+        else -> "$bytes B"
     }
 }
 
