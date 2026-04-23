@@ -193,12 +193,24 @@ object GitHubManager {
     }
 
     suspend fun getBranches(context: Context, owner: String, repo: String): List<String> {
-        val r = request(context, "/repos/$owner/$repo/branches?per_page=50")
-        if (!r.success) return emptyList()
-        return try {
-            val arr = JSONArray(r.body)
-            (0 until arr.length()).map { arr.getJSONObject(it).optString("name") }
-        } catch (e: Exception) { emptyList() }
+        val branches = mutableListOf<String>()
+        var page = 1
+        while (true) {
+            val r = request(context, "/repos/$owner/$repo/branches?per_page=100&page=$page")
+            if (!r.success) break
+            val count = try {
+                val arr = JSONArray(r.body)
+                for (i in 0 until arr.length()) {
+                    arr.getJSONObject(i).optString("name").takeIf { it.isNotBlank() }?.let { branches += it }
+                }
+                arr.length()
+            } catch (e: Exception) {
+                0
+            }
+            if (count < 100) break
+            page++
+        }
+        return branches.distinct()
     }
 
     suspend fun cloneRepo(context: Context, owner: String, repo: String, destDir: java.io.File, onProgress: (String) -> Unit): Boolean =
@@ -674,15 +686,25 @@ object GitHubManager {
     }
 
     suspend fun getWorkflows(context: Context, owner: String, repo: String): List<GHWorkflow> {
-        val r = request(context, "/repos/$owner/$repo/actions/workflows?per_page=30")
-        if (!r.success) return emptyList()
-        return try {
-            val arr = JSONObject(r.body).getJSONArray("workflows")
-            (0 until arr.length()).map { i ->
-                val j = arr.getJSONObject(i)
-                GHWorkflow(id = j.optLong("id"), name = j.optString("name"), state = j.optString("state"), path = j.optString("path"))
+        val workflows = mutableListOf<GHWorkflow>()
+        var page = 1
+        while (true) {
+            val r = request(context, "/repos/$owner/$repo/actions/workflows?per_page=100&page=$page")
+            if (!r.success) break
+            val count = try {
+                val arr = JSONObject(r.body).getJSONArray("workflows")
+                for (i in 0 until arr.length()) {
+                    val j = arr.getJSONObject(i)
+                    workflows += GHWorkflow(id = j.optLong("id"), name = j.optString("name"), state = j.optString("state"), path = j.optString("path"))
+                }
+                arr.length()
+            } catch (e: Exception) {
+                0
             }
-        } catch (e: Exception) { emptyList() }
+            if (count < 100) break
+            page++
+        }
+        return workflows.distinctBy { it.id }
     }
 
     suspend fun getWorkflowRuns(context: Context, owner: String, repo: String, workflowId: Long? = null, perPage: Int = 20): List<GHWorkflowRun> {
@@ -789,6 +811,101 @@ object GitHubManager {
         }.toString()
         val encodedId = URLEncoder.encode(workflowId, "UTF-8")
         return request(context, "/repos/$owner/$repo/actions/workflows/$encodedId/dispatches", "POST", body).let { it.code == 204 || it.success }
+    }
+
+    suspend fun getWorkflowDispatchSchema(context: Context, owner: String, repo: String, workflowPath: String, branch: String? = null): GHWorkflowDispatchSchema? {
+        val content = getFileContent(context, owner, repo, workflowPath, branch)
+        if (content.isBlank()) return null
+        return parseWorkflowDispatchSchema(workflowPath, content)
+    }
+
+    suspend fun getWorkflowDispatchSchemas(context: Context, owner: String, repo: String, workflows: List<GHWorkflow>, branch: String? = null): List<GHWorkflowDispatchSchema> {
+        return workflows.mapNotNull { workflow ->
+            getWorkflowDispatchSchema(context, owner, repo, workflow.path, branch)?.copy(
+                workflowName = workflow.name.ifBlank { workflow.path.substringAfterLast('/') }
+            )
+        }
+    }
+
+    private fun parseWorkflowDispatchSchema(workflowPath: String, yaml: String): GHWorkflowDispatchSchema? {
+        val lines = yaml.lines()
+        val workflowName = lines.firstOrNull { it.trimStart().startsWith("name:") }
+            ?.substringAfter(":")
+            ?.trim()
+            ?.trim('"', '\'')
+            .orEmpty()
+            .ifBlank { workflowPath.substringAfterLast('/') }
+
+        val dispatchIndex = lines.indexOfFirst { it.trim() == "workflow_dispatch:" }
+        if (dispatchIndex < 0) return null
+
+        val dispatchIndent = lines[dispatchIndex].takeWhile { it == ' ' }.length
+        val inputsIndex = lines.indexOfFirstIndexed(dispatchIndex + 1) { _, line ->
+            val indent = line.takeWhile { it == ' ' }.length
+            line.trim() == "inputs:" && indent > dispatchIndent
+        }
+        if (inputsIndex < 0) return GHWorkflowDispatchSchema(workflowPath, workflowName, emptyList())
+
+        val inputsIndent = lines[inputsIndex].takeWhile { it == ' ' }.length
+        val results = mutableListOf<GHWorkflowDispatchInput>()
+        var i = inputsIndex + 1
+        while (i < lines.size) {
+            val raw = lines[i]
+            if (raw.trim().isBlank()) { i++; continue }
+            val indent = raw.takeWhile { it == ' ' }.length
+            if (indent <= inputsIndent) break
+            val trimmed = raw.trim()
+            if (trimmed.endsWith(":") && !trimmed.startsWith("#")) {
+                val key = trimmed.removeSuffix(":").trim()
+                var description = ""
+                var required = false
+                var defaultValue = ""
+                val options = mutableListOf<String>()
+                val keyIndent = indent
+                i++
+                while (i < lines.size) {
+                    val childRaw = lines[i]
+                    if (childRaw.trim().isBlank()) { i++; continue }
+                    val childIndent = childRaw.takeWhile { it == ' ' }.length
+                    if (childIndent <= keyIndent) break
+                    val childTrim = childRaw.trim()
+                    when {
+                        childTrim.startsWith("description:") -> description = childTrim.substringAfter(":").trim().trim('"', '\'')
+                        childTrim.startsWith("required:") -> required = childTrim.substringAfter(":").trim().equals("true", true)
+                        childTrim.startsWith("default:") -> defaultValue = childTrim.substringAfter(":").trim().trim('"', '\'')
+                        childTrim.startsWith("options:") -> {
+                            i++
+                            while (i < lines.size) {
+                                val optionRaw = lines[i]
+                                if (optionRaw.trim().isBlank()) { i++; continue }
+                                val optionIndent = optionRaw.takeWhile { it == ' ' }.length
+                                if (optionIndent <= childIndent) break
+                                val optionTrim = optionRaw.trim()
+                                if (optionTrim.startsWith("- ")) options += optionTrim.removePrefix("- ").trim().trim('"', '\'')
+                                i++
+                            }
+                            continue
+                        }
+                    }
+                    i++
+                }
+                results += GHWorkflowDispatchInput(
+                    key = key,
+                    description = description,
+                    required = required,
+                    defaultValue = defaultValue,
+                    options = options
+                )
+                continue
+            }
+            i++
+        }
+        return GHWorkflowDispatchSchema(workflowPath, workflowName, results)
+    }
+
+    private inline fun List<String>.indexOfFirstIndexed(startIndex: Int, predicate: (Int, String) -> Boolean): Int {
+        for (index in startIndex until size) if (predicate(index, this[index])) return index
+        return -1
     }
 
     suspend fun getRunArtifacts(context: Context, owner: String, repo: String, runId: Long): List<GHArtifact> {
@@ -1876,6 +1993,20 @@ data class GHCommitDetail(val sha: String, val message: String, val author: Stri
 data class GHDiffFile(val filename: String, val status: String, val additions: Int, val deletions: Int, val patch: String)
 
 data class GHWorkflow(val id: Long, val name: String, val state: String, val path: String)
+
+data class GHWorkflowDispatchInput(
+    val key: String,
+    val description: String,
+    val required: Boolean,
+    val defaultValue: String,
+    val options: List<String>
+)
+
+data class GHWorkflowDispatchSchema(
+    val workflowPath: String,
+    val workflowName: String,
+    val inputs: List<GHWorkflowDispatchInput>
+)
 
 data class GHWorkflowRun(val id: Long, val name: String, val status: String, val conclusion: String,
     val branch: String, val event: String, val createdAt: String, val updatedAt: String,

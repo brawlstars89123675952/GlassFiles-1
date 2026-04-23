@@ -292,8 +292,14 @@ internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -
             RepoTab.PULLS -> PullsTab(filteredPulls, repo, { scope.launch { pulls = GitHubManager.getPullRequests(context, repo.owner, repo.name) } }) { prNumber -> selectedPRNumber = prNumber }
             RepoTab.RELEASES -> ReleasesTab(releases, repo)
             RepoTab.ACTIONS -> ActionsTab(workflowRuns, repo) { selectedRunId = it.id }
-            RepoTab.BUILDS -> BuildsScreen(repo = repo, branches = branches) {
+            RepoTab.BUILDS -> BuildsScreen(
+                repo = repo,
+                branches = branches,
+                workflows = workflows,
+                selectedBranch = selectedBranch
+            ) { runId ->
                 selectedTab = RepoTab.ACTIONS
+                if (runId != null) selectedRunId = runId
                 scope.launch {
                     workflowRuns = GitHubManager.getWorkflowRuns(context, repo.owner, repo.name)
                     workflows = GitHubManager.getWorkflows(context, repo.owner, repo.name)

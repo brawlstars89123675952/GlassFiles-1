@@ -135,11 +135,23 @@
   - пустая action-кнопка заменена на осмысленную `Builder`
 - После нового CI-лога выполнен compile-fix для builder module:
   - добавлен недостающий импорт `verticalScroll` в `BuildsScreen.kt`
+- Builder architecture переведён на dynamic model по требованиям пользователя:
+  - branches only from GitHub API
+  - workflows only from GitHub API
+  - workflow_dispatch.inputs parsed from workflow YAML
+  - build cards generated only for workflows that реально имеют workflow_dispatch schema
+  - форма запуска строится автоматически по inputs workflow, без жёстко зашитых полей
+  - dispatch uses real workflow filename + ref + inputs from parsed schema
+- Выполнен integration pass по dynamic builder:
+  - убраны оставшиеся статичные build-категории/пресеты из builder UI
+  - `BuildsScreen` подключён к реальным `workflows`, `branches` и текущей ветке из repo screen
+  - workflows с `workflow_dispatch` без inputs больше не скрываются
+  - после `Run workflow` выполняется поиск нового `workflow_dispatch` run и открывается detail screen с polling
 
 ### Важно
 - По просьбе пользователя server-side сборки/compile checks больше не запускать.
 - Фокус только на реальной доработке UI/UX и функциональности GitHub-модулей внутри проекта.
 
 ### Текущее состояние
-- Builder compile issue from latest CI log fixed.
-- Изменения готовы к fix commit / push.
+- Builder больше не опирается на статичные списки параметров формы или build-пресеты.
+- Локальная сборка не запускалась по просьбе пользователя.
