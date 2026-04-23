@@ -90,6 +90,10 @@ import coil.compose.AsyncImage
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.GHContent
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.ui.theme.Blue
+import com.glassfiles.ui.theme.SeparatorColor
+import com.glassfiles.ui.theme.TextSecondary
+import com.glassfiles.ui.theme.TextTertiary
 import kotlinx.coroutines.launch
 
 private enum class GitHubEditorMode { EDIT, READ, PREVIEW }
