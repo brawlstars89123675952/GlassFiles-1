@@ -940,7 +940,7 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                                 Column(Modifier.weight(1f)) {
                                     Text(artifact.name, fontSize = 14.sp, color = if (artifact.expired) TextTertiary else TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text(ghFmtSize(artifact.sizeInBytes), fontSize = 11.sp, color = TextSecondary)
+                                        Text(formatArtifactSize(artifact.sizeInBytes), fontSize = 11.sp, color = TextSecondary)
                                         if (artifact.expired) Text(Strings.ghExpired, fontSize = 11.sp, color = Color(0xFFFF3B30))
                                         else Text(artifact.createdAt.take(10), fontSize = 11.sp, color = TextTertiary)
                                     }
@@ -1196,7 +1196,7 @@ private fun stepStatusColor(step: GHStep): Color {
     }
 }
 
-private fun ghFmtSize(bytes: Long): String {
+private fun formatArtifactSize(bytes: Long): String {
     if (bytes <= 0L) return "0 B"
     val kb = 1024.0
     val mb = kb * 1024.0

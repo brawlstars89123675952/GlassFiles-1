@@ -74,12 +74,16 @@
   - снижение риска повторного save с устаревшим SHA
   - refresh/dispatch safety guards в Actions
   - сохранение workflow-filtered view при обновлении входных runs
+- После CI-ошибок выполнен compile-fix pass.
+- Исправлено:
+  - removed unresolved `Icons.Rounded.Markdown`
+  - added missing `verticalScroll` import
+  - resolved size formatter name conflict in `GitHubActionsModule.kt`
 
 ### Важно
 - По просьбе пользователя server-side сборки/compile checks больше не запускать.
 - Фокус только на реальной доработке UI/UX и функциональности GitHub-модулей внутри проекта.
 
 ### Текущее состояние
-- GitHub file editor сильно усилен и визуально/функционально ближе к современному code editor.
-- GitHub Actions стал заметно более живым и функциональным.
-- Изменения подготовлены к git commit / push.
+- Исправлены конкретные compile-ошибки, пришедшие из CI-лога.
+- Изменения готовы к fix commit / push.

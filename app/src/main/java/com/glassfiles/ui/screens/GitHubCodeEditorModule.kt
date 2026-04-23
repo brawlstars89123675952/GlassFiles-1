@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Code
@@ -36,7 +37,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FindInPage
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.Markdown
+import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Preview
 import androidx.compose.material.icons.rounded.Redo
 import androidx.compose.material.icons.rounded.Save
@@ -326,7 +327,7 @@ fun CodeEditorScreen(
                     if (isMarkdown) {
                         IconButton(onClick = { editorMode = if (editorMode == EditorMode.CODE) EditorMode.PREVIEW else EditorMode.CODE }) {
                             Icon(
-                                if (editorMode == EditorMode.CODE) Icons.Rounded.Markdown else Icons.Rounded.Preview,
+                                if (editorMode == EditorMode.CODE) Icons.Rounded.MenuBook else Icons.Rounded.Preview,
                                 null,
                                 Modifier.size(20.dp),
                                 tint = Blue
