@@ -153,6 +153,42 @@
   - `workflow_dispatch.inputs.type` читается из YAML
   - boolean inputs автоматически отображаются как выбор `true/false`
   - убран специальный label-маппинг под отдельные примеры параметров
+- Зафиксировано подтверждение по финальному ТЗ для builder module:
+  - ветки читаются из репозитория через GitHub API `/repos/{owner}/{repo}/branches`
+  - параметры формы читаются из YAML workflow-файлов `.github/workflows/*.yml`
+  - workflow ID/filename определяется из реальных workflows репозитория
+  - карточки сборок скрываются, если подходящий workflow отсутствует
+  - после `Run workflow` открывается экран отслеживания run со статусным polling
+  - статичные списки build-параметров и build-пресетов убраны
+- Сборка после этих изменений подтверждена как успешная.
+- Выполнена полная доработка GitHub Actions-модуля в сторону поведения сайта GitHub:
+  - runs теперь запрашиваются через API с `page`, `branch`, `event`, `status` и поддержкой `Load more`
+  - Actions screen получил фильтры по workflow/status/branch/event, поиск по title/SHA/actor/event/branch/run number и live polling с сохранением фильтров
+  - `Run workflow` в Actions использует реальные branches и динамическую форму из `workflow_dispatch.inputs`, а не `key=value`
+  - верхний `DispatchWorkflowDialog` также переведён на YAML-driven inputs, чтобы не оставалось второго неполного пути запуска
+  - добавлены enable/disable workflow, rerun all jobs, rerun failed jobs, cancel run
+  - run detail теперь подтягивает metadata конкретного run, показывает title/status/branch/event/SHA/attempt/repository, jobs, steps, logs и artifacts
+  - artifact delete перенесён в `GitHubManager`, jobs/artifacts запрашиваются расширенно (`per_page=100`)
+- Локальная сборка не запускалась по просьбе пользователя; выполнена только безопасная проверка `git diff --check`.
+- Выполнен дополнительный full-Actions API/UI pass:
+  - добавлены repo-wide artifacts с поиском по имени, пагинацией, digest/expiration/run metadata, download/delete
+  - добавлены workflow run attempts и загрузка jobs для выбранной попытки
+  - добавлены check runs и annotations по `head_sha`
+  - добавлены pending deployments, approve/reject и deployment review history
+  - добавлены run usage/timing, rerun single job, force cancel, delete logs, delete run
+  - добавлены Actions caches: usage, list, delete
+  - добавлены repository variables: list/create/update/delete
+  - добавлены repository secrets: list/delete; create/update закрыто следующим crypto-pass, потому что GitHub требует sealed-box encryption
+  - добавлены repository self-hosted runners: list/delete, registration/remove tokens
+  - добавлены read API и set API для Actions permissions, workflow permissions и artifact/log retention
+  - Actions screen получил отдельные секции `Runs`, `Artifacts`, `Caches`, `Variables`, `Secrets`, `Runners`, `Settings`
+- Локальная сборка по-прежнему не запускалась; повторно выполнена безопасная проверка `git diff --check`.
+- Выполнен crypto-pass для GitHub Actions secrets:
+  - добавлена Android-зависимость `lazysodium-android` + `jna` для Libsodium sealed box
+  - добавлен `GitHubSecretCrypto`, который шифрует value через `crypto_box_seal` и отдаёт base64 для GitHub API
+  - добавлен API `/actions/secrets/public-key`
+  - добавлен `PUT /actions/secrets/{secret_name}` с `encrypted_value` и `key_id`
+  - Secrets UI теперь умеет create/update/delete repository secrets; значение секрета по правилам GitHub обратно не читается
 
 ### Важно
 - По просьбе пользователя server-side сборки/compile checks больше не запускать.
@@ -160,4 +196,6 @@
 
 ### Текущее состояние
 - Builder больше не опирается на статичные списки параметров формы или build-пресеты.
-- Локальная сборка не запускалась по просьбе пользователя.
+- Последняя проверенная сборка прошла успешно.
+- Actions-модуль расширен до GitHub-style workflow/run management, но новая локальная compile-сборка намеренно не запускалась.
+- Actions API покрывает основные repository-level функции сайта GitHub Actions, включая encrypted create/update для repository secrets.

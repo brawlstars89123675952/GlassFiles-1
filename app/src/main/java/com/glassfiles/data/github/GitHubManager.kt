@@ -707,9 +707,24 @@ object GitHubManager {
         return workflows.distinctBy { it.id }
     }
 
-    suspend fun getWorkflowRuns(context: Context, owner: String, repo: String, workflowId: Long? = null, perPage: Int = 20): List<GHWorkflowRun> {
-        val endpoint = if (workflowId != null) "/repos/$owner/$repo/actions/workflows/$workflowId/runs?per_page=$perPage"
-            else "/repos/$owner/$repo/actions/runs?per_page=$perPage"
+    suspend fun getWorkflowRuns(
+        context: Context,
+        owner: String,
+        repo: String,
+        workflowId: Long? = null,
+        perPage: Int = 20,
+        page: Int = 1,
+        branch: String? = null,
+        event: String? = null,
+        status: String? = null
+    ): List<GHWorkflowRun> {
+        val params = mutableListOf("per_page=$perPage", "page=$page")
+        branch?.takeIf { it.isNotBlank() }?.let { params += "branch=${URLEncoder.encode(it, "UTF-8")}" }
+        event?.takeIf { it.isNotBlank() }?.let { params += "event=${URLEncoder.encode(it, "UTF-8")}" }
+        status?.takeIf { it.isNotBlank() }?.let { params += "status=${URLEncoder.encode(it, "UTF-8")}" }
+        val query = params.joinToString("&")
+        val endpoint = if (workflowId != null) "/repos/$owner/$repo/actions/workflows/$workflowId/runs?$query"
+            else "/repos/$owner/$repo/actions/runs?$query"
         val r = request(context, endpoint)
         if (!r.success) return emptyList()
         return try {
@@ -718,24 +733,20 @@ object GitHubManager {
         } catch (e: Exception) { emptyList() }
     }
 
-    suspend fun getWorkflowRunJobs(context: Context, owner: String, repo: String, runId: Long): List<GHJob> {
-        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/jobs")
-        if (!r.success) return emptyList()
+    suspend fun getWorkflowRun(context: Context, owner: String, repo: String, runId: Long): GHWorkflowRun? {
+        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId")
+        if (!r.success) return null
         return try {
-            val arr = JSONObject(r.body).getJSONArray("jobs")
-            (0 until arr.length()).map { i ->
-                val j = arr.getJSONObject(i)
-                val steps = mutableListOf<GHStep>()
-                val stepsArr = j.optJSONArray("steps")
-                if (stepsArr != null) for (s in 0 until stepsArr.length()) {
-                    val sj = stepsArr.getJSONObject(s)
-                    steps.add(GHStep(name = sj.optString("name"), status = sj.optString("status"), conclusion = sj.optString("conclusion", ""), number = sj.optInt("number")))
-                }
-                GHJob(id = j.optLong("id"), name = j.optString("name"), status = j.optString("status"),
-                    conclusion = j.optString("conclusion", ""), startedAt = j.optString("started_at", ""),
-                    completedAt = j.optString("completed_at", ""), steps = steps)
-            }
-        } catch (e: Exception) { emptyList() }
+            parseWorkflowRun(JSONObject(r.body))
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun getWorkflowRunJobs(context: Context, owner: String, repo: String, runId: Long): List<GHJob> {
+        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/jobs?filter=all&per_page=100")
+        if (!r.success) return emptyList()
+        return parseJobs(r.body)
     }
 
     suspend fun getWorkflowRunLogs(context: Context, owner: String, repo: String, runId: Long): String =
@@ -785,8 +796,17 @@ object GitHubManager {
     suspend fun rerunWorkflow(context: Context, owner: String, repo: String, runId: Long): Boolean =
         request(context, "/repos/$owner/$repo/actions/runs/$runId/rerun", "POST", "{}").success
 
+    suspend fun rerunFailedJobs(context: Context, owner: String, repo: String, runId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/runs/$runId/rerun-failed-jobs", "POST", "{}").success
+
     suspend fun cancelWorkflowRun(context: Context, owner: String, repo: String, runId: Long): Boolean =
         request(context, "/repos/$owner/$repo/actions/runs/$runId/cancel", "POST", "{}").success
+
+    suspend fun enableWorkflow(context: Context, owner: String, repo: String, workflowId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/workflows/$workflowId/enable", "PUT", "{}").let { it.code == 204 || it.success }
+
+    suspend fun disableWorkflow(context: Context, owner: String, repo: String, workflowId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/workflows/$workflowId/disable", "PUT", "{}").let { it.code == 204 || it.success }
 
     suspend fun dispatchWorkflow(context: Context, owner: String, repo: String, workflowId: Long, branch: String, inputs: Map<String, String> = emptyMap()): Boolean {
         val body = JSONObject().apply {
@@ -943,21 +963,9 @@ object GitHubManager {
     }
 
     suspend fun getRunArtifacts(context: Context, owner: String, repo: String, runId: Long): List<GHArtifact> {
-        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/artifacts")
+        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/artifacts?per_page=100")
         if (!r.success) return emptyList()
-        return try {
-            val arr = JSONObject(r.body).getJSONArray("artifacts")
-            (0 until arr.length()).map { i ->
-                val j = arr.getJSONObject(i)
-                GHArtifact(
-                    id = j.optLong("id"), name = j.optString("name"),
-                    sizeInBytes = j.optLong("size_in_bytes", 0),
-                    expired = j.optBoolean("expired", false),
-                    createdAt = j.optString("created_at", ""),
-                    expiresAt = j.optString("expires_at", "")
-                )
-            }
-        } catch (e: Exception) { emptyList() }
+        return parseArtifacts(r.body)
     }
 
     suspend fun downloadArtifact(context: Context, owner: String, repo: String, artifactId: Long, destFile: java.io.File): Boolean =
@@ -980,6 +988,437 @@ object GitHubManager {
             } catch (e: Exception) { Log.e(TAG, "Download artifact: ${e.message}"); false }
         }
 
+    suspend fun deleteArtifact(context: Context, owner: String, repo: String, artifactId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/artifacts/$artifactId", "DELETE").let { it.code == 204 || it.success }
+
+    suspend fun getRepositoryArtifacts(context: Context, owner: String, repo: String, page: Int = 1, name: String? = null): List<GHArtifact> {
+        val params = mutableListOf("per_page=100", "page=$page")
+        name?.takeIf { it.isNotBlank() }?.let { params += "name=${URLEncoder.encode(it, "UTF-8")}" }
+        val r = request(context, "/repos/$owner/$repo/actions/artifacts?${params.joinToString("&")}")
+        if (!r.success) return emptyList()
+        return parseArtifacts(r.body)
+    }
+
+    suspend fun getArtifact(context: Context, owner: String, repo: String, artifactId: Long): GHArtifact? {
+        val r = request(context, "/repos/$owner/$repo/actions/artifacts/$artifactId")
+        if (!r.success) return null
+        return try { parseArtifact(JSONObject(r.body)) } catch (e: Exception) { null }
+    }
+
+    suspend fun getWorkflowRunAttempt(context: Context, owner: String, repo: String, runId: Long, attempt: Int): GHWorkflowRun? {
+        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/attempts/$attempt")
+        if (!r.success) return null
+        return try { parseWorkflowRun(JSONObject(r.body)) } catch (e: Exception) { null }
+    }
+
+    suspend fun getWorkflowRunAttemptJobs(context: Context, owner: String, repo: String, runId: Long, attempt: Int): List<GHJob> {
+        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/attempts/$attempt/jobs?per_page=100")
+        if (!r.success) return emptyList()
+        return parseJobs(r.body)
+    }
+
+    suspend fun getWorkflowRunAttemptLogs(context: Context, owner: String, repo: String, runId: Long, attempt: Int): String =
+        getRedirectLocationOrText(context, "$API/repos/$owner/$repo/actions/runs/$runId/attempts/$attempt/logs")
+
+    suspend fun rerunJob(context: Context, owner: String, repo: String, jobId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/jobs/$jobId/rerun", "POST", "{}").success
+
+    suspend fun deleteWorkflowRun(context: Context, owner: String, repo: String, runId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/runs/$runId", "DELETE").let { it.code == 204 || it.success }
+
+    suspend fun deleteWorkflowRunLogs(context: Context, owner: String, repo: String, runId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/runs/$runId/logs", "DELETE").let { it.code == 204 || it.success }
+
+    suspend fun forceCancelWorkflowRun(context: Context, owner: String, repo: String, runId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/runs/$runId/force-cancel", "POST", "{}").success
+
+    suspend fun getWorkflowUsage(context: Context, owner: String, repo: String, workflowId: Long): GHActionsUsage? {
+        val r = request(context, "/repos/$owner/$repo/actions/workflows/$workflowId/timing")
+        if (!r.success) return null
+        return parseActionsUsage(r.body)
+    }
+
+    suspend fun getWorkflowRunUsage(context: Context, owner: String, repo: String, runId: Long): GHActionsUsage? {
+        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/timing")
+        if (!r.success) return null
+        return parseActionsUsage(r.body)
+    }
+
+    suspend fun getCheckRunsForRef(context: Context, owner: String, repo: String, ref: String): List<GHCheckRun> {
+        if (ref.isBlank()) return emptyList()
+        val encodedRef = URLEncoder.encode(ref, "UTF-8")
+        val r = request(context, "/repos/$owner/$repo/commits/$encodedRef/check-runs?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).optJSONArray("check_runs") ?: JSONArray()
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                val output = j.optJSONObject("output")
+                GHCheckRun(
+                    id = j.optLong("id"),
+                    name = j.optString("name"),
+                    status = j.optString("status"),
+                    conclusion = j.optString("conclusion", ""),
+                    detailsUrl = j.optString("details_url", ""),
+                    htmlUrl = j.optString("html_url", ""),
+                    startedAt = j.optString("started_at", ""),
+                    completedAt = j.optString("completed_at", ""),
+                    title = output?.optString("title") ?: "",
+                    summary = output?.optString("summary") ?: "",
+                    annotationsCount = output?.optInt("annotations_count", 0) ?: 0
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getCheckRunAnnotations(context: Context, owner: String, repo: String, checkRunId: Long): List<GHCheckAnnotation> {
+        val r = request(context, "/repos/$owner/$repo/check-runs/$checkRunId/annotations?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHCheckAnnotation(
+                    path = j.optString("path"),
+                    startLine = j.optInt("start_line", 0),
+                    endLine = j.optInt("end_line", 0),
+                    annotationLevel = j.optString("annotation_level"),
+                    message = j.optString("message"),
+                    title = j.optString("title", ""),
+                    rawDetails = j.optString("raw_details", "")
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getPendingDeployments(context: Context, owner: String, repo: String, runId: Long): List<GHPendingDeployment> {
+        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/pending_deployments")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                val env = j.optJSONObject("environment")
+                GHPendingDeployment(
+                    environmentId = env?.optLong("id") ?: 0L,
+                    environmentName = env?.optString("name") ?: "",
+                    currentUserCanApprove = j.optBoolean("current_user_can_approve", false),
+                    waitTimer = j.optInt("wait_timer", 0),
+                    waitTimerStartedAt = j.optString("wait_timer_started_at", ""),
+                    reviewers = j.optJSONArray("reviewers")?.let { reviewers ->
+                        (0 until reviewers.length()).mapNotNull { idx ->
+                            reviewers.optJSONObject(idx)?.optJSONObject("reviewer")?.optString("login")
+                        }
+                    } ?: emptyList()
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun reviewPendingDeployments(context: Context, owner: String, repo: String, runId: Long, environmentIds: List<Long>, approve: Boolean, comment: String): Boolean {
+        val body = JSONObject().apply {
+            put("environment_ids", JSONArray(environmentIds))
+            put("state", if (approve) "approved" else "rejected")
+            put("comment", comment)
+        }.toString()
+        return request(context, "/repos/$owner/$repo/actions/runs/$runId/pending_deployments", "POST", body).success
+    }
+
+    suspend fun getWorkflowRunReviewHistory(context: Context, owner: String, repo: String, runId: Long): List<GHWorkflowRunReview> {
+        val r = request(context, "/repos/$owner/$repo/actions/runs/$runId/approvals")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHWorkflowRunReview(
+                    state = j.optString("state"),
+                    comment = j.optString("comment", ""),
+                    user = j.optJSONObject("user")?.optString("login") ?: "",
+                    environments = j.optJSONArray("environments")?.let { envs ->
+                        (0 until envs.length()).mapNotNull { idx -> envs.optJSONObject(idx)?.optString("name") }
+                    } ?: emptyList()
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun approveWorkflowRunForFork(context: Context, owner: String, repo: String, runId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/runs/$runId/approve", "POST", "{}").success
+
+    suspend fun getActionsCacheUsage(context: Context, owner: String, repo: String): GHActionsCacheUsage? {
+        val r = request(context, "/repos/$owner/$repo/actions/cache/usage")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            GHActionsCacheUsage(j.optString("full_name", ""), j.optLong("active_caches_size_in_bytes", 0), j.optInt("active_caches_count", 0))
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun getActionsCaches(context: Context, owner: String, repo: String, page: Int = 1, key: String? = null, ref: String? = null): List<GHActionsCacheEntry> {
+        val params = mutableListOf("per_page=100", "page=$page")
+        key?.takeIf { it.isNotBlank() }?.let { params += "key=${URLEncoder.encode(it, "UTF-8")}" }
+        ref?.takeIf { it.isNotBlank() }?.let { params += "ref=${URLEncoder.encode(it, "UTF-8")}" }
+        val r = request(context, "/repos/$owner/$repo/actions/caches?${params.joinToString("&")}")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).optJSONArray("actions_caches") ?: JSONArray()
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHActionsCacheEntry(
+                    id = j.optLong("id"),
+                    ref = j.optString("ref"),
+                    key = j.optString("key"),
+                    version = j.optString("version"),
+                    lastAccessedAt = j.optString("last_accessed_at"),
+                    createdAt = j.optString("created_at"),
+                    sizeInBytes = j.optLong("size_in_bytes", 0)
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun deleteActionsCache(context: Context, owner: String, repo: String, cacheId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/caches/$cacheId", "DELETE").let { it.code == 204 || it.success }
+
+    suspend fun getRepoActionsSecrets(context: Context, owner: String, repo: String): List<GHActionSecret> {
+        val r = request(context, "/repos/$owner/$repo/actions/secrets?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).optJSONArray("secrets") ?: JSONArray()
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHActionSecret(j.optString("name"), j.optString("created_at", ""), j.optString("updated_at", ""))
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getRepoActionsPublicKey(context: Context, owner: String, repo: String): GHActionPublicKey? {
+        val r = request(context, "/repos/$owner/$repo/actions/secrets/public-key")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            GHActionPublicKey(j.optString("key_id"), j.optString("key"))
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun createOrUpdateRepoActionsSecret(context: Context, owner: String, repo: String, name: String, value: String): Boolean {
+        return try {
+            val publicKey = getRepoActionsPublicKey(context, owner, repo) ?: return false
+            val encrypted = withContext(Dispatchers.Default) {
+                GitHubSecretCrypto.encryptSecret(publicKey.key, value)
+            }
+            val encodedName = URLEncoder.encode(name, "UTF-8")
+            val body = JSONObject().apply {
+                put("encrypted_value", encrypted)
+                put("key_id", publicKey.keyId)
+            }.toString()
+            request(context, "/repos/$owner/$repo/actions/secrets/$encodedName", "PUT", body).let {
+                it.code == 201 || it.code == 204 || it.success
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Save actions secret: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun deleteRepoActionsSecret(context: Context, owner: String, repo: String, name: String): Boolean {
+        val encodedName = URLEncoder.encode(name, "UTF-8")
+        return request(context, "/repos/$owner/$repo/actions/secrets/$encodedName", "DELETE").let { it.code == 204 || it.success }
+    }
+
+    suspend fun getRepoActionsVariables(context: Context, owner: String, repo: String): List<GHActionVariable> {
+        val r = request(context, "/repos/$owner/$repo/actions/variables?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).optJSONArray("variables") ?: JSONArray()
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHActionVariable(j.optString("name"), j.optString("value"), j.optString("created_at", ""), j.optString("updated_at", ""))
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun createRepoActionsVariable(context: Context, owner: String, repo: String, name: String, value: String): Boolean {
+        val body = JSONObject().apply { put("name", name); put("value", value) }.toString()
+        return request(context, "/repos/$owner/$repo/actions/variables", "POST", body).success
+    }
+
+    suspend fun updateRepoActionsVariable(context: Context, owner: String, repo: String, name: String, value: String): Boolean {
+        val encodedName = URLEncoder.encode(name, "UTF-8")
+        val body = JSONObject().apply { put("name", name); put("value", value) }.toString()
+        return request(context, "/repos/$owner/$repo/actions/variables/$encodedName", "PATCH", body).success
+    }
+
+    suspend fun deleteRepoActionsVariable(context: Context, owner: String, repo: String, name: String): Boolean {
+        val encodedName = URLEncoder.encode(name, "UTF-8")
+        return request(context, "/repos/$owner/$repo/actions/variables/$encodedName", "DELETE").let { it.code == 204 || it.success }
+    }
+
+    suspend fun getRepoSelfHostedRunners(context: Context, owner: String, repo: String): List<GHActionRunner> {
+        val r = request(context, "/repos/$owner/$repo/actions/runners?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).optJSONArray("runners") ?: JSONArray()
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                val labels = j.optJSONArray("labels")?.let { labelArr ->
+                    (0 until labelArr.length()).mapNotNull { idx -> labelArr.optJSONObject(idx)?.optString("name") }
+                } ?: emptyList()
+                GHActionRunner(
+                    id = j.optLong("id"),
+                    name = j.optString("name"),
+                    os = j.optString("os"),
+                    status = j.optString("status"),
+                    busy = j.optBoolean("busy", false),
+                    labels = labels
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun deleteRepoSelfHostedRunner(context: Context, owner: String, repo: String, runnerId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/actions/runners/$runnerId", "DELETE").let { it.code == 204 || it.success }
+
+    suspend fun createRepoRunnerRegistrationToken(context: Context, owner: String, repo: String): GHRunnerToken? {
+        val r = request(context, "/repos/$owner/$repo/actions/runners/registration-token", "POST", "{}")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            GHRunnerToken(j.optString("token"), j.optString("expires_at", ""))
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun createRepoRunnerRemoveToken(context: Context, owner: String, repo: String): GHRunnerToken? {
+        val r = request(context, "/repos/$owner/$repo/actions/runners/remove-token", "POST", "{}")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            GHRunnerToken(j.optString("token"), j.optString("expires_at", ""))
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun getRepoActionsPermissions(context: Context, owner: String, repo: String): GHActionsPermissions? {
+        val r = request(context, "/repos/$owner/$repo/actions/permissions")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            GHActionsPermissions(
+                enabled = j.optBoolean("enabled", false),
+                allowedActions = j.optString("allowed_actions", ""),
+                selectedActionsUrl = j.optString("selected_actions_url", "")
+            )
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun setRepoActionsPermissions(context: Context, owner: String, repo: String, enabled: Boolean, allowedActions: String): Boolean {
+        val body = JSONObject().apply {
+            put("enabled", enabled)
+            if (allowedActions.isNotBlank()) put("allowed_actions", allowedActions)
+        }.toString()
+        return request(context, "/repos/$owner/$repo/actions/permissions", "PUT", body).let { it.code == 204 || it.success }
+    }
+
+    suspend fun getRepoActionsWorkflowPermissions(context: Context, owner: String, repo: String): GHWorkflowPermissions? {
+        val r = request(context, "/repos/$owner/$repo/actions/permissions/workflow")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            GHWorkflowPermissions(j.optString("default_workflow_permissions", ""), j.optBoolean("can_approve_pull_request_reviews", false))
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun setRepoActionsWorkflowPermissions(context: Context, owner: String, repo: String, defaultWorkflowPermissions: String, canApprovePullRequestReviews: Boolean): Boolean {
+        val body = JSONObject().apply {
+            put("default_workflow_permissions", defaultWorkflowPermissions)
+            put("can_approve_pull_request_reviews", canApprovePullRequestReviews)
+        }.toString()
+        return request(context, "/repos/$owner/$repo/actions/permissions/workflow", "PUT", body).let { it.code == 204 || it.success }
+    }
+
+    suspend fun getRepoActionsRetention(context: Context, owner: String, repo: String): GHActionsRetention? {
+        val r = request(context, "/repos/$owner/$repo/actions/permissions/artifact-and-log-retention")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            GHActionsRetention(j.optInt("days", 0))
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun setRepoActionsRetention(context: Context, owner: String, repo: String, days: Int): Boolean {
+        val body = JSONObject().apply { put("days", days) }.toString()
+        return request(context, "/repos/$owner/$repo/actions/permissions/artifact-and-log-retention", "PUT", body).let { it.code == 204 || it.success }
+    }
+
+    private fun parseArtifacts(body: String): List<GHArtifact> = try {
+        val arr = JSONObject(body).optJSONArray("artifacts") ?: JSONArray()
+        (0 until arr.length()).map { i -> parseArtifact(arr.getJSONObject(i)) }
+    } catch (e: Exception) { emptyList() }
+
+    private fun parseArtifact(j: JSONObject): GHArtifact {
+        val workflowRun = j.optJSONObject("workflow_run")
+        return GHArtifact(
+            id = j.optLong("id"),
+            name = j.optString("name"),
+            sizeInBytes = j.optLong("size_in_bytes", 0),
+            expired = j.optBoolean("expired", false),
+            createdAt = j.optString("created_at", ""),
+            expiresAt = j.optString("expires_at", ""),
+            updatedAt = j.optString("updated_at", ""),
+            digest = j.optString("digest", ""),
+            workflowRunId = workflowRun?.optLong("id") ?: 0L,
+            workflowRunBranch = workflowRun?.optString("head_branch") ?: "",
+            workflowRunSha = workflowRun?.optString("head_sha") ?: ""
+        )
+    }
+
+    private fun parseJobs(body: String): List<GHJob> = try {
+        val arr = JSONObject(body).getJSONArray("jobs")
+        (0 until arr.length()).map { i ->
+            val j = arr.getJSONObject(i)
+            val steps = mutableListOf<GHStep>()
+            val stepsArr = j.optJSONArray("steps")
+            if (stepsArr != null) for (s in 0 until stepsArr.length()) {
+                val sj = stepsArr.getJSONObject(s)
+                steps.add(GHStep(name = sj.optString("name"), status = sj.optString("status"), conclusion = sj.optString("conclusion", ""), number = sj.optInt("number")))
+            }
+            GHJob(id = j.optLong("id"), name = j.optString("name"), status = j.optString("status"),
+                conclusion = j.optString("conclusion", ""), startedAt = j.optString("started_at", ""),
+                completedAt = j.optString("completed_at", ""), steps = steps)
+        }
+    } catch (e: Exception) { emptyList() }
+
+    private fun parseActionsUsage(body: String): GHActionsUsage? = try {
+        val j = JSONObject(body)
+        val billable = j.optJSONObject("billable")
+        val minutes = mutableMapOf<String, Int>()
+        val ms = mutableMapOf<String, Long>()
+        billable?.keys()?.forEach { key ->
+            val platform = billable.optJSONObject(key)
+            minutes[key] = platform?.optInt("total_ms", 0)?.div(60000) ?: 0
+            ms[key] = platform?.optLong("total_ms", 0) ?: 0L
+        }
+        GHActionsUsage(runDurationMs = j.optLong("run_duration_ms", 0), billableMs = ms, billableMinutes = minutes)
+    } catch (e: Exception) { null }
+
+    private suspend fun getRedirectLocationOrText(context: Context, url: String): String =
+        withContext(Dispatchers.IO) {
+            try {
+                val token = getToken(context)
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    setRequestProperty("Authorization", "Bearer $token")
+                    setRequestProperty("Accept", "application/vnd.github.v3+json")
+                    instanceFollowRedirects = false
+                    connectTimeout = 15000
+                    readTimeout = 15000
+                }
+                val code = conn.responseCode
+                val location = conn.getHeaderField("Location")
+                conn.disconnect()
+                if (location != null) "Logs URL: $location" else "Logs: HTTP $code"
+            } catch (e: Exception) { "Error: ${e.message}" }
+        }
+
     private fun parseWorkflowRun(j: JSONObject) = GHWorkflowRun(
         id = j.optLong("id"), name = j.optString("name"), status = j.optString("status"),
         conclusion = j.optString("conclusion", ""), branch = j.optString("head_branch", ""),
@@ -987,7 +1426,15 @@ object GitHubManager {
         updatedAt = j.optString("updated_at", ""), runNumber = j.optInt("run_number"),
         actor = j.optJSONObject("actor")?.optString("login") ?: "",
         actorAvatar = j.optJSONObject("actor")?.optString("avatar_url") ?: "",
-        workflowId = j.optLong("workflow_id")
+        workflowId = j.optLong("workflow_id"),
+        displayTitle = j.optString("display_title", ""),
+        headSha = j.optString("head_sha", ""),
+        headRepository = j.optJSONObject("head_repository")?.optString("full_name") ?: "",
+        runAttempt = j.optInt("run_attempt", 1),
+        htmlUrl = j.optString("html_url", ""),
+        cancelUrl = j.optString("cancel_url", ""),
+        rerunUrl = j.optString("rerun_url", ""),
+        checkSuiteId = j.optLong("check_suite_id", 0)
     )
 
     suspend fun getNotifications(context: Context, all: Boolean = false): List<GHNotification> {
@@ -2045,7 +2492,10 @@ data class GHWorkflowDispatchSchema(
 
 data class GHWorkflowRun(val id: Long, val name: String, val status: String, val conclusion: String,
     val branch: String, val event: String, val createdAt: String, val updatedAt: String,
-    val runNumber: Int, val actor: String, val actorAvatar: String, val workflowId: Long)
+    val runNumber: Int, val actor: String, val actorAvatar: String, val workflowId: Long,
+    val displayTitle: String = "", val headSha: String = "", val headRepository: String = "",
+    val runAttempt: Int = 1, val htmlUrl: String = "", val cancelUrl: String = "",
+    val rerunUrl: String = "", val checkSuiteId: Long = 0)
 
 data class GHJob(val id: Long, val name: String, val status: String, val conclusion: String,
     val startedAt: String, val completedAt: String, val steps: List<GHStep>)
@@ -2056,7 +2506,47 @@ data class GHNotification(val id: String, val unread: Boolean, val reason: Strin
     val title: String, val type: String, val repoName: String, val updatedAt: String, val url: String)
 
 data class GHArtifact(val id: Long, val name: String, val sizeInBytes: Long,
-    val expired: Boolean, val createdAt: String, val expiresAt: String)
+    val expired: Boolean, val createdAt: String, val expiresAt: String,
+    val updatedAt: String = "", val digest: String = "", val workflowRunId: Long = 0,
+    val workflowRunBranch: String = "", val workflowRunSha: String = "")
+
+data class GHCheckAnnotation(val path: String, val startLine: Int, val endLine: Int,
+    val annotationLevel: String, val message: String, val title: String, val rawDetails: String)
+
+data class GHPendingDeployment(val environmentId: Long, val environmentName: String,
+    val currentUserCanApprove: Boolean, val waitTimer: Int, val waitTimerStartedAt: String,
+    val reviewers: List<String>)
+
+data class GHWorkflowRunReview(val state: String, val comment: String, val user: String,
+    val environments: List<String>)
+
+data class GHActionsUsage(val runDurationMs: Long, val billableMs: Map<String, Long>,
+    val billableMinutes: Map<String, Int>)
+
+data class GHActionsCacheUsage(val fullName: String, val activeCachesSizeInBytes: Long,
+    val activeCachesCount: Int)
+
+data class GHActionsCacheEntry(val id: Long, val ref: String, val key: String, val version: String,
+    val lastAccessedAt: String, val createdAt: String, val sizeInBytes: Long)
+
+data class GHActionPublicKey(val keyId: String, val key: String)
+
+data class GHActionSecret(val name: String, val createdAt: String, val updatedAt: String)
+
+data class GHActionVariable(val name: String, val value: String, val createdAt: String, val updatedAt: String)
+
+data class GHActionRunner(val id: Long, val name: String, val os: String, val status: String,
+    val busy: Boolean, val labels: List<String>)
+
+data class GHRunnerToken(val token: String, val expiresAt: String)
+
+data class GHActionsPermissions(val enabled: Boolean, val allowedActions: String,
+    val selectedActionsUrl: String)
+
+data class GHWorkflowPermissions(val defaultWorkflowPermissions: String,
+    val canApprovePullRequestReviews: Boolean)
+
+data class GHActionsRetention(val days: Int)
 
 data class GHCodeResult(val name: String, val path: String, val sha: String, val htmlUrl: String, val score: Double)
 
@@ -2156,8 +2646,12 @@ data class GHCheckRun(
     val detailsUrl: String,
     val startedAt: String,
     val completedAt: String,
-    val outputTitle: String,
-    val outputSummary: String
+    val outputTitle: String = "",
+    val outputSummary: String = "",
+    val htmlUrl: String = "",
+    val title: String = outputTitle,
+    val summary: String = outputSummary,
+    val annotationsCount: Int = 0
 )
 
 data class GHCompareResult(

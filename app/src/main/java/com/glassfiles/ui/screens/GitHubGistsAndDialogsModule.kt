@@ -110,15 +110,22 @@ internal fun GistsScreen(onBack: () -> Unit, onMinimize: () -> Unit, onClose: ((
 internal fun DispatchWorkflowDialog(repo: GHRepo, workflows: List<GHWorkflow>, branches: List<String>, onDismiss: () -> Unit, onDone: () -> Unit) {
     var selectedWf by remember { mutableStateOf(workflows.firstOrNull()) }
     var selectedBranch by remember { mutableStateOf(repo.defaultBranch) }
+    var schema by remember { mutableStateOf<GHWorkflowDispatchSchema?>(null) }
+    var inputValues by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var dispatching by remember { mutableStateOf(false) }
     val ctx = LocalContext.current; val s = rememberCoroutineScope()
+
+    LaunchedEffect(selectedWf?.path, selectedBranch) {
+        schema = selectedWf?.let { GitHubManager.getWorkflowDispatchSchema(ctx, repo.owner, repo.name, it.path, selectedBranch) }
+        inputValues = schema?.inputs.orEmpty().associate { it.key to it.defaultValue }
+    }
 
     AlertDialog(onDismissRequest = onDismiss, containerColor = SurfaceWhite,
         title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Rounded.PlayArrow, null, Modifier.size(22.dp), tint = Color(0xFF34C759))
             Text(Strings.ghRunWorkflow, fontWeight = FontWeight.Bold, color = TextPrimary)
         } },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // Workflow picker
             Text(Strings.ghWorkflows, fontSize = 12.sp, color = TextSecondary)
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -142,6 +149,38 @@ internal fun DispatchWorkflowDialog(repo: GHRepo, workflows: List<GHWorkflow>, b
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 branches.forEach { b -> BC(b, b == selectedBranch) { selectedBranch = b } }
             }
+            val inputs = schema?.inputs.orEmpty()
+            if (schema != null && inputs.isNotEmpty()) {
+                Text("Inputs", fontSize = 12.sp, color = TextSecondary)
+                inputs.forEach { input ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(input.key, fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                            if (input.required) Text("required", fontSize = 10.sp, color = Color(0xFFFF9500))
+                        }
+                        if (input.description.isNotBlank()) Text(input.description, fontSize = 10.sp, color = TextTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        val choices = dialogDispatchInputChoices(input)
+                        if (choices.isNotEmpty()) {
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                choices.forEach { option -> BC(option, inputValues[input.key] == option) { inputValues = inputValues + (input.key to option) } }
+                            }
+                        } else {
+                            OutlinedTextField(
+                                value = inputValues[input.key].orEmpty(),
+                                onValueChange = { inputValues = inputValues + (input.key to it) },
+                                label = { Text(input.key) },
+                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = input.type.lowercase() != "environment"
+                            )
+                        }
+                    }
+                }
+            } else if (schema != null) {
+                Text("This workflow has no workflow_dispatch inputs", fontSize = 11.sp, color = TextTertiary)
+            } else {
+                Text("This workflow has no workflow_dispatch trigger", fontSize = 11.sp, color = TextTertiary)
+            }
             if (dispatching) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
@@ -153,13 +192,19 @@ internal fun DispatchWorkflowDialog(repo: GHRepo, workflows: List<GHWorkflow>, b
             if (selectedWf == null || dispatching) return@TextButton
             dispatching = true
             s.launch {
-                val ok = GitHubManager.dispatchWorkflow(ctx, repo.owner, repo.name, selectedWf!!.id, selectedBranch)
+                val ok = GitHubManager.dispatchWorkflow(ctx, repo.owner, repo.name, selectedWf!!.id, selectedBranch, inputValues.filterValues { it.isNotBlank() })
                 Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                 dispatching = false
                 if (ok) onDone()
             }
-        }, enabled = !dispatching) { Text(Strings.ghRunWorkflow, color = if (dispatching) TextTertiary else Color(0xFF34C759), fontWeight = FontWeight.Bold) } },
+        }, enabled = !dispatching && schema != null) { Text(Strings.ghRunWorkflow, color = if (dispatching || schema == null) TextTertiary else Color(0xFF34C759), fontWeight = FontWeight.Bold) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } })
+}
+
+private fun dialogDispatchInputChoices(input: GHWorkflowDispatchInput): List<String> = when {
+    input.options.isNotEmpty() -> input.options
+    input.type.equals("boolean", ignoreCase = true) -> listOf("true", "false")
+    else -> emptyList()
 }
 
 // ═══════════════════════════════════

@@ -129,6 +129,10 @@ dependencies {
     // FTP client
     implementation 'commons-net:commons-net:3.10.0'
 
+    // GitHub Actions secrets encryption (Libsodium sealed boxes)
+    implementation 'com.goterl:lazysodium-android:5.2.0@aar'
+    implementation 'net.java.dev.jna:jna:5.17.0@aar'
+
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 }
