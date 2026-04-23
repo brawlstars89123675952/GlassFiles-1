@@ -79,7 +79,7 @@ fun ReleasesScreen(
 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
             items(releases) { release ->
-                ReleaseCard(release, repoOwner, repoName) { updatedReleases ->
+                ReleaseCard(release, repoOwner, repoName, releases) { updatedReleases ->
                     releases = updatedReleases
                 }
                 Spacer(Modifier.height(12.dp))
@@ -105,6 +105,7 @@ private fun ReleaseCard(
     release: GHRelease,
     repoOwner: String,
     repoName: String,
+    releases: List<GHRelease>,
     onReleasesUpdate: (List<GHRelease>) -> Unit
 ) {
     val context = LocalContext.current

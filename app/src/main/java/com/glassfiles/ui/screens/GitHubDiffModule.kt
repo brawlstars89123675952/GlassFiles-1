@@ -256,48 +256,6 @@ private fun FileDiffScreen(
     }
 }
 
-private fun parseDiffLines(patch: String): List<DiffLine> {
-    val result = mutableListOf<DiffLine>()
-    val lines = patch.lines()
-    var oldLine = 0
-    var newLine = 0
-    var inHunk = false
-
-    for (line in lines) {
-        when {
-            line.startsWith("@@") -> {
-                inHunk = true
-                val match = Regex("@@ -(\\d+).*?\\+(\\d+)").find(line)
-                oldLine = match?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                newLine = match?.groupValues?.get(2)?.toIntOrNull() ?: 0
-                result.add(DiffLine.Header(line))
-            }
-            line.startsWith("+") -> {
-                if (inHunk) {
-                    result.add(DiffLine.Added(line.drop(1), newLine))
-                    newLine++
-                }
-            }
-            line.startsWith("-") -> {
-                if (inHunk) {
-                    result.add(DiffLine.Removed(line.drop(1), oldLine))
-                    oldLine++
-                }
-            }
-            line.startsWith(" ") -> {
-                if (inHunk) {
-                    result.add(DiffLine.Context(line.drop(1), oldLine, newLine))
-                    oldLine++
-                    newLine++
-                }
-            }
-            line.startsWith("\\") -> result.add(DiffLine.NoNewline(line))
-            else -> result.add(DiffLine.Context(line, oldLine, newLine))
-        }
-    }
-    return result
-}
-
 sealed class PatchDiffLine {
     data class Header(val text: String) : PatchDiffLine()
     data class Added(val text: String, val lineNum: Int) : PatchDiffLine()
