@@ -17,84 +17,651 @@ import java.net.URL
 import java.util.zip.ZipFile
 
 // ═══════════════════════════════════
-// AI Models — Gemini + Qwen (full list)
+// Provider + Model Catalog Foundation
 // ═══════════════════════════════════
 
-enum class AiProvider(
-    val label: String, val modelId: String, val supportsVision: Boolean,
-    val desc: String, val isGemini: Boolean = false, val isQwen: Boolean = false,
-    val supportsFiles: Boolean = false, val category: String = ""
-) {
-    // ── Gemini ──
-    GEMINI_FLASH("Gemini 2.5 Flash", "gemini-2.5-flash", true, "Fast, efficient", isGemini = true, category = "Gemini"),
-    GEMINI_PRO("Gemini 2.5 Pro", "gemini-2.5-pro", true, "Most capable", isGemini = true, category = "Gemini"),
-    GEMINI_FLASH_LITE("Gemini 2.5 Flash-Lite", "gemini-2.5-flash-lite", true, "Lightweight", isGemini = true, category = "Gemini"),
-    GEMINI_3_FLASH("Gemini 3 Flash", "gemini-3-flash-preview", true, "Next-gen fast", isGemini = true, category = "Gemini"),
-    GEMINI_31_PRO("Gemini 3.1 Pro", "gemini-3.1-pro-preview", true, "Next-gen pro", isGemini = true, category = "Gemini"),
-
-    // ── Qwen Commercial ──
-    QWEN3_MAX("Qwen3 Max", "qwen3-max", false, "Best Qwen3, complex tasks", isQwen = true, supportsFiles = true, category = "Qwen Commercial"),
-    QWEN35_PLUS("Qwen3.5 Plus", "qwen3.5-plus", true, "Text + Vision, balanced", isQwen = true, supportsFiles = true, category = "Qwen Commercial"),
-    QWEN_PLUS("Qwen Plus", "qwen-plus", false, "Smart, balanced", isQwen = true, supportsFiles = true, category = "Qwen Commercial"),
-    QWEN35_FLASH("Qwen3.5 Flash", "qwen3.5-flash", true, "Fast, multimodal", isQwen = true, supportsFiles = true, category = "Qwen Commercial"),
-    QWEN_FLASH("Qwen Flash", "qwen-flash", false, "Fastest, cheapest", isQwen = true, supportsFiles = true, category = "Qwen Commercial"),
-    QWEN_TURBO("Qwen Turbo", "qwen-turbo", false, "Fast, cost-effective", isQwen = true, supportsFiles = true, category = "Qwen Commercial"),
-    QWEN_LONG("Qwen Long", "qwen-long", false, "10M context window", isQwen = true, supportsFiles = true, category = "Qwen Commercial"),
-
-    // ── Qwen Coder ──
-    QWEN3_CODER_PLUS("Qwen3 Coder Plus", "qwen3-coder-plus", false, "Code + tool calling", isQwen = true, supportsFiles = true, category = "Qwen Coder"),
-    QWEN3_CODER_FLASH("Qwen3 Coder Flash", "qwen3-coder-flash", false, "Fast code generation", isQwen = true, supportsFiles = true, category = "Qwen Coder"),
-
-    // ── Qwen Vision ──
-    QWEN3_VL_PLUS("Qwen3 VL Plus", "qwen3-vl-plus", true, "High-res vision", isQwen = true, supportsFiles = true, category = "Qwen Vision"),
-    QWEN3_VL_FLASH("Qwen3 VL Flash", "qwen3-vl-flash", true, "Fast vision", isQwen = true, supportsFiles = true, category = "Qwen Vision"),
-    QWEN_VL_PLUS("Qwen VL Plus", "qwen-vl-plus", true, "Vision + long text", isQwen = true, supportsFiles = true, category = "Qwen Vision"),
-    QWEN_VL_MAX("Qwen VL Max", "qwen-vl-max", true, "Best vision model", isQwen = true, supportsFiles = true, category = "Qwen Vision"),
-    QWEN_OCR("Qwen OCR", "qwen-ocr-latest", true, "Text extraction from images", isQwen = true, supportsFiles = true, category = "Qwen Vision"),
-
-    // ── Qwen Reasoning ──
-    QWQ_PLUS("QwQ Plus", "qwq-plus", false, "Deep reasoning", isQwen = true, supportsFiles = true, category = "Qwen Reasoning"),
-    QWEN_MATH_PLUS("Qwen Math Plus", "qwen-math-plus", false, "Math problem solving", isQwen = true, supportsFiles = true, category = "Qwen Reasoning"),
-    QWEN_MATH_TURBO("Qwen Math Turbo", "qwen-math-turbo", false, "Fast math", isQwen = true, supportsFiles = true, category = "Qwen Reasoning"),
-
-    // ── Qwen Open-Source ──
-    QWEN3_235B("Qwen3 235B-A22B", "qwen3-235b-a22b", false, "Largest open MoE", isQwen = true, supportsFiles = true, category = "Qwen Open-Source"),
-    QWEN3_32B("Qwen3 32B", "qwen3-32b", false, "Dense 32B", isQwen = true, supportsFiles = true, category = "Qwen Open-Source"),
-    QWEN3_14B("Qwen3 14B", "qwen3-14b", false, "Dense 14B", isQwen = true, supportsFiles = true, category = "Qwen Open-Source"),
-    QWEN3_8B("Qwen3 8B", "qwen3-8b", false, "Dense 8B", isQwen = true, supportsFiles = true, category = "Qwen Open-Source"),
-    QWEN3_4B("Qwen3 4B", "qwen3-4b", false, "Dense 4B", isQwen = true, supportsFiles = true, category = "Qwen Open-Source"),
-    QWEN25_72B("Qwen2.5 72B", "qwen2.5-72b-instruct", false, "Large dense", isQwen = true, supportsFiles = true, category = "Qwen Open-Source"),
-    QWEN25_32B("Qwen2.5 32B", "qwen2.5-32b-instruct", false, "Medium dense", isQwen = true, supportsFiles = true, category = "Qwen Open-Source"),
+enum class AiVendor(val label: String) {
+    GOOGLE("Google"),
+    ALIBABA("Alibaba Cloud"),
+    OPENAI("OpenAI"),
+    XAI("xAI"),
+    MOONSHOT("Moonshot AI")
 }
 
-data class ChatMessage(val role: String, val content: String, val imageBase64: String? = null, val fileContent: String? = null)
+enum class AiProviderType(
+    val storageKey: String,
+    val label: String,
+    val vendor: AiVendor,
+    val defaultBaseUrl: String,
+    val supportsProxy: Boolean = false,
+    val supportsRegion: Boolean = false
+) {
+    GEMINI("gemini", "Gemini", AiVendor.GOOGLE, "https://generativelanguage.googleapis.com/v1beta/models", supportsProxy = true),
+    QWEN("qwen", "Qwen", AiVendor.ALIBABA, "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", supportsRegion = true),
+    OPENAI("openai", "OpenAI / ChatGPT", AiVendor.OPENAI, "https://api.openai.com/v1"),
+    XAI("xai", "xAI / Grok", AiVendor.XAI, "https://api.x.ai/v1"),
+    KIMI("kimi", "Kimi", AiVendor.MOONSHOT, "https://api.moonshot.ai/v1")
+}
+
+enum class AiCapability(val storageKey: String) {
+    CHAT("chat"),
+    CODING("coding"),
+    IMAGE_INPUT("image_input"),
+    IMAGE_OUTPUT("image_output"),
+    VIDEO_INPUT("video_input"),
+    VIDEO_OUTPUT("video_output"),
+    FILES("files"),
+    REASONING("reasoning"),
+    LONG_CONTEXT("long_context")
+}
+
+data class AiModelSpec(
+    val key: String,
+    val providerType: AiProviderType,
+    val modelId: String,
+    val label: String,
+    val description: String,
+    val category: String,
+    val capabilities: Set<AiCapability> = setOf(AiCapability.CHAT),
+    val enabledByDefault: Boolean = true
+) {
+    val supportsVision: Boolean get() = AiCapability.IMAGE_INPUT in capabilities || AiCapability.VIDEO_INPUT in capabilities
+    val supportsFiles: Boolean get() = AiCapability.FILES in capabilities
+    val supportsCoding: Boolean get() = AiCapability.CODING in capabilities
+    val supportsImageGeneration: Boolean get() = AiCapability.IMAGE_OUTPUT in capabilities
+    val supportsVideoGeneration: Boolean get() = AiCapability.VIDEO_OUTPUT in capabilities
+}
+
+enum class AiProvider(
+    val spec: AiModelSpec
+) {
+    GEMINI_FLASH(
+        AiModelSpec(
+            key = "gemini_flash",
+            providerType = AiProviderType.GEMINI,
+            modelId = "gemini-2.5-flash",
+            label = "Gemini 2.5 Flash",
+            description = "Fast, efficient",
+            category = "Gemini",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.IMAGE_INPUT, AiCapability.FILES)
+        )
+    ),
+    GEMINI_PRO(
+        AiModelSpec(
+            key = "gemini_pro",
+            providerType = AiProviderType.GEMINI,
+            modelId = "gemini-2.5-pro",
+            label = "Gemini 2.5 Pro",
+            description = "Most capable",
+            category = "Gemini",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.IMAGE_INPUT, AiCapability.FILES, AiCapability.REASONING, AiCapability.LONG_CONTEXT)
+        )
+    ),
+    GEMINI_FLASH_LITE(
+        AiModelSpec(
+            key = "gemini_flash_lite",
+            providerType = AiProviderType.GEMINI,
+            modelId = "gemini-2.5-flash-lite",
+            label = "Gemini 2.5 Flash-Lite",
+            description = "Lightweight",
+            category = "Gemini",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.IMAGE_INPUT)
+        )
+    ),
+    GEMINI_3_FLASH(
+        AiModelSpec(
+            key = "gemini_3_flash",
+            providerType = AiProviderType.GEMINI,
+            modelId = "gemini-3-flash-preview",
+            label = "Gemini 3 Flash",
+            description = "Next-gen fast",
+            category = "Gemini",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.IMAGE_INPUT, AiCapability.FILES)
+        )
+    ),
+    GEMINI_31_PRO(
+        AiModelSpec(
+            key = "gemini_31_pro",
+            providerType = AiProviderType.GEMINI,
+            modelId = "gemini-3.1-pro-preview",
+            label = "Gemini 3.1 Pro",
+            description = "Next-gen pro",
+            category = "Gemini",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.IMAGE_INPUT, AiCapability.FILES, AiCapability.REASONING, AiCapability.LONG_CONTEXT)
+        )
+    ),
+    QWEN3_MAX(
+        AiModelSpec(
+            key = "qwen3_max",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3-max",
+            label = "Qwen3 Max",
+            description = "Best Qwen3, complex tasks",
+            category = "Qwen Commercial",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES, AiCapability.REASONING, AiCapability.LONG_CONTEXT)
+        )
+    ),
+    QWEN35_PLUS(
+        AiModelSpec(
+            key = "qwen35_plus",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3.5-plus",
+            label = "Qwen3.5 Plus",
+            description = "Text + Vision, balanced",
+            category = "Qwen Commercial",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.IMAGE_INPUT, AiCapability.FILES)
+        )
+    ),
+    QWEN_PLUS(
+        AiModelSpec(
+            key = "qwen_plus",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen-plus",
+            label = "Qwen Plus",
+            description = "Smart, balanced",
+            category = "Qwen Commercial",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES)
+        )
+    ),
+    QWEN35_FLASH(
+        AiModelSpec(
+            key = "qwen35_flash",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3.5-flash",
+            label = "Qwen3.5 Flash",
+            description = "Fast, multimodal",
+            category = "Qwen Commercial",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.IMAGE_INPUT, AiCapability.FILES)
+        )
+    ),
+    QWEN_FLASH(
+        AiModelSpec(
+            key = "qwen_flash",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen-flash",
+            label = "Qwen Flash",
+            description = "Fastest, cheapest",
+            category = "Qwen Commercial",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.FILES)
+        )
+    ),
+    QWEN_TURBO(
+        AiModelSpec(
+            key = "qwen_turbo",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen-turbo",
+            label = "Qwen Turbo",
+            description = "Fast, cost-effective",
+            category = "Qwen Commercial",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.FILES)
+        )
+    ),
+    QWEN_LONG(
+        AiModelSpec(
+            key = "qwen_long",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen-long",
+            label = "Qwen Long",
+            description = "10M context window",
+            category = "Qwen Commercial",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.FILES, AiCapability.LONG_CONTEXT)
+        )
+    ),
+    QWEN3_CODER_PLUS(
+        AiModelSpec(
+            key = "qwen3_coder_plus",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3-coder-plus",
+            label = "Qwen3 Coder Plus",
+            description = "Code + tool calling",
+            category = "Qwen Coder",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES, AiCapability.REASONING)
+        )
+    ),
+    QWEN3_CODER_FLASH(
+        AiModelSpec(
+            key = "qwen3_coder_flash",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3-coder-flash",
+            label = "Qwen3 Coder Flash",
+            description = "Fast code generation",
+            category = "Qwen Coder",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES)
+        )
+    ),
+    QWEN3_VL_PLUS(
+        AiModelSpec(
+            key = "qwen3_vl_plus",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3-vl-plus",
+            label = "Qwen3 VL Plus",
+            description = "High-res vision",
+            category = "Qwen Vision",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.IMAGE_INPUT, AiCapability.FILES)
+        )
+    ),
+    QWEN3_VL_FLASH(
+        AiModelSpec(
+            key = "qwen3_vl_flash",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3-vl-flash",
+            label = "Qwen3 VL Flash",
+            description = "Fast vision",
+            category = "Qwen Vision",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.IMAGE_INPUT, AiCapability.FILES)
+        )
+    ),
+    QWEN_VL_PLUS(
+        AiModelSpec(
+            key = "qwen_vl_plus",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen-vl-plus",
+            label = "Qwen VL Plus",
+            description = "Vision + long text",
+            category = "Qwen Vision",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.IMAGE_INPUT, AiCapability.FILES, AiCapability.LONG_CONTEXT)
+        )
+    ),
+    QWEN_VL_MAX(
+        AiModelSpec(
+            key = "qwen_vl_max",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen-vl-max",
+            label = "Qwen VL Max",
+            description = "Best vision model",
+            category = "Qwen Vision",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.IMAGE_INPUT, AiCapability.FILES, AiCapability.REASONING)
+        )
+    ),
+    QWEN_OCR(
+        AiModelSpec(
+            key = "qwen_ocr",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen-ocr-latest",
+            label = "Qwen OCR",
+            description = "Text extraction from images",
+            category = "Qwen Vision",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.IMAGE_INPUT, AiCapability.FILES)
+        )
+    ),
+    QWQ_PLUS(
+        AiModelSpec(
+            key = "qwq_plus",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwq-plus",
+            label = "QwQ Plus",
+            description = "Deep reasoning",
+            category = "Qwen Reasoning",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.FILES, AiCapability.REASONING)
+        )
+    ),
+    QWEN_MATH_PLUS(
+        AiModelSpec(
+            key = "qwen_math_plus",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen-math-plus",
+            label = "Qwen Math Plus",
+            description = "Math problem solving",
+            category = "Qwen Reasoning",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.FILES, AiCapability.REASONING)
+        )
+    ),
+    QWEN_MATH_TURBO(
+        AiModelSpec(
+            key = "qwen_math_turbo",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen-math-turbo",
+            label = "Qwen Math Turbo",
+            description = "Fast math",
+            category = "Qwen Reasoning",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.FILES, AiCapability.REASONING)
+        )
+    ),
+    QWEN3_235B(
+        AiModelSpec(
+            key = "qwen3_235b",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3-235b-a22b",
+            label = "Qwen3 235B-A22B",
+            description = "Largest open MoE",
+            category = "Qwen Open-Source",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES)
+        )
+    ),
+    QWEN3_32B(
+        AiModelSpec(
+            key = "qwen3_32b",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3-32b",
+            label = "Qwen3 32B",
+            description = "Dense 32B",
+            category = "Qwen Open-Source",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES)
+        )
+    ),
+    QWEN3_14B(
+        AiModelSpec(
+            key = "qwen3_14b",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3-14b",
+            label = "Qwen3 14B",
+            description = "Dense 14B",
+            category = "Qwen Open-Source",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES)
+        )
+    ),
+    QWEN3_8B(
+        AiModelSpec(
+            key = "qwen3_8b",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3-8b",
+            label = "Qwen3 8B",
+            description = "Dense 8B",
+            category = "Qwen Open-Source",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES)
+        )
+    ),
+    QWEN3_4B(
+        AiModelSpec(
+            key = "qwen3_4b",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen3-4b",
+            label = "Qwen3 4B",
+            description = "Dense 4B",
+            category = "Qwen Open-Source",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES)
+        )
+    ),
+    QWEN25_72B(
+        AiModelSpec(
+            key = "qwen25_72b",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen2.5-72b-instruct",
+            label = "Qwen2.5 72B",
+            description = "Large dense",
+            category = "Qwen Open-Source",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES, AiCapability.LONG_CONTEXT)
+        )
+    ),
+    QWEN25_32B(
+        AiModelSpec(
+            key = "qwen25_32b",
+            providerType = AiProviderType.QWEN,
+            modelId = "qwen2.5-32b-instruct",
+            label = "Qwen2.5 32B",
+            description = "Medium dense",
+            category = "Qwen Open-Source",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES)
+        )
+    );
+
+    val label: String get() = spec.label
+    val modelId: String get() = spec.modelId
+    val supportsVision: Boolean get() = spec.supportsVision
+    val desc: String get() = spec.description
+    val supportsFiles: Boolean get() = spec.supportsFiles
+    val category: String get() = spec.category
+    val vendor: AiVendor get() = spec.providerType.vendor
+    val providerType: AiProviderType get() = spec.providerType
+    val isGemini: Boolean get() = providerType == AiProviderType.GEMINI
+    val isQwen: Boolean get() = providerType == AiProviderType.QWEN
+    val supportsCoding: Boolean get() = spec.supportsCoding
+    val supportsImageGeneration: Boolean get() = spec.supportsImageGeneration
+    val supportsVideoGeneration: Boolean get() = spec.supportsVideoGeneration
+
+    companion object {
+        fun fromStoredValue(value: String?): AiProvider? {
+            if (value.isNullOrBlank()) return null
+            return entries.firstOrNull { it.name.equals(value, ignoreCase = true) }
+                ?: entries.firstOrNull { it.modelId.equals(value, ignoreCase = true) }
+                ?: entries.firstOrNull { it.spec.key.equals(value, ignoreCase = true) }
+        }
+    }
+}
+
+object AiModelCatalog {
+    val allModels: List<AiModelSpec> = AiProvider.entries.map { it.spec } + listOf(
+        AiModelSpec(
+            key = "openai_gpt5",
+            providerType = AiProviderType.OPENAI,
+            modelId = "gpt-5",
+            label = "GPT-5",
+            description = "General-purpose flagship",
+            category = "OpenAI",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.IMAGE_INPUT, AiCapability.FILES, AiCapability.REASONING)
+        ),
+        AiModelSpec(
+            key = "openai_gpt4o",
+            providerType = AiProviderType.OPENAI,
+            modelId = "gpt-4o",
+            label = "GPT-4o",
+            description = "Multimodal flagship",
+            category = "OpenAI",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.IMAGE_INPUT, AiCapability.FILES)
+        ),
+        AiModelSpec(
+            key = "xai_grok_2",
+            providerType = AiProviderType.XAI,
+            modelId = "grok-2-latest",
+            label = "Grok 2",
+            description = "xAI assistant model",
+            category = "xAI",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.IMAGE_INPUT, AiCapability.FILES)
+        ),
+        AiModelSpec(
+            key = "kimi_k2",
+            providerType = AiProviderType.KIMI,
+            modelId = "kimi-k2-0905-preview",
+            label = "Kimi K2",
+            description = "Long-context Moonshot model",
+            category = "Kimi",
+            capabilities = setOf(AiCapability.CHAT, AiCapability.CODING, AiCapability.FILES, AiCapability.LONG_CONTEXT)
+        )
+    )
+
+    fun byProvider(providerType: AiProviderType): List<AiModelSpec> = allModels.filter { it.providerType == providerType }
+    fun findById(modelId: String?): AiModelSpec? = allModels.firstOrNull { it.modelId == modelId }
+}
+
+data class AiProviderConfig(
+    val providerType: AiProviderType,
+    val apiKey: String = "",
+    val baseUrl: String = "",
+    val region: String = "",
+    val enabled: Boolean = false,
+    val defaultChatModelId: String = "",
+    val defaultCodingModelId: String = "",
+    val defaultImageModelId: String = "",
+    val defaultVideoModelId: String = "",
+    val extra: Map<String, String> = emptyMap()
+) {
+    val resolvedBaseUrl: String get() = baseUrl.ifBlank { providerType.defaultBaseUrl }
+}
+
+object AiConfigStore {
+    private const val PREFS = "ai_provider_prefs"
+    private const val LEGACY_PREFS = "gemini_prefs"
+    private const val LEGACY_KEY_GEMINI = "api_key"
+    private const val LEGACY_KEY_PROXY = "proxy_url"
+    private const val LEGACY_KEY_QWEN = "qwen_api_key"
+    private const val LEGACY_KEY_QWEN_REGION = "qwen_region"
+
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun legacyPrefs(context: Context) = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
+    private fun keyPrefix(providerType: AiProviderType) = "provider_${providerType.storageKey}_"
+
+    private fun defaultRegion(providerType: AiProviderType): String = when (providerType) {
+        AiProviderType.QWEN -> "intl"
+        else -> ""
+    }
+
+    private fun legacyConfig(context: Context, providerType: AiProviderType): AiProviderConfig = when (providerType) {
+        AiProviderType.GEMINI -> AiProviderConfig(
+            providerType = providerType,
+            apiKey = legacyPrefs(context).getString(LEGACY_KEY_GEMINI, "") ?: "",
+            baseUrl = legacyPrefs(context).getString(LEGACY_KEY_PROXY, "") ?: "",
+            enabled = (legacyPrefs(context).getString(LEGACY_KEY_GEMINI, "") ?: "").isNotBlank()
+        )
+        AiProviderType.QWEN -> AiProviderConfig(
+            providerType = providerType,
+            apiKey = legacyPrefs(context).getString(LEGACY_KEY_QWEN, "") ?: "",
+            region = legacyPrefs(context).getString(LEGACY_KEY_QWEN_REGION, "intl") ?: "intl",
+            enabled = (legacyPrefs(context).getString(LEGACY_KEY_QWEN, "") ?: "").isNotBlank()
+        )
+        else -> AiProviderConfig(providerType = providerType)
+    }
+
+    fun getConfig(context: Context, providerType: AiProviderType): AiProviderConfig {
+        val pref = prefs(context)
+        val prefix = keyPrefix(providerType)
+        val storedKey = pref.getString(prefix + "api_key", null)
+        val storedBaseUrl = pref.getString(prefix + "base_url", null)
+        val storedRegion = pref.getString(prefix + "region", null)
+        val enabled = pref.getBoolean(prefix + "enabled", false)
+        if (storedKey == null && storedBaseUrl == null && storedRegion == null && !pref.contains(prefix + "enabled")) {
+            return legacyConfig(context, providerType)
+        }
+        return AiProviderConfig(
+            providerType = providerType,
+            apiKey = storedKey ?: "",
+            baseUrl = storedBaseUrl ?: "",
+            region = storedRegion ?: defaultRegion(providerType),
+            enabled = enabled || (storedKey?.isNotBlank() == true),
+            defaultChatModelId = pref.getString(prefix + "default_chat_model", "") ?: "",
+            defaultCodingModelId = pref.getString(prefix + "default_coding_model", "") ?: "",
+            defaultImageModelId = pref.getString(prefix + "default_image_model", "") ?: "",
+            defaultVideoModelId = pref.getString(prefix + "default_video_model", "") ?: ""
+        )
+    }
+
+    fun saveConfig(context: Context, config: AiProviderConfig) {
+        val prefix = keyPrefix(config.providerType)
+        prefs(context).edit()
+            .putString(prefix + "api_key", config.apiKey.trim())
+            .putString(prefix + "base_url", config.baseUrl.trim().trimEnd('/'))
+            .putString(prefix + "region", config.region.ifBlank { defaultRegion(config.providerType) })
+            .putBoolean(prefix + "enabled", config.enabled || config.apiKey.isNotBlank())
+            .putString(prefix + "default_chat_model", config.defaultChatModelId)
+            .putString(prefix + "default_coding_model", config.defaultCodingModelId)
+            .putString(prefix + "default_image_model", config.defaultImageModelId)
+            .putString(prefix + "default_video_model", config.defaultVideoModelId)
+            .apply()
+    }
+
+    fun hasApiKey(context: Context, providerType: AiProviderType): Boolean = getConfig(context, providerType).apiKey.isNotBlank()
+    fun getApiKey(context: Context, providerType: AiProviderType): String = getConfig(context, providerType).apiKey
+    fun saveApiKey(context: Context, providerType: AiProviderType, apiKey: String) = saveConfig(context, getConfig(context, providerType).copy(apiKey = apiKey.trim(), enabled = apiKey.isNotBlank()))
+    fun getBaseUrl(context: Context, providerType: AiProviderType): String = getConfig(context, providerType).baseUrl
+    fun saveBaseUrl(context: Context, providerType: AiProviderType, baseUrl: String) = saveConfig(context, getConfig(context, providerType).copy(baseUrl = baseUrl.trim().trimEnd('/')))
+    fun getRegion(context: Context, providerType: AiProviderType): String = getConfig(context, providerType).region.ifBlank { defaultRegion(providerType) }
+    fun saveRegion(context: Context, providerType: AiProviderType, region: String) = saveConfig(context, getConfig(context, providerType).copy(region = region))
+    fun saveDefaultChatModel(context: Context, providerType: AiProviderType, modelId: String) = saveConfig(context, getConfig(context, providerType).copy(defaultChatModelId = modelId))
+    fun saveDefaultCodingModel(context: Context, providerType: AiProviderType, modelId: String) = saveConfig(context, getConfig(context, providerType).copy(defaultCodingModelId = modelId))
+    fun saveDefaultImageModel(context: Context, providerType: AiProviderType, modelId: String) = saveConfig(context, getConfig(context, providerType).copy(defaultImageModelId = modelId))
+    fun saveDefaultVideoModel(context: Context, providerType: AiProviderType, modelId: String) = saveConfig(context, getConfig(context, providerType).copy(defaultVideoModelId = modelId))
+}
+
+data class MessageAttachment(
+    val kind: String,
+    val name: String? = null,
+    val mimeType: String? = null,
+    val textContent: String? = null,
+    val base64Data: String? = null,
+    val uri: String? = null,
+    val metadata: Map<String, String> = emptyMap()
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("kind", kind)
+        putOpt("name", name)
+        putOpt("mimeType", mimeType)
+        putOpt("textContent", textContent)
+        putOpt("base64Data", base64Data)
+        putOpt("uri", uri)
+        if (metadata.isNotEmpty()) {
+            put("metadata", JSONObject().apply {
+                metadata.forEach { (k, v) -> put(k, v) }
+            })
+        }
+    }
+
+    companion object {
+        fun fromJson(json: JSONObject): MessageAttachment = MessageAttachment(
+            kind = json.optString("kind", "file"),
+            name = json.optString("name").takeIf { it.isNotBlank() },
+            mimeType = json.optString("mimeType").takeIf { it.isNotBlank() },
+            textContent = json.optString("textContent").takeIf { it.isNotBlank() },
+            base64Data = json.optString("base64Data").takeIf { it.isNotBlank() },
+            uri = json.optString("uri").takeIf { it.isNotBlank() },
+            metadata = json.optJSONObject("metadata")?.let { meta ->
+                meta.keys().asSequence().associateWith { key -> meta.optString(key, "") }
+            } ?: emptyMap()
+        )
+    }
+}
+
+data class ChatMessage(
+    val role: String,
+    val content: String,
+    val attachments: List<MessageAttachment> = emptyList(),
+    val providerType: String? = null,
+    val vendor: String? = null,
+    val modelId: String? = null,
+    val modelLabel: String? = null,
+    val createdAt: Long? = null,
+    val imageBase64: String? = attachments.firstOrNull { it.kind == "image" }?.base64Data,
+    val fileContent: String? = attachments.firstOrNull { it.kind == "file" || it.kind == "archive" }?.textContent
+) {
+    companion object {
+        fun legacy(
+            role: String,
+            content: String,
+            imageBase64: String? = null,
+            fileContent: String? = null,
+            providerType: String? = null,
+            vendor: String? = null,
+            modelId: String? = null,
+            modelLabel: String? = null,
+            createdAt: Long? = null
+        ): ChatMessage {
+            val attachments = buildList {
+                if (!imageBase64.isNullOrBlank()) add(MessageAttachment(kind = "image", mimeType = "image/jpeg", base64Data = imageBase64))
+                if (!fileContent.isNullOrBlank()) add(MessageAttachment(kind = "file", textContent = fileContent))
+            }
+            return ChatMessage(role, content, attachments, providerType, vendor, modelId, modelLabel, createdAt)
+        }
+    }
+
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("role", role)
+        put("content", content)
+        putOpt("providerType", providerType)
+        putOpt("vendor", vendor)
+        putOpt("modelId", modelId)
+        putOpt("modelLabel", modelLabel)
+        if (createdAt != null) put("createdAt", createdAt)
+        if (attachments.isNotEmpty()) {
+            put("attachments", JSONArray().apply { attachments.forEach { put(it.toJson()) } })
+        }
+        if (imageBase64 != null) put("imageBase64", imageBase64)
+        if (fileContent != null) put("fileContent", fileContent)
+    }
+}
 
 // ═══════════════════════════════════
-// API Key Storage
+// Legacy compatibility facade
 // ═══════════════════════════════════
 
 object GeminiKeyStore {
-    private const val PREFS = "gemini_prefs"
-    private const val KEY_GEMINI = "api_key"
-    private const val KEY_PROXY = "proxy_url"
-    private const val KEY_QWEN = "qwen_api_key"
-    private const val KEY_QWEN_REGION = "qwen_region"
-
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    fun getKey(context: Context): String = prefs(context).getString(KEY_GEMINI, "") ?: ""
-    fun saveKey(context: Context, key: String) = prefs(context).edit().putString(KEY_GEMINI, key.trim()).apply()
-    fun hasKey(context: Context): Boolean = getKey(context).isNotBlank()
-
-    fun getProxy(context: Context): String = prefs(context).getString(KEY_PROXY, "") ?: ""
-    fun saveProxy(context: Context, url: String) = prefs(context).edit().putString(KEY_PROXY, url.trim().trimEnd('/')).apply()
-
-    fun getQwenKey(context: Context): String = prefs(context).getString(KEY_QWEN, "") ?: ""
-    fun saveQwenKey(context: Context, key: String) = prefs(context).edit().putString(KEY_QWEN, key.trim()).apply()
-    fun hasQwenKey(context: Context): Boolean = getQwenKey(context).isNotBlank()
-
-    fun getQwenRegion(context: Context): String = prefs(context).getString(KEY_QWEN_REGION, "intl") ?: "intl"
-    fun saveQwenRegion(context: Context, region: String) = prefs(context).edit().putString(KEY_QWEN_REGION, region).apply()
+    fun getKey(context: Context): String = AiConfigStore.getApiKey(context, AiProviderType.GEMINI)
+    fun saveKey(context: Context, key: String) = AiConfigStore.saveApiKey(context, AiProviderType.GEMINI, key)
+    fun hasKey(context: Context): Boolean = AiConfigStore.hasApiKey(context, AiProviderType.GEMINI)
+    fun getProxy(context: Context): String = AiConfigStore.getBaseUrl(context, AiProviderType.GEMINI)
+    fun saveProxy(context: Context, url: String) = AiConfigStore.saveBaseUrl(context, AiProviderType.GEMINI, url)
+    fun getQwenKey(context: Context): String = AiConfigStore.getApiKey(context, AiProviderType.QWEN)
+    fun saveQwenKey(context: Context, key: String) = AiConfigStore.saveApiKey(context, AiProviderType.QWEN, key)
+    fun hasQwenKey(context: Context): Boolean = AiConfigStore.hasApiKey(context, AiProviderType.QWEN)
+    fun getQwenRegion(context: Context): String = AiConfigStore.getRegion(context, AiProviderType.QWEN)
+    fun saveQwenRegion(context: Context, region: String) = AiConfigStore.saveRegion(context, AiProviderType.QWEN, region)
 }
 
 // ═══════════════════════════════════
@@ -118,22 +685,69 @@ object AiManager {
         qwenKey: String = "", qwenRegion: String = "intl",
         onChunk: (String) -> Unit
     ): String = withContext(Dispatchers.IO) {
-        when {
-            provider.isGemini -> {
+        when (provider.providerType) {
+            AiProviderType.GEMINI -> {
                 if (geminiKey.isBlank()) throw Exception("Enter Gemini API key in AI settings")
                 doChatGemini(provider.modelId, messages, geminiKey, proxyUrl, onChunk)
             }
-            provider.isQwen -> {
+            AiProviderType.QWEN -> {
                 if (qwenKey.isBlank()) throw Exception("Enter Qwen API key in AI settings")
                 doChatQwen(provider.modelId, messages, provider.supportsVision, qwenKey, qwenRegion, onChunk)
             }
-            else -> throw Exception("Unknown provider")
+            AiProviderType.OPENAI, AiProviderType.XAI, AiProviderType.KIMI -> {
+                val apiKey = openRouterKey.ifBlank {
+                    when (provider.providerType) {
+                        AiProviderType.OPENAI -> geminiKey
+                        AiProviderType.XAI -> qwenKey
+                        AiProviderType.KIMI -> proxyUrl
+                        else -> ""
+                    }
+                }
+                if (apiKey.isBlank()) throw Exception("Enter ${provider.providerType.label} API key in AI settings")
+                doChatOpenAiCompatible(provider, messages, apiKey, onChunk)
+            }
         }
     }
 
-    // ═══════════════════════════════════
-    // Qwen (OpenAI-compatible streaming)
-    // ═══════════════════════════════════
+    fun createGeneratedImageAttachment(prompt: String, providerType: AiProviderType, modelId: String): MessageAttachment {
+        val svg = """
+            <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+              <defs>
+                <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#111827"/>
+                  <stop offset="100%" stop-color="#1f2937"/>
+                </linearGradient>
+              </defs>
+              <rect width="1024" height="1024" rx="36" fill="url(#bg)"/>
+              <circle cx="280" cy="260" r="120" fill="#22c55e" fill-opacity="0.18"/>
+              <circle cx="760" cy="760" r="170" fill="#3b82f6" fill-opacity="0.18"/>
+              <text x="80" y="150" fill="#f8fafc" font-size="48" font-family="sans-serif" font-weight="700">Generated image preview</text>
+              <text x="80" y="230" fill="#94a3b8" font-size="28" font-family="sans-serif">Provider: ${escapeSvg(providerType.label)}</text>
+              <text x="80" y="275" fill="#94a3b8" font-size="28" font-family="sans-serif">Model: ${escapeSvg(modelId)}</text>
+              <foreignObject x="80" y="340" width="864" height="540">
+                <div xmlns="http://www.w3.org/1999/xhtml" style="color:#e2e8f0;font-size:34px;line-height:1.35;font-family:sans-serif;white-space:pre-wrap;">${escapeSvg(prompt)}</div>
+              </foreignObject>
+            </svg>
+        """.trimIndent()
+        val base64 = Base64.encodeToString(svg.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+        return MessageAttachment(
+            kind = "generated_image",
+            name = "generated-${System.currentTimeMillis()}.svg",
+            mimeType = "image/svg+xml",
+            base64Data = base64,
+            metadata = mapOf("prompt" to prompt, "providerType" to providerType.storageKey, "modelId" to modelId)
+        )
+    }
+
+    fun createGeneratedVideoAttachment(prompt: String, providerType: AiProviderType, modelId: String): MessageAttachment {
+        return MessageAttachment(
+            kind = "generated_video",
+            name = "video-request-${System.currentTimeMillis()}",
+            mimeType = "video/mp4",
+            textContent = "Video request prepared for: $prompt",
+            metadata = mapOf("prompt" to prompt, "providerType" to providerType.storageKey, "modelId" to modelId, "status" to "placeholder")
+        )
+    }
 
     private fun doChatQwen(
         modelId: String, messages: List<ChatMessage>, supportsVision: Boolean,
@@ -154,9 +768,15 @@ object AiManager {
             when {
                 msg.imageBase64 != null && supportsVision -> {
                     val content = JSONArray()
-                    content.put(JSONObject().put("type", "text").put("text", msg.content))
-                    content.put(JSONObject().put("type", "image_url").put("image_url",
-                        JSONObject().put("url", "data:image/jpeg;base64,${msg.imageBase64}")))
+                    if (msg.content.isNotBlank()) content.put(JSONObject().put("type", "text").put("text", msg.content))
+                    msg.attachments.filter { it.kind == "image" && !it.base64Data.isNullOrBlank() }.forEach { attachment ->
+                        content.put(
+                            JSONObject().put("type", "image_url").put(
+                                "image_url",
+                                JSONObject().put("url", "data:${attachment.mimeType ?: "image/jpeg"};base64,${attachment.base64Data}")
+                            )
+                        )
+                    }
                     msgs.put(JSONObject().put("role", msg.role).put("content", content))
                 }
                 msg.fileContent != null -> {
@@ -196,10 +816,6 @@ object AiManager {
         return sb.toString()
     }
 
-    // ═══════════════════════════════════
-    // Gemini (SSE streaming)
-    // ═══════════════════════════════════
-
     private fun doChatGemini(
         modelId: String, messages: List<ChatMessage>,
         apiKey: String, proxyUrl: String, onChunk: (String) -> Unit
@@ -217,10 +833,19 @@ object AiManager {
             val role = if (msg.role == "assistant") "model" else "user"
             val parts = JSONArray()
             if (msg.content.isNotBlank()) parts.put(JSONObject().put("text", msg.content))
-            if (msg.fileContent != null) parts.put(JSONObject().put("text", "\n--- File content ---\n${msg.fileContent}"))
-            if (msg.imageBase64 != null) {
-                parts.put(JSONObject().put("inlineData",
-                    JSONObject().put("mimeType", "image/jpeg").put("data", msg.imageBase64)))
+            msg.attachments.filter { it.kind == "file" || it.kind == "archive" }.forEach { attachment ->
+                if (!attachment.textContent.isNullOrBlank()) {
+                    val label = attachment.name?.let { "\n--- ${it} ---\n" } ?: "\n--- File content ---\n"
+                    parts.put(JSONObject().put("text", "$label${attachment.textContent}"))
+                }
+            }
+            msg.attachments.filter { it.kind == "image" && !it.base64Data.isNullOrBlank() }.forEach { attachment ->
+                parts.put(
+                    JSONObject().put(
+                        "inlineData",
+                        JSONObject().put("mimeType", attachment.mimeType ?: "image/jpeg").put("data", attachment.base64Data)
+                    )
+                )
             }
             contents.put(JSONObject().put("role", role).put("parts", parts))
         }
@@ -271,9 +896,92 @@ object AiManager {
         return sb.toString()
     }
 
-    // ═══════════════════════════════════
-    // ZIP Archive Support (up to 60 files)
-    // ═══════════════════════════════════
+    private fun doChatOpenAiCompatible(
+        provider: AiProvider,
+        messages: List<ChatMessage>,
+        apiKey: String,
+        onChunk: (String) -> Unit
+    ): String {
+        val baseUrl = provider.providerType.defaultBaseUrl.trimEnd('/')
+        val conn = (URL("$baseUrl/chat/completions").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Authorization", "Bearer $apiKey")
+            doOutput = true
+            connectTimeout = 30000
+            readTimeout = 120000
+        }
+
+        val msgs = JSONArray().put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
+        messages.forEach { msg ->
+            val imageAttachments = msg.attachments.filter { (it.kind == "image" || it.kind == "generated_image") && !it.base64Data.isNullOrBlank() }
+            val fileAttachments = msg.attachments.filter { it.kind == "file" || it.kind == "archive" }
+            if (imageAttachments.isNotEmpty()) {
+                val content = JSONArray()
+                if (msg.content.isNotBlank()) content.put(JSONObject().put("type", "text").put("text", msg.content))
+                imageAttachments.forEach { attachment ->
+                    content.put(
+                        JSONObject().put("type", "image_url").put(
+                            "image_url",
+                            JSONObject().put("url", "data:${attachment.mimeType ?: "image/jpeg"};base64,${attachment.base64Data}")
+                        )
+                    )
+                }
+                if (fileAttachments.isNotEmpty()) {
+                    val combined = fileAttachments.joinToString("\n\n") { attachment ->
+                        val label = attachment.name ?: "Attached file"
+                        "$label\n${attachment.textContent.orEmpty()}"
+                    }
+                    content.put(JSONObject().put("type", "text").put("text", combined))
+                }
+                msgs.put(JSONObject().put("role", msg.role).put("content", content))
+            } else {
+                val fileText = fileAttachments.joinToString("\n\n") { attachment ->
+                    val label = attachment.name ?: "Attached file"
+                    "$label\n${attachment.textContent.orEmpty()}"
+                }
+                val mergedText = listOf(msg.content.takeIf { it.isNotBlank() }, fileText.takeIf { it.isNotBlank() }).filterNotNull().joinToString("\n\n")
+                msgs.put(JSONObject().put("role", msg.role).put("content", mergedText))
+            }
+        }
+
+        val body = JSONObject().put("model", provider.modelId).put("messages", msgs).put("stream", true).toString()
+        conn.outputStream.use { it.write(body.toByteArray()) }
+
+        val code = conn.responseCode
+        if (code !in 200..299) {
+            val err = (if (code >= 400) conn.errorStream else conn.inputStream)?.bufferedReader()?.readText()?.take(700) ?: "error $code"
+            conn.disconnect()
+            throw Exception("${provider.providerType.label} $code: ${err.take(220)}")
+        }
+
+        val sb = StringBuilder()
+        val reader = BufferedReader(InputStreamReader(conn.inputStream))
+        var line: String?
+        while (reader.readLine().also { line = it } != null) {
+            val l = line ?: continue
+            if (!l.startsWith("data: ")) continue
+            val data = l.removePrefix("data: ").trim()
+            if (data == "[DONE]" || data.isBlank()) continue
+            try {
+                val chunk = JSONObject(data).optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta")?.optString("content", "").orEmpty()
+                if (chunk.isNotBlank()) {
+                    sb.append(chunk)
+                    onChunk(chunk)
+                }
+            } catch (_: Exception) {}
+        }
+        reader.close()
+        conn.disconnect()
+        return sb.toString()
+    }
+
+    private fun escapeSvg(text: String): String = text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;")
 
     private val TEXT_EXTENSIONS = setOf(
         "txt", "md", "json", "xml", "html", "css", "js", "ts", "kt", "java",
@@ -330,10 +1038,6 @@ object AiManager {
         entries.forEach { (name, content) -> sb.append("=== $name ===\n$content\n\n") }
         return sb.toString()
     }
-
-    // ═══════════════════════════════════
-    // File Reading
-    // ═══════════════════════════════════
 
     fun encodeImage(file: File): String? = try {
         val bmp = BitmapFactory.decodeFile(file.absolutePath) ?: return null

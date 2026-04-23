@@ -172,9 +172,52 @@
   - добавлены недостающие imports `android.content.Context` и `kotlinx.coroutines.CoroutineScope` в `GitHubActionsModule.kt`
   - восстановлены imports `TextTertiary` и `java.io.File`, случайно затронутые при точечном import-edit pass
 
-### Важно
+- Выполнен targeted data-layer refactor для AI foundation без server-side сборок:
+  - добавлено provider-agnostic хранилище `AiConfigStore` для Gemini, Qwen, OpenAI/ChatGPT, xAI/Grok, Kimi
+  - сохранён backward-compatible facade `GeminiKeyStore`, чтобы не ломать текущий UI
+  - введены `AiVendor`, `AiProviderType`, `AiCapability`, `AiModelSpec`, `AiModelCatalog`
+  - текущий enum `AiProvider` переведён на model-spec основу с capability metadata
+  - `ChatMessage` расширен до structured attachments + provider/vendor/model metadata + timestamps
+  - `ChatHistoryManager` переведён на schemaVersion=2 JSON persistence
+  - загрузка старых chat JSON сохранена: legacy `imageBase64` / `fileContent` автоматически мапятся в новые attachments
+  - `ChatSession` теперь хранит provider/model/vendor metadata alongside legacy `provider`
+  - минимально обновлён `AiChatScreen.kt`, чтобы новые сообщения и сохранения записывали enriched metadata без UI rewrite
+  - локальные build/compile checks не запускались по прямому требованию пользователя
 - По просьбе пользователя server-side сборки/compile checks больше не запускать.
 - Фокус только на реальной доработке UI/UX и функциональности GitHub-модулей внутри проекта.
+
+- Выполнен первый AI implementation pass по новому ТЗ:
+  - заложен multi-provider AI foundation для Gemini / Qwen / ChatGPT / Grok / Kimi
+  - добавлены provider configs с сохранением default model selection по chat/coding/image/video use-cases
+  - `AiChatScreen` уже пишет enriched provider/model metadata в историю, сохраняя backward compatibility
+  - добавлен отдельный экран `AiCodingScreen.kt` для coding/agent-capable моделей
+  - `GlassFilesApp` получил новый `AppScreen.AI_CODING` и отдельную FAB-кнопку для coding AI
+  - локальные server-side builds по просьбе пользователя не запускались
+
+- Выполнен второй AI implementation pass по новому ТЗ:
+  - `AiChatScreen.kt` полностью переведён на provider-aware архитектуру поверх нового AI foundation
+  - стартовый setup screen теперь принимает API keys для Gemini / Qwen / ChatGPT / Grok / Kimi
+  - AI settings теперь управляют provider configs и default model selection для chat/coding/image/video
+  - модель выбирается через provider-aware picker с capability-aware filtering по режимам `Chat` / `Image` / `Video`
+  - изображения и video placeholders больше не выводятся как base64/кракозябры в текст, а рендерятся как structured attachment previews
+  - для image/video режима добавлены attachment-based assistant results, чтобы media отображались карточками в чате
+  - для OpenAI-compatible providers добавлен runtime chat path foundation (`OpenAI / xAI / Kimi`) через совместимый `/chat/completions` streaming flow
+
+- Выполнен AI localization / polish pass:
+  - в `Localization.kt` добавлены строки для provider setup, model picker, mode switch, coding screen и media fallbacks
+  - `AiChatScreen.kt` частично переведён с hardcoded AI-текста на `Strings.*`
+  - user-facing labels для image/video placeholders и provider settings стали централизованными
+
+- Выполнен дополнительный AI coding/localization pass:
+  - `AiCodingScreen.kt` переведён на `Strings.*` для основных user-facing заголовков и quick actions
+  - coding workspace теперь использует централизованные локализуемые labels вместо прямого hardcode
+  - продолжается cleanup оставшихся AI hardcoded строк и compatibility-полировка
+
+- Выполнен завершающий AI compatibility cleanup pass:
+  - в `AiChatScreen.kt` дополнительно убраны заметные hardcoded user-facing строки
+  - mode chips, provider hints, save/cancel labels, camera/voice prompts и часть context/save сообщений переведены на `Strings.*`
+  - badges `Vision / Files / Code` теперь тоже централизованы через локализацию
+  - состояние доведено до аккуратной точки остановки без запуска server-side сборок
 
 ### Текущее состояние
 - Builder больше не опирается на статичные списки параметров формы или build-пресеты.

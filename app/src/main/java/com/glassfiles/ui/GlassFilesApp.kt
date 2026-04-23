@@ -51,7 +51,7 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.launch
 import java.io.File
 
-enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_CHAT, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
+enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_CHAT, AI_CODING, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
 
 @Composable
 fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Unit = {}, appSettings: com.glassfiles.data.AppSettings? = null) {
@@ -211,6 +211,9 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
                 AppScreen.AI_CHAT -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
                     AiChatScreen(onBack = { goBack(); aiInitialPrompt = null; aiInitialImage = null }, initialPrompt = aiInitialPrompt, initialImageBase64 = aiInitialImage)
                 }
+                AppScreen.AI_CODING -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
+                    AiCodingScreen(onBack = { goBack() }, onOpenChat = { navigateTo(AppScreen.AI_CHAT) })
+                }
                 AppScreen.SETTINGS -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { SettingsScreen(settings = settings, onBack = { goBack() }) }
                 AppScreen.DUPLICATES -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { DuplicatesScreen(onBack = { goBack() }) }
                 AppScreen.QR_SCANNER -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { QrScannerScreen(onBack = { goBack() }) }
@@ -345,6 +348,9 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
 
                     AnimatedVisibility(folderStack.isEmpty(), enter = fadeIn(tween(300)) + scaleIn(tween(300)), exit = fadeOut(tween(200)) + scaleOut(tween(200)), modifier = Modifier.fillMaxSize()) {
                         Box(Modifier.fillMaxSize()) {
+                            Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 200.dp).clickable { navigateTo(AppScreen.AI_CODING) }) {
+                                GlassFab(backdrop, Icons.Rounded.Code, iconTint = Color.White, tintColor = Color(0x663B82F6))
+                            }
                             Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 148.dp).clickable { navigateTo(AppScreen.AI_CHAT) }) {
                                 GlassFab(backdrop, Icons.Rounded.AutoAwesome, iconTint = Color.White, tintColor = Color(0x66238636))
                             }
