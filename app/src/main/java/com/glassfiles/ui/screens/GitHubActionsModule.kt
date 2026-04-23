@@ -1959,8 +1959,8 @@ private fun checkStatusColor(checkRun: GHCheckRun): Color = when (displayCheckSt
 }
 
 private fun ensureJobLogsLoaded(
-    scope: kotlinx.coroutines.CoroutineScope,
-    context: android.content.Context,
+    scope: CoroutineScope,
+    context: Context,
     repo: GHRepo,
     job: GHJob,
     jobLogs: MutableMap<Long, String>,
@@ -1968,26 +1968,32 @@ private fun ensureJobLogsLoaded(
     force: Boolean = false,
     setLoading: (Long?) -> Unit
 ) {
-    if (!force && jobLogs[job.id] != null) return
+    if (!force && jobLogs.containsKey(job.id)) return
     scope.launch {
         setLoading(job.id)
         val log = GitHubManager.getJobLogs(context, repo.owner, repo.name, job.id)
-        jobLogs[job.id] = log
-        jobStepLogs[job.id] = splitLogsBySteps(job, log)
+        // Only save if it's not an error message
+        if (!log.startsWith("Error: ")) {
+            jobLogs[job.id] = log
+            jobStepLogs[job.id] = splitLogsBySteps(job, log)
+        }
         setLoading(null)
     }
 }
 
 private suspend fun refreshJobLogsNow(
-    context: android.content.Context,
+    context: Context,
     repo: GHRepo,
     job: GHJob,
     jobLogs: MutableMap<Long, String>,
     jobStepLogs: MutableMap<Long, Map<Int, String>>
 ) {
     val log = GitHubManager.getJobLogs(context, repo.owner, repo.name, job.id)
-    jobLogs[job.id] = log
-    jobStepLogs[job.id] = splitLogsBySteps(job, log)
+    // Only update if it's not an error message
+    if (!log.startsWith("Error: ")) {
+        jobLogs[job.id] = log
+        jobStepLogs[job.id] = splitLogsBySteps(job, log)
+    }
 }
 
 private fun splitLogsBySteps(job: GHJob, raw: String): Map<Int, String> {

@@ -73,15 +73,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -95,8 +101,14 @@ import com.glassfiles.ui.theme.SeparatorColor
 import com.glassfiles.ui.theme.TextSecondary
 import com.glassfiles.ui.theme.TextTertiary
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 private enum class GitHubEditorMode { EDIT, READ, PREVIEW }
+
+private data class EditorSearchMatch(val start: Int, val end: Int, val line: Int)
+
+private data class EditorSymbol(val name: String, val kind: String, val line: Int)
 
 @Composable
 fun CodeEditorScreen(
@@ -111,23 +123,26 @@ fun CodeEditorScreen(
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
 
-    var textState by rememberSaveable(file.path, stateSaver = TextFieldValue.Saver) {
+    var textState by rememberSaveable(file.path, branch, stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(initialContent))
     }
-    var savedContent by rememberSaveable(file.path) { mutableStateOf(initialContent) }
-    var savedSha by rememberSaveable(file.path) { mutableStateOf(file.sha) }
-    var mode by rememberSaveable(file.path) { mutableStateOf(GitHubEditorMode.EDIT) }
-    var lineNumbers by rememberSaveable(file.path) { mutableStateOf(true) }
-    var wrapLines by rememberSaveable(file.path) { mutableStateOf(false) }
-    var showSearch by rememberSaveable(file.path) { mutableStateOf(false) }
-    var searchState by rememberSaveable(file.path, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
-    var replaceState by rememberSaveable(file.path, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
-    var showGoToLine by rememberSaveable(file.path) { mutableStateOf(false) }
-    var goToLineText by rememberSaveable(file.path) { mutableStateOf("") }
-    var commitMessage by rememberSaveable(file.path) { mutableStateOf("Update ${file.name}") }
-    var showCommitDialog by rememberSaveable(file.path) { mutableStateOf(false) }
-    var saving by rememberSaveable(file.path) { mutableStateOf(false) }
-    var currentMatchIndex by rememberSaveable(file.path) { mutableIntStateOf(0) }
+    var savedContent by rememberSaveable(file.path, branch) { mutableStateOf(initialContent) }
+    var savedSha by rememberSaveable(file.path, branch) { mutableStateOf(file.sha) }
+    var mode by rememberSaveable(file.path, branch) { mutableStateOf(GitHubEditorMode.EDIT) }
+    var lineNumbers by rememberSaveable(file.path, branch) { mutableStateOf(true) }
+    var wrapLines by rememberSaveable(file.path, branch) { mutableStateOf(false) }
+    var showSearch by rememberSaveable(file.path, branch) { mutableStateOf(false) }
+    var searchState by rememberSaveable(file.path, branch, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
+    var replaceState by rememberSaveable(file.path, branch, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
+    var showGoToLine by rememberSaveable(file.path, branch) { mutableStateOf(false) }
+    var showOutline by rememberSaveable(file.path, branch) { mutableStateOf(false) }
+    var showDiscardDialog by rememberSaveable(file.path, branch) { mutableStateOf(false) }
+    var goToLineText by rememberSaveable(file.path, branch) { mutableStateOf("") }
+    var commitMessage by rememberSaveable(file.path, branch) { mutableStateOf("Update ${file.name}") }
+    var showCommitDialog by rememberSaveable(file.path, branch) { mutableStateOf(false) }
+    var saving by rememberSaveable(file.path, branch) { mutableStateOf(false) }
+    var currentMatchIndex by rememberSaveable(file.path, branch) { mutableIntStateOf(0) }
+    var fontSize by rememberSaveable(file.path, branch) { mutableIntStateOf(13) }
 
     val ext = remember(file.name) { file.name.substringAfterLast(".", "").lowercase() }
     val isImage = ext in listOf("png", "jpg", "jpeg", "gif", "webp", "svg", "ico")
@@ -139,7 +154,13 @@ fun CodeEditorScreen(
     val currentLine = remember(textState.selection, text) {
         text.take(textState.selection.start.coerceIn(0, text.length)).count { it == '\n' } + 1
     }
-    val matches = remember(text, searchState.text) { buildSearchMatches(lines, searchState.text) }
+    val currentColumn = remember(textState.selection, text) {
+        val cursor = textState.selection.start.coerceIn(0, text.length)
+        if (cursor == 0) 1 else cursor - text.lastIndexOf('\n', cursor - 1).let { if (it < 0) -1 else it }
+    }
+    val matches = remember(text, searchState.text) { buildSearchMatches(text, searchState.text) }
+    val currentMatch = matches.getOrNull(currentMatchIndex)
+    val symbols = remember(lines, ext) { buildEditorSymbols(lines, ext) }
 
     val undoStack = remember(file.path) { mutableStateListOf<TextFieldValue>() }
     val redoStack = remember(file.path) { mutableStateListOf<TextFieldValue>() }
@@ -157,6 +178,33 @@ fun CodeEditorScreen(
             redoStack.clear()
             textState = newState
         }
+    }
+
+    fun applyEditorInput(newState: TextFieldValue) {
+        val old = textState
+        val insertedNewLine = newState.text.length == old.text.length + 1 &&
+            newState.selection.start == newState.selection.end &&
+            newState.selection.start > 0 &&
+            newState.text.getOrNull(newState.selection.start - 1) == '\n'
+
+        if (!insertedNewLine) {
+            applyState(newState)
+            return
+        }
+
+        val cursorAfterBreak = newState.selection.start
+        val previousLineEnd = (cursorAfterBreak - 2).coerceAtLeast(0)
+        val previousLineStart = old.text.lastIndexOf('\n', previousLineEnd).let { if (it < 0) 0 else it + 1 }
+        val previousLine = old.text.substring(previousLineStart, (previousLineEnd + 1).coerceAtMost(old.text.length))
+        val indent = previousLine.takeWhile { it == ' ' || it == '\t' }
+        val extra = if (previousLine.trimEnd().endsWith("{") || previousLine.trimEnd().endsWith("[") || previousLine.trimEnd().endsWith("(")) "    " else ""
+        val insert = indent + extra
+        if (insert.isEmpty()) {
+            applyState(newState)
+            return
+        }
+        val adjusted = newState.text.substring(0, cursorAfterBreak) + insert + newState.text.substring(cursorAfterBreak)
+        applyState(TextFieldValue(adjusted, TextRange(cursorAfterBreak + insert.length)))
     }
 
     fun insertText(value: String) {
@@ -195,8 +243,10 @@ fun CodeEditorScreen(
     fun toggleComment() {
         val prefix = commentPrefix ?: return
         val selection = textState.selection
-        val startLine = text.take(selection.start.coerceAtLeast(0)).count { it == '\n' }
-        val endLine = text.take(selection.end.coerceAtLeast(0)).count { it == '\n' }
+        val startOffset = minOf(selection.start, selection.end).coerceIn(0, text.length)
+        val endOffset = maxOf(selection.start, selection.end).coerceIn(0, text.length)
+        val startLine = text.take(startOffset).count { it == '\n' }
+        val endLine = text.take(endOffset).count { it == '\n' }
         val mutableLines = lines.toMutableList()
         val range = startLine..endLine.coerceAtMost(mutableLines.lastIndex.coerceAtLeast(0))
         val uncomment = range.all { idx -> mutableLines[idx].trimStart().startsWith(prefix) }
@@ -220,16 +270,57 @@ fun CodeEditorScreen(
         textState = textState.copy(selection = TextRange(offset))
     }
 
+    fun goToOffset(offset: Int) {
+        textState = textState.copy(selection = TextRange(offset.coerceIn(0, text.length)))
+    }
+
+    fun selectedLineRange(): IntRange {
+        val start = minOf(textState.selection.start, textState.selection.end).coerceIn(0, text.length)
+        val end = maxOf(textState.selection.start, textState.selection.end).coerceIn(0, text.length)
+        val startLine = text.take(start).count { it == '\n' }
+        val endLine = text.take(end).count { it == '\n' }.coerceAtMost(lines.lastIndex.coerceAtLeast(0))
+        return startLine..endLine
+    }
+
+    fun transformSelectedLines(transform: (String) -> String) {
+        val range = selectedLineRange()
+        val mutableLines = lines.toMutableList()
+        range.forEach { idx ->
+            if (idx in mutableLines.indices) mutableLines[idx] = transform(mutableLines[idx])
+        }
+        val newText = mutableLines.joinToString("\n")
+        applyState(TextFieldValue(newText, textState.selection.coerceIn(newText.length)))
+    }
+
+    fun selectAll() {
+        textState = textState.copy(selection = TextRange(0, text.length))
+    }
+
+    fun formatJsonDocument() {
+        if (ext != "json") return
+        val formatted = try {
+            val trimmed = text.trim()
+            when {
+                trimmed.startsWith("[") -> JSONArray(trimmed).toString(2)
+                trimmed.startsWith("{") -> JSONObject(trimmed).toString(2)
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
+        }
+        if (formatted == null) {
+            Toast.makeText(context, "Invalid JSON", Toast.LENGTH_SHORT).show()
+            return
+        }
+        applyState(TextFieldValue(formatted, TextRange(0)))
+    }
+
     fun replaceCurrent() {
         val query = searchState.text
         if (query.isBlank() || matches.isEmpty()) return
-        val targetLine = matches.getOrNull(currentMatchIndex) ?: return
-        val offsetToLine = lines.take(targetLine).sumOf { it.length + 1 }
-        val local = lines[targetLine].indexOf(query, ignoreCase = true)
-        if (local < 0) return
-        val start = offsetToLine + local
-        val end = start + query.length
-        val newText = text.replaceRange(start, end, replaceState.text)
+        val target = matches.getOrNull(currentMatchIndex) ?: return
+        val newText = text.replaceRange(target.start, target.end, replaceState.text)
+        val start = target.start
         applyState(TextFieldValue(newText, TextRange((start + replaceState.text.length).coerceAtMost(newText.length))))
     }
 
@@ -268,6 +359,59 @@ fun CodeEditorScreen(
         )
     }
 
+    if (showOutline) {
+        AlertDialog(
+            onDismissRequest = { showOutline = false },
+            title = { Text("Outline") },
+            text = {
+                if (symbols.isEmpty()) {
+                    Text("No symbols found", color = TextSecondary, fontSize = 13.sp)
+                } else {
+                    LazyColumn(
+                        Modifier.fillMaxWidth().height(340.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        itemsIndexed(symbols) { _, symbol ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF111B2E))
+                                    .clickable {
+                                        goToLine(symbol.line + 1)
+                                        showOutline = false
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 9.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                MetaPill(symbol.kind, Blue)
+                                Text(symbol.name, color = Color(0xFFE5E7EB), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Text("${symbol.line + 1}", color = TextTertiary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showOutline = false }) { Text("Close") } }
+        )
+    }
+
+    if (showDiscardDialog) {
+        AlertDialog(
+            onDismissRequest = { showDiscardDialog = false },
+            title = { Text("Discard changes?") },
+            text = { Text("This file has uncommitted edits.", color = TextSecondary, fontSize = 13.sp) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDiscardDialog = false
+                    onBack()
+                }) { Text("Discard") }
+            },
+            dismissButton = { TextButton(onClick = { showDiscardDialog = false }) { Text(Strings.cancel) } }
+        )
+    }
+
     Column(Modifier.fillMaxSize().background(Color(0xFF09111F))) {
         GitHubEditorTopBar(
             fileName = file.name,
@@ -281,9 +425,11 @@ fun CodeEditorScreen(
             hasChanges = hasChanges,
             canUndo = undoStack.isNotEmpty(),
             canRedo = redoStack.isNotEmpty(),
-            onBack = onBack,
+            hasOutline = symbols.isNotEmpty(),
+            onBack = { if (hasChanges && !isImage) showDiscardDialog = true else onBack() },
             onToggleSearch = { showSearch = !showSearch },
             onGoTo = { showGoToLine = true },
+            onOutline = { showOutline = true },
             onCopy = {
                 clipboard.setText(AnnotatedString(text))
                 Toast.makeText(context, Strings.copied, Toast.LENGTH_SHORT).show()
@@ -317,6 +463,7 @@ fun CodeEditorScreen(
             EditorInfoStrip(
                 mode = mode,
                 currentLine = currentLine,
+                currentColumn = currentColumn,
                 selectionLength = textState.selection.length,
                 matchCount = matches.size,
                 currentMatchNumber = if (matches.isEmpty()) 0 else currentMatchIndex + 1,
@@ -337,13 +484,13 @@ fun CodeEditorScreen(
                 onPrev = {
                     if (matches.isNotEmpty()) {
                         currentMatchIndex = (currentMatchIndex - 1).floorMod(matches.size)
-                        goToLine(matches[currentMatchIndex] + 1)
+                        goToOffset(matches[currentMatchIndex].start)
                     }
                 },
                 onNext = {
                     if (matches.isNotEmpty()) {
                         currentMatchIndex = (currentMatchIndex + 1).floorMod(matches.size)
-                        goToLine(matches[currentMatchIndex] + 1)
+                        goToOffset(matches[currentMatchIndex].start)
                     }
                 },
                 onReplaceOne = { replaceCurrent() },
@@ -356,7 +503,14 @@ fun CodeEditorScreen(
                 onInsert = { insertText(it) },
                 onInsertPair = { open, close -> insertPair(open, close) },
                 onDuplicate = { duplicateLine() },
-                onComment = if (commentPrefix != null) ({ toggleComment() }) else null
+                onComment = if (commentPrefix != null) ({ toggleComment() }) else null,
+                onIndent = { transformSelectedLines { "    $it" } },
+                onOutdent = { transformSelectedLines { line -> if (line.startsWith("    ")) line.drop(4) else if (line.startsWith("\t")) line.drop(1) else line } },
+                onTrim = { transformSelectedLines { it.trimEnd() } },
+                onSelectAll = { selectAll() },
+                onFormatJson = if (ext == "json") ({ formatJsonDocument() }) else null,
+                onFontSmaller = { fontSize = (fontSize - 1).coerceAtLeast(11) },
+                onFontLarger = { fontSize = (fontSize + 1).coerceAtMost(20) }
             )
         }
 
@@ -370,8 +524,19 @@ fun CodeEditorScreen(
             when {
                 isImage -> ModernImageCanvas(file)
                 isMarkdown && mode == GitHubEditorMode.PREVIEW -> ModernMarkdownCanvas(lines)
-                mode == GitHubEditorMode.READ -> ModernReadCanvas(lines, ext, lineNumbers, wrapLines, matches.getOrNull(currentMatchIndex))
-                else -> ModernEditCanvas(textState, lines, lineNumbers, wrapLines, ext, matches.getOrNull(currentMatchIndex), onValueChange = { applyState(it) })
+                mode == GitHubEditorMode.READ -> ModernReadCanvas(lines, ext, lineNumbers, wrapLines, currentMatch?.line)
+                else -> ModernEditCanvas(
+                    textState = textState,
+                    lines = lines,
+                    lineNumbers = lineNumbers,
+                    wrapLines = wrapLines,
+                    ext = ext,
+                    fontSize = fontSize,
+                    searchQuery = searchState.text,
+                    currentHighlightedLine = currentMatch?.line,
+                    currentMatchRange = currentMatch?.let { it.start until it.end },
+                    onValueChange = { applyEditorInput(it) }
+                )
             }
         }
     }
@@ -400,7 +565,7 @@ fun CodeEditorScreen(
                     }
                     saving = true
                     scope.launch {
-                        val success = GitHubManager.uploadFile(
+                        val result = GitHubManager.uploadFileWithResult(
                             context = context,
                             owner = repoOwner,
                             repo = repoName,
@@ -412,9 +577,9 @@ fun CodeEditorScreen(
                         )
                         saving = false
                         showCommitDialog = false
-                        if (success) {
+                        if (result.success) {
                             savedContent = text
-                            savedSha = ""
+                            if (result.sha.isNotBlank()) savedSha = result.sha
                             undoStack.clear()
                             redoStack.clear()
                             Toast.makeText(context, "Committed successfully", Toast.LENGTH_SHORT).show()
@@ -445,9 +610,11 @@ private fun GitHubEditorTopBar(
     hasChanges: Boolean,
     canUndo: Boolean,
     canRedo: Boolean,
+    hasOutline: Boolean,
     onBack: () -> Unit,
     onToggleSearch: () -> Unit,
     onGoTo: () -> Unit,
+    onOutline: () -> Unit,
     onCopy: () -> Unit,
     onToggleLineNumbers: () -> Unit,
     onToggleWrap: () -> Unit,
@@ -461,6 +628,7 @@ private fun GitHubEditorTopBar(
         if (!isImage) {
             IconButton(onClick = onToggleSearch) { Icon(Icons.Rounded.Search, null, tint = if (showSearch) Blue else TextSecondary) }
             IconButton(onClick = onGoTo) { Icon(Icons.Rounded.Tag, null, tint = TextSecondary) }
+            if (hasOutline) IconButton(onClick = onOutline) { Icon(Icons.Rounded.Code, null, tint = TextSecondary) }
             IconButton(onClick = onCopy) { Icon(Icons.Rounded.ContentCopy, null, tint = TextSecondary) }
             IconButton(onClick = onToggleLineNumbers) { Icon(Icons.Rounded.FindInPage, null, tint = if (lineNumbers) Blue else TextSecondary) }
             IconButton(onClick = onToggleWrap) { Icon(Icons.Rounded.WrapText, null, tint = if (wrapLines) Blue else TextSecondary) }
@@ -488,6 +656,7 @@ private fun GitHubEditorTopBar(
 private fun EditorInfoStrip(
     mode: GitHubEditorMode,
     currentLine: Int,
+    currentColumn: Int,
     selectionLength: Int,
     matchCount: Int,
     currentMatchNumber: Int,
@@ -507,6 +676,7 @@ private fun EditorInfoStrip(
         ModePill("Read", mode == GitHubEditorMode.READ) { onSetMode(GitHubEditorMode.READ) }
         if (isMarkdown) ModePill("Preview", mode == GitHubEditorMode.PREVIEW) { onSetMode(GitHubEditorMode.PREVIEW) }
         MetaPill("Ln $currentLine", Blue)
+        MetaPill("Col $currentColumn", TextSecondary)
         if (selectionLength > 0) MetaPill("$selectionLength sel", Color(0xFF34C759))
         if (matchCount > 0) MetaPill("$currentMatchNumber/$matchCount", Color(0xFF58A6FF))
         if (hasChanges) MetaPill("Modified", Color(0xFFFF6B6B))
@@ -611,7 +781,14 @@ private fun EditorActionRibbon(
     onInsert: (String) -> Unit,
     onInsertPair: (String, String) -> Unit,
     onDuplicate: () -> Unit,
-    onComment: (() -> Unit)?
+    onComment: (() -> Unit)?,
+    onIndent: () -> Unit,
+    onOutdent: () -> Unit,
+    onTrim: () -> Unit,
+    onSelectAll: () -> Unit,
+    onFormatJson: (() -> Unit)?,
+    onFontSmaller: () -> Unit,
+    onFontLarger: () -> Unit
 ) {
     Row(
         Modifier
@@ -622,6 +799,13 @@ private fun EditorActionRibbon(
     ) {
         if (onComment != null) EditorActionChip("Comment") { onComment() }
         EditorActionChip("Duplicate") { onDuplicate() }
+        EditorActionChip("Indent") { onIndent() }
+        EditorActionChip("Outdent") { onOutdent() }
+        EditorActionChip("Trim") { onTrim() }
+        EditorActionChip("All") { onSelectAll() }
+        if (onFormatJson != null) EditorActionChip("Format JSON") { onFormatJson() }
+        EditorActionChip("A-") { onFontSmaller() }
+        EditorActionChip("A+") { onFontLarger() }
         EditorActionChip("{}") { onInsertPair("{", "}") }
         EditorActionChip("()") { onInsertPair("(", ")") }
         EditorActionChip("[]") { onInsertPair("[", "]") }
@@ -658,7 +842,10 @@ private fun ModernEditCanvas(
     lineNumbers: Boolean,
     wrapLines: Boolean,
     ext: String,
+    fontSize: Int,
+    searchQuery: String,
     currentHighlightedLine: Int?,
+    currentMatchRange: IntRange?,
     onValueChange: (TextFieldValue) -> Unit
 ) {
     val vertical = rememberScrollState()
@@ -677,37 +864,76 @@ private fun ModernEditCanvas(
                     Text(
                         text = "${index + 1}",
                         color = if (active) Blue else Color(0xFF64748B),
-                        fontSize = 12.sp,
+                        fontSize = (fontSize - 1).coerceAtLeast(10).sp,
                         fontFamily = FontFamily.Monospace,
                         textAlign = TextAlign.End,
-                        lineHeight = 20.sp,
+                        lineHeight = (fontSize + 7).sp,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)
                     )
                 }
             }
         }
         Box(Modifier.width(1.dp).fillMaxSize().background(SeparatorColor))
-        val baseModifier = Modifier.weight(1f).fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp)
+        val baseModifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp)
         val scrollModifier = if (wrapLines) baseModifier.verticalScroll(vertical) else baseModifier.verticalScroll(vertical).horizontalScroll(rememberScrollState())
-        BasicTextField(
-            value = textState,
-            onValueChange = onValueChange,
-            modifier = scrollModifier,
-            textStyle = TextStyle(
-                color = Color(0xFFE5E7EB),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp,
-                lineHeight = 20.sp
-            ),
-            decorationBox = { inner ->
-                Box(Modifier.fillMaxSize()) {
-                    if (textState.text.isEmpty()) {
-                        Text("Start typing…", color = Color(0xFF64748B), fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+        Row(Modifier.weight(1f).fillMaxSize()) {
+            BasicTextField(
+                value = textState,
+                onValueChange = onValueChange,
+                modifier = scrollModifier.weight(1f),
+                textStyle = TextStyle(
+                    color = Color(0xFFE5E7EB),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = fontSize.sp,
+                    lineHeight = (fontSize + 7).sp
+                ),
+                visualTransformation = EditorSyntaxTransformation(ext, searchQuery, currentMatchRange),
+                cursorBrush = SolidColor(Blue),
+                decorationBox = { inner ->
+                    Box(Modifier.fillMaxSize()) {
+                        if (textState.text.isEmpty()) {
+                            Text("Start typing...", color = Color(0xFF64748B), fontSize = fontSize.sp, fontFamily = FontFamily.Monospace)
+                        }
+                        inner()
                     }
-                    inner()
                 }
-            }
-        )
+            )
+            EditorMiniMap(lines, currentHighlightedLine)
+        }
+    }
+}
+
+@Composable
+private fun EditorMiniMap(lines: List<String>, currentHighlightedLine: Int?) {
+    Column(
+        Modifier
+            .width(12.dp)
+            .fillMaxSize()
+            .background(Color(0xFF0B1220))
+            .padding(vertical = 12.dp, horizontal = 3.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        val sampled = remember(lines) {
+            if (lines.size <= 80) lines.mapIndexed { index, line -> index to line }
+            else lines.indices.step((lines.size / 80).coerceAtLeast(1)).map { it to lines[it] }.take(80)
+        }
+        sampled.forEach { (index, line) ->
+            val active = currentHighlightedLine == index
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(
+                        when {
+                            active -> Blue
+                            line.trimStart().startsWith("//") || line.trimStart().startsWith("#") -> Color(0xFF6A9955).copy(alpha = 0.75f)
+                            line.isBlank() -> Color.Transparent
+                            else -> Color(0xFF334155)
+                        }
+                    )
+            )
+        }
     }
 }
 
@@ -814,10 +1040,116 @@ private fun buildEditorSubtitle(ext: String, lines: Int, chars: Int, changed: Bo
     return "$type • $lines lines • $chars chars$suffix"
 }
 
-private fun buildSearchMatches(lines: List<String>, query: String): List<Int> {
+private class EditorSyntaxTransformation(
+    private val ext: String,
+    private val searchQuery: String,
+    private val currentMatchRange: IntRange?
+) : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        return TransformedText(
+            buildEditorAnnotatedText(text.text, ext, searchQuery, currentMatchRange),
+            OffsetMapping.Identity
+        )
+    }
+}
+
+private fun buildEditorAnnotatedText(
+    text: String,
+    ext: String,
+    searchQuery: String,
+    currentMatchRange: IntRange?
+): AnnotatedString {
+    val syntax = buildAnnotatedString {
+        if (text.length > 180_000) {
+            pushStyle(SpanStyle(color = Color(0xFFE5E7EB)))
+            append(text)
+            pop()
+            return@buildAnnotatedString
+        }
+
+        var start = 0
+        while (start <= text.length) {
+            val nextBreak = text.indexOf('\n', start)
+            val end = if (nextBreak < 0) text.length else nextBreak
+            val line = text.substring(start, end)
+            if (line.length > 1_200) {
+                pushStyle(SpanStyle(color = Color(0xFFE5E7EB)))
+                append(line)
+                pop()
+            } else {
+                append(doHighlightLine(line, ext))
+            }
+            if (nextBreak < 0) break
+            append('\n')
+            start = nextBreak + 1
+        }
+    }
+
+    return buildAnnotatedString {
+        append(syntax)
+        buildSearchMatches(text, searchQuery).forEach { match ->
+            addStyle(
+                SpanStyle(background = Color(0xFFFFD166).copy(alpha = 0.20f)),
+                match.start,
+                match.end
+            )
+        }
+        currentMatchRange?.let { range ->
+            val start = range.first.coerceIn(0, text.length)
+            val end = (range.last + 1).coerceIn(start, text.length)
+            if (end > start) {
+                addStyle(SpanStyle(background = Color(0xFF58A6FF).copy(alpha = 0.34f)), start, end)
+            }
+        }
+    }
+}
+
+private fun buildSearchMatches(text: String, query: String): List<EditorSearchMatch> {
     val q = query.trim()
     if (q.isBlank()) return emptyList()
-    return lines.mapIndexedNotNull { index, line -> if (line.contains(q, ignoreCase = true)) index else null }
+    val matches = mutableListOf<EditorSearchMatch>()
+    var from = 0
+    while (from <= text.length - q.length && matches.size < 2_000) {
+        val idx = text.indexOf(q, from, ignoreCase = true)
+        if (idx < 0) break
+        val line = text.take(idx).count { it == '\n' }
+        matches += EditorSearchMatch(idx, idx + q.length, line)
+        from = idx + q.length.coerceAtLeast(1)
+    }
+    return matches
+}
+
+private fun buildEditorSymbols(lines: List<String>, ext: String): List<EditorSymbol> {
+    val symbols = mutableListOf<EditorSymbol>()
+    val codeRegex = Regex("""^\s*(?:export\s+|public\s+|private\s+|protected\s+|internal\s+|open\s+|override\s+|suspend\s+|data\s+|sealed\s+|abstract\s+|final\s+)*(class|object|interface|enum|fun|function|def|fn|struct|trait|impl|const|let|var|val)\s+([A-Za-z_$][\w$]*)""")
+    val markdownRegex = Regex("""^(#{1,6})\s+(.+)$""")
+    val cssRegex = Regex("""^\s*([.#]?[A-Za-z0-9_-][^{]+)\s*\{""")
+    val yamlRegex = Regex("""^([A-Za-z0-9_-][A-Za-z0-9_.-]*)\s*:""")
+
+    lines.forEachIndexed { index, raw ->
+        if (symbols.size >= 240) return@forEachIndexed
+        val line = raw.trimEnd()
+        when {
+            ext in listOf("md", "markdown") -> {
+                val match = markdownRegex.find(line) ?: return@forEachIndexed
+                symbols += EditorSymbol(match.groupValues[2].trim().take(80), "H${match.groupValues[1].length}", index)
+            }
+            ext in listOf("css", "scss", "sass", "less") -> {
+                val match = cssRegex.find(line) ?: return@forEachIndexed
+                symbols += EditorSymbol(match.groupValues[1].trim().take(80), "CSS", index)
+            }
+            ext in listOf("yaml", "yml", "toml") && !raw.startsWith(" ") && !raw.startsWith("\t") -> {
+                val match = yamlRegex.find(line) ?: return@forEachIndexed
+                symbols += EditorSymbol(match.groupValues[1].trim().take(80), "KEY", index)
+            }
+            else -> {
+                val match = codeRegex.find(line) ?: return@forEachIndexed
+                val kind = match.groupValues[1].uppercase()
+                symbols += EditorSymbol(match.groupValues[2].trim().take(80), kind, index)
+            }
+        }
+    }
+    return symbols
 }
 
 private fun commentPrefixForExtension(ext: String): String? = when (ext) {

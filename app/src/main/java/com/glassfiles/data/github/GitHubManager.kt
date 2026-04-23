@@ -267,10 +267,29 @@ object GitHubManager {
         val body = JSONObject().apply {
             put("message", message)
             put("content", b64)
-            if (sha != null) put("sha", sha)
+            if (!sha.isNullOrBlank()) put("sha", sha)
             if (branch != null) put("branch", branch)
         }.toString()
         return request(context, "/repos/$owner/$repo/contents/$path", "PUT", body).success
+    }
+
+    suspend fun uploadFileWithResult(
+        context: Context, owner: String, repo: String, path: String,
+        content: ByteArray, message: String, branch: String? = null, sha: String? = null
+    ): GHFileSaveResult {
+        val b64 = android.util.Base64.encodeToString(content, android.util.Base64.NO_WRAP)
+        val body = JSONObject().apply {
+            put("message", message)
+            put("content", b64)
+            if (!sha.isNullOrBlank()) put("sha", sha)
+            if (branch != null) put("branch", branch)
+        }.toString()
+        val r = request(context, "/repos/$owner/$repo/contents/$path", "PUT", body)
+        if (!r.success) return GHFileSaveResult(false, "", r.body)
+        val newSha = try {
+            JSONObject(r.body).optJSONObject("content")?.optString("sha").orEmpty()
+        } catch (_: Exception) { "" }
+        return GHFileSaveResult(true, newSha, "")
     }
 
     suspend fun uploadFileFromPath(
@@ -2451,6 +2470,8 @@ data class GHIssueDetail(val number: Int, val title: String, val body: String, v
 
 data class GHContent(val name: String, val path: String, val type: String, val size: Long,
     val downloadUrl: String, val sha: String)
+
+data class GHFileSaveResult(val success: Boolean, val sha: String, val error: String)
 
 data class GHPullRequest(val number: Int, val title: String, val state: String, val author: String,
     val createdAt: String, val head: String, val base: String, val comments: Int,

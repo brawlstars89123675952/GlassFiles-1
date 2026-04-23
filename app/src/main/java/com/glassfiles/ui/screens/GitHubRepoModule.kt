@@ -123,8 +123,24 @@ internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -
             onBack = { 
                 editingFile = null
                 fileContent = null
+                scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch) }
             }
         )
+        return
+    }
+    if (safeEditingFile != null) {
+        LaunchedEffect(safeEditingFile.path, selectedBranch) {
+            fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, safeEditingFile.path, selectedBranch)
+        }
+        Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+            GHTopBar(safeEditingFile.name, subtitle = "Loading editor", onBack = {
+                editingFile = null
+                fileContent = null
+            })
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+            }
+        }
         return
     }
     
@@ -196,7 +212,6 @@ internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -
             }
         }; return
     }
-    if (editingFile != null) { EditFileScreen(repo, editingFile!!, selectedBranch, { editingFile = null }) { editingFile = null; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch) } }; return }
     val filteredContents = remember(contents, repoQuery) {
         if (repoQuery.isBlank()) contents else contents.filter { it.name.contains(repoQuery, ignoreCase = true) || it.path.contains(repoQuery, ignoreCase = true) }
     }
@@ -286,7 +301,7 @@ internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor))
         if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
         else when (selectedTab) {
-            RepoTab.FILES -> FilesTab(filteredContents, onDirClick = { currentPath = it.path }, onFileClick = { scope.launch { openedFile = it; fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, it.path, selectedBranch) } }, onEdit = { openedFile = it; editingFile = it }, onDelete = { deleteTarget = it }, onDownload = { scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${it.name}"); val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, it.path, dest, selectedBranch); Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show() } })
+            RepoTab.FILES -> FilesTab(filteredContents, onDirClick = { currentPath = it.path }, onFileClick = { scope.launch { openedFile = it; fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, it.path, selectedBranch) } }, onEdit = { openedFile = null; fileContent = null; editingFile = it }, onDelete = { deleteTarget = it }, onDownload = { scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${it.name}"); val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, it.path, dest, selectedBranch); Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show() } })
             RepoTab.COMMITS -> CommitsTab(filteredCommits, commitsHasMore, { scope.launch { commitsPage++; val r = GitHubManager.getCommits(context, repo.owner, repo.name, commitsPage); if (r.size < 30) commitsHasMore = false; commits = commits + r } }) { selectedCommitSha = it.sha }
             RepoTab.ISSUES -> IssuesTab(filteredIssues, issuesHasMore, { scope.launch { issuesPage++; val r = GitHubManager.getIssues(context, repo.owner, repo.name, page = issuesPage); if (r.size < 30) issuesHasMore = false; issues = issues + r } }) { selectedIssue = it }
             RepoTab.PULLS -> PullsTab(filteredPulls, repo, { scope.launch { pulls = GitHubManager.getPullRequests(context, repo.owner, repo.name) } }) { prNumber -> selectedPRNumber = prNumber }
@@ -881,172 +896,6 @@ internal fun CommitDiffScreen(repo: GHRepo, sha: String, onBack: () -> Unit) { v
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Box(Modifier.size(8.dp).clip(CircleShape).background(when (f.status) { "added" -> Color(0xFF34C759); "removed" -> Color(0xFFFF3B30); else -> Color(0xFFFF9500) })); Text(f.filename, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); Text("+${f.additions}", fontSize = 11.sp, color = Color(0xFF34C759)); Text("-${f.deletions}", fontSize = 11.sp, color = Color(0xFFFF3B30)) }
                 if (f.patch.isNotBlank()) { Spacer(Modifier.height(4.dp)); Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF1E1E22)).horizontalScroll(rememberScrollState()).padding(8.dp)) { Text(f.patch.take(2000), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFD4D4D4), lineHeight = 16.sp) } }
             }; Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor)) } }
-        }
-    }
-}
-
-@Composable
-internal fun EditFileScreen(repo: GHRepo, file: GHContent, branch: String, onBack: () -> Unit, onSaved: () -> Unit) {
-    val context = LocalContext.current; val scope = rememberCoroutineScope()
-    var tfv by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
-    var commitMsg by remember { mutableStateOf("Update ${file.name}") }
-    var loading by remember { mutableStateOf(true) }; var saving by remember { mutableStateOf(false) }
-    val ext = file.name.substringAfterLast(".", "").lowercase()
-    val clipMgr = remember { context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager }
-    // Editor state
-    var showSearch by remember { mutableStateOf(false) }
-    var searchText by remember { mutableStateOf("") }; var replaceText by remember { mutableStateOf("") }
-    var showGoTo by remember { mutableStateOf(false) }; var goToText by remember { mutableStateOf("") }
-    var wordWrap by remember { mutableStateOf(false) }
-    val undoStack = remember { mutableListOf<String>() }
-    val redoStack = remember { mutableListOf<String>() }
-    var lastSnapshot by remember { mutableStateOf("") }
-    var modified by remember { mutableStateOf(false) }
-
-    fun snapshot() { if (tfv.text != lastSnapshot) { undoStack.add(lastSnapshot); redoStack.clear(); lastSnapshot = tfv.text; modified = true; if (undoStack.size > 50) undoStack.removeFirst() } }
-    fun undo() { if (undoStack.isNotEmpty()) { redoStack.add(tfv.text); val prev = undoStack.removeLast(); tfv = androidx.compose.ui.text.input.TextFieldValue(prev); lastSnapshot = prev } }
-    fun redo() { if (redoStack.isNotEmpty()) { undoStack.add(tfv.text); val next = redoStack.removeLast(); tfv = androidx.compose.ui.text.input.TextFieldValue(next); lastSnapshot = next } }
-    fun insertAtCursor(text: String) { snapshot(); val sel = tfv.selection; val new = tfv.text.replaceRange(sel.min, sel.max, text); val cur = sel.min + text.length; tfv = androidx.compose.ui.text.input.TextFieldValue(new, androidx.compose.ui.text.TextRange(cur)); lastSnapshot = new }
-
-    LaunchedEffect(file, branch) {
-        val raw = GitHubManager.getFileContent(context, repo.owner, repo.name, file.path, branch)
-        tfv = androidx.compose.ui.text.input.TextFieldValue(raw); lastSnapshot = raw; loading = false
-    }
-
-    // Search match count
-    val matchCount = remember(searchText, tfv.text) { if (searchText.isNotBlank()) tfv.text.windowed(searchText.length.coerceAtLeast(1), 1).count { it.equals(searchText, true) } else 0 }
-    // Current line
-    val currentLine = remember(tfv.selection) { tfv.text.take(tfv.selection.start).count { it == '\n' } + 1 }
-
-    // Go to line dialog
-    if (showGoTo) AlertDialog(onDismissRequest = { showGoTo = false }, containerColor = Color(0xFF161B22),
-        title = { Text("Go to line", fontWeight = FontWeight.Bold, color = Color(0xFFC9D1D9)) },
-        text = { OutlinedTextField(goToText, { goToText = it.filter { c -> c.isDigit() } }, singleLine = true, placeholder = { Text("Line number", color = Color(0xFF484F58)) },
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color(0xFFC9D1D9), unfocusedTextColor = Color(0xFFC9D1D9), focusedBorderColor = Blue, unfocusedBorderColor = Color(0xFF30363D), cursorColor = Blue), modifier = Modifier.fillMaxWidth()) },
-        confirmButton = { TextButton(onClick = {
-            val line = goToText.toIntOrNull() ?: 1; val lines = tfv.text.lines(); val target = (line - 1).coerceIn(0, lines.size - 1)
-            val offset = lines.take(target).sumOf { it.length + 1 }
-            tfv = tfv.copy(selection = androidx.compose.ui.text.TextRange(offset)); showGoTo = false
-        }) { Text("Go", color = Blue) } },
-        dismissButton = { TextButton(onClick = { showGoTo = false }) { Text("Cancel", color = Color(0xFF8B949E)) } })
-
-    Column(Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
-        // Top bar
-        GHTopBar(file.name, subtitle = if (modified) "• ${Strings.ghEditFile}" else Strings.ghEditFile, onBack = onBack) {
-            // Undo
-            IconButton(onClick = { undo() }, enabled = undoStack.isNotEmpty()) { Icon(Icons.Rounded.Undo, null, Modifier.size(20.dp), tint = if (undoStack.isNotEmpty()) Blue else Color(0xFF30363D)) }
-            // Redo
-            IconButton(onClick = { redo() }, enabled = redoStack.isNotEmpty()) { Icon(Icons.Rounded.Redo, null, Modifier.size(20.dp), tint = if (redoStack.isNotEmpty()) Blue else Color(0xFF30363D)) }
-            // Search
-            IconButton(onClick = { showSearch = !showSearch }) { Icon(Icons.Rounded.Search, null, Modifier.size(20.dp), tint = if (showSearch) Color(0xFFFFCC00) else Blue) }
-            // Save
-            IconButton(onClick = {
-                if (saving) return@IconButton; saving = true; snapshot()
-                scope.launch {
-                    val ok = GitHubManager.uploadFile(context, repo.owner, repo.name, file.path, tfv.text.toByteArray(), commitMsg, branch, file.sha)
-                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                    if (ok) { modified = false; onSaved() }; saving = false
-                }
-            }, enabled = !saving) {
-                if (saving) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
-                else Icon(Icons.Rounded.Save, null, Modifier.size(20.dp), tint = Color(0xFF34C759))
-            }
-        }
-        // Search & Replace bar
-        AnimatedVisibility(showSearch) {
-            Column(Modifier.fillMaxWidth().background(Color(0xFF161B22)).padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BasicTextField(searchText, { searchText = it },
-                        textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFFC9D1D9), fontSize = 13.sp, fontFamily = FontFamily.Monospace), singleLine = true,
-                        modifier = Modifier.weight(1f).background(Color(0xFF0D1117), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 6.dp),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Blue),
-                        decorationBox = { inner -> if (searchText.isEmpty()) Text("Find...", color = Color(0xFF484F58), fontSize = 13.sp); inner() })
-                    Text("$matchCount", fontSize = 12.sp, color = if (matchCount > 0) Color(0xFFFFCC00) else Color(0xFF484F58), fontWeight = FontWeight.Bold, modifier = Modifier.width(32.dp), textAlign = TextAlign.Center)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BasicTextField(replaceText, { replaceText = it },
-                        textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFFC9D1D9), fontSize = 13.sp, fontFamily = FontFamily.Monospace), singleLine = true,
-                        modifier = Modifier.weight(1f).background(Color(0xFF0D1117), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 6.dp),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Blue),
-                        decorationBox = { inner -> if (replaceText.isEmpty()) Text("Replace...", color = Color(0xFF484F58), fontSize = 13.sp); inner() })
-                    // Replace one
-                    Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFF238636)).clickable {
-                        if (searchText.isNotBlank()) { snapshot(); tfv = androidx.compose.ui.text.input.TextFieldValue(tfv.text.replaceFirst(searchText, replaceText, true)); lastSnapshot = tfv.text }
-                    }.padding(horizontal = 8.dp, vertical = 4.dp)) { Text("1", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                    // Replace all
-                    Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFF1F6FEB)).clickable {
-                        if (searchText.isNotBlank()) { snapshot(); tfv = androidx.compose.ui.text.input.TextFieldValue(tfv.text.replace(searchText, replaceText, true)); lastSnapshot = tfv.text }
-                    }.padding(horizontal = 8.dp, vertical = 4.dp)) { Text("All", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                }
-            }
-        }
-        // Commit message
-        OutlinedTextField(commitMsg, { commitMsg = it }, label = { Text(Strings.ghCommitMsg) }, singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = Color(0xFFC9D1D9)),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Blue, unfocusedBorderColor = Color(0xFF30363D), cursorColor = Blue, focusedLabelColor = Blue, unfocusedLabelColor = Color(0xFF8B949E)))
-        // File info bar
-        Row(Modifier.fillMaxWidth().background(Color(0xFF161B22)).padding(horizontal = 12.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Ln ${currentLine}", fontSize = 11.sp, color = Color(0xFF58A6FF), fontWeight = FontWeight.Medium)
-            Text("${tfv.text.lines().size} lines", fontSize = 11.sp, color = Color(0xFF8B949E))
-            Text("${tfv.text.length} chars", fontSize = 11.sp, color = Color(0xFF8B949E))
-            Text(ext.uppercase(), fontSize = 11.sp, color = Color(0xFF58A6FF), fontWeight = FontWeight.SemiBold)
-            if (tfv.selection.length > 0) Text("${tfv.selection.length} sel", fontSize = 11.sp, color = Color(0xFF34C759), fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.weight(1f))
-            // Word wrap toggle
-            Icon(Icons.Rounded.WrapText, null, Modifier.size(16.dp).clickable { wordWrap = !wordWrap }, tint = if (wordWrap) Color(0xFF58A6FF) else Color(0xFF484F58))
-            // Go to line
-            Icon(Icons.Rounded.Tag, null, Modifier.size(16.dp).clickable { showGoTo = true }, tint = Color(0xFF8B949E))
-            // More menu
-            Icon(Icons.Rounded.MoreVert, null, Modifier.size(16.dp).clickable {
-                snapshot(); val sel = tfv.selection; val lines = tfv.text.lines()
-                val lineIdx = tfv.text.take(sel.start).count { it == '\n' }
-                val dupLine = lines.getOrElse(lineIdx) { "" }
-                val before = lines.take(lineIdx + 1).joinToString("\n"); val after = lines.drop(lineIdx + 1).joinToString("\n")
-                val newText = "$before\n$dupLine${if (after.isNotBlank()) "\n$after" else ""}"
-                tfv = androidx.compose.ui.text.input.TextFieldValue(newText, sel); lastSnapshot = newText
-                Toast.makeText(context, "Line duplicated", Toast.LENGTH_SHORT).show()
-            }, tint = Color(0xFF8B949E))
-        }
-        Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0xFF30363D)))
-        // Quick insert toolbar
-        Row(Modifier.fillMaxWidth().background(Color(0xFF0D1117)).horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            listOf("TAB" to "\t", "{}" to "{ }", "()" to "()", "[]" to "[]", "\"\"" to "\"\"", "''" to "''",
-                "<>" to "<>", "//" to "// ", "/*" to "/* */", "=>" to " => ", "->" to " -> ", "::" to "::",
-                ";" to ";", "," to ", ", "fun" to "fun ", "val" to "val ", "var" to "var ").forEach { (label, insert) ->
-                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFF21262D)).clickable { insertAtCursor(insert) }.padding(horizontal = 8.dp, vertical = 5.dp)) {
-                    Text(label, fontSize = 11.sp, color = Color(0xFF8B949E), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium)
-                }
-            }
-        }
-        Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0xFF30363D)))
-        // Editor
-        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
-        else {
-            Row(Modifier.fillMaxSize()) {
-                val scrollState = rememberScrollState()
-                // Line numbers
-                Column(Modifier.width(40.dp).verticalScroll(scrollState).background(Color(0xFF0D1117)).padding(top = 8.dp, end = 4.dp)) {
-                    tfv.text.lines().forEachIndexed { i, _ ->
-                        val isCurrentLine = i + 1 == currentLine
-                        Text("${i + 1}", fontSize = 12.sp, fontFamily = FontFamily.Monospace,
-                            color = if (isCurrentLine) Color(0xFFC9D1D9) else Color(0xFF484F58),
-                            fontWeight = if (isCurrentLine) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.fillMaxWidth().then(
-                                if (isCurrentLine) Modifier.background(Color(0xFF1A1F24)) else Modifier
-                            ), textAlign = TextAlign.End)
-                    }
-                }
-                Box(Modifier.width(0.5.dp).fillMaxHeight().background(Color(0xFF30363D)))
-                // Text editor
-                val editorMod = Modifier.fillMaxSize().verticalScroll(scrollState).padding(start = 8.dp, top = 8.dp, end = 8.dp)
-                BasicTextField(
-                    tfv, { newVal -> if (newVal.text != tfv.text) snapshot(); tfv = newVal },
-                    textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFFC9D1D9), fontSize = 12.sp, fontFamily = FontFamily.Monospace, lineHeight = 18.sp),
-                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Blue),
-                    modifier = if (wordWrap) editorMod else editorMod.horizontalScroll(rememberScrollState())
-                )
-            }
         }
     }
 }

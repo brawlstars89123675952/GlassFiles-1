@@ -101,40 +101,6 @@
 - По запросу пользователя текущее состояние зафиксировано для следующей CI-сборки и визуальной оценки после push.
 - После нового CI-лога выполнен быстрый compile-fix:
   - добавлены недостающие theme imports (`Blue`, `SeparatorColor`, `TextSecondary`, `TextTertiary`) в `GitHubCodeEditorModule.kt`
-- Начата реализация нового модуля `Сборки` (CI/CD Builder) по ТЗ.
-- Реализовано:
-  - новый файл `BuildsScreen.kt`
-  - overload `dispatchWorkflow(context, owner, repo, workflowId: String, ref, inputs)` в `GitHubManager.kt`
-  - вкладка `Сборки` добавлена рядом с `Actions` в `GitHubRepoModule.kt`
-  - после успешного запуска build screen переводит пользователя в `Actions` и обновляет workflow runs
-- Основание реализации verified against official GitHub Docs:
-  - `workflow_dispatch`
-  - REST create workflow dispatch event
-- Пользователь уточнил целевой scope для builder module: нужно поддержать широкий набор типов сборок как UI-категории/пресеты поверх GitHub Actions/workflow_dispatch.
-- Builder screen расширен до полного каталога категорий:
-  - Ядра и система
-  - Модули
-  - Драйверы и графика
-  - Приложения
-  - Кросс-платформа
-  - Автоматизация
-  - Специфические
-- В Build workflow form now implemented fixed settings required by user:
-  - Branch
-  - Release Type
-  - Kernel Version to Build
-  - Feature Set
-  - KSU Commit
-  - green `Run workflow` button
-- Current builder uses official GitHub `workflow_dispatch` model: `ref` + `inputs`.
-- Выполнен дополнительный tidy-up pass:
-  - `Workflow control` уменьшен заметнее по высоте
-  - stat cards ужаты
-  - поля dispatch сделаны компактнее
-  - вкладка `Сборки` в `RepoDetailScreen` приведена в более аккуратный вид
-  - пустая action-кнопка заменена на осмысленную `Builder`
-- После нового CI-лога выполнен compile-fix для builder module:
-  - добавлен недостающий импорт `verticalScroll` в `BuildsScreen.kt`
 - Builder architecture переведён на dynamic model по требованиям пользователя:
   - branches only from GitHub API
   - workflows only from GitHub API
@@ -189,6 +155,11 @@
   - добавлен API `/actions/secrets/public-key`
   - добавлен `PUT /actions/secrets/{secret_name}` с `encrypted_value` и `key_id`
   - Secrets UI теперь умеет create/update/delete repository secrets; значение секрета по правилам GitHub обратно не читается
+- Выполнен fix ложного "Ошибка" тоста в Actions run details:
+  - `ensureJobLogsLoaded` теперь проверяет, что результат `getJobLogs` не начинается с "Error: "
+  - `refreshJobLogsNow` тоже игнорирует ошибки от API, не сохраняя их как логи
+  - таким образом, transient состояния (queued/in_progress) не вызывают ложные ошибки
+  - UI теперь не показывает Toast на нормальные промежуточные состояния workflow
 
 ### Важно
 - По просьбе пользователя server-side сборки/compile checks больше не запускать.
@@ -199,3 +170,22 @@
 - Последняя проверенная сборка прошла успешно.
 - Actions-модуль расширен до GitHub-style workflow/run management, но новая локальная compile-сборка намеренно не запускалась.
 - Actions API покрывает основные repository-level функции сайта GitHub Actions, включая encrypted create/update для repository secrets.
+
+### Итоговая запись после commit/push
+- Подготовлен и отправлен commit `80bbae5 Complete GitHub Actions module`.
+- Push выполнен в `origin/main`.
+- В push вошли изменения по файлам:
+  - `WORKLOG_GITHUB_MODULES.md`
+  - `app/build.gradle`
+  - `app/src/main/java/com/glassfiles/data/github/GitHubManager.kt`
+  - `app/src/main/java/com/glassfiles/data/github/GitHubSecretCrypto.kt`
+  - `app/src/main/java/com/glassfiles/ui/screens/GitHubActionsModule.kt`
+  - `app/src/main/java/com/glassfiles/ui/screens/GitHubGistsAndDialogsModule.kt`
+- Основной результат:
+  - Actions-модуль доработан до GitHub-style интерфейса с runs, artifacts, caches, variables, secrets, runners и settings.
+  - Workflow runs получили фильтры, поиск, пагинацию, polling и расширенный detail screen.
+  - Workflow dispatch запускается через реальные branches и YAML-driven `workflow_dispatch.inputs`.
+  - Artifacts доступны как на уровне run, так и repository-wide, с download/delete.
+  - Jobs поддерживают logs, step logs и rerun отдельного job.
+  - Runs поддерживают rerun, rerun failed jobs, cancel, force cancel, delete logs и delete run.
+  - Добавлены attempts, check runs, annotations, pending deployments, approve/reject deployments и review history.
