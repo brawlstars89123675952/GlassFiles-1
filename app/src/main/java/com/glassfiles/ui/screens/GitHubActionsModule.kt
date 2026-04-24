@@ -1,6 +1,8 @@
 package com.glassfiles.ui.screens
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -114,6 +116,20 @@ import java.util.TimeZone
 
 private enum class ActionsRunFilter { ALL, ACTIVE, QUEUED, FAILED, SUCCESS, CANCELLED, SKIPPED }
 
+private enum class RunDetailSection { SUMMARY, JOBS, ARTIFACTS, CHECKS }
+
+private const val ACTIONS_INPUT_PREFS = "github_actions_dispatch_inputs"
+
+private data class ArtifactGroup(
+    val label: String,
+    val color: Color,
+    val order: Int,
+    val items: List<GHArtifact>
+)
+
+private const val ACTIONS_POLL_DELAY_MS = 5000L
+private const val ACTIONS_BACKOFF_DELAY_MS = 15000L
+
 @Composable
 internal fun ActionsTab(
     runs: List<GHWorkflowRun>,
@@ -129,6 +145,7 @@ internal fun ActionsTab(
     var branches by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedWorkflowId by remember { mutableStateOf<Long?>(null) }
     var selectedBranch by remember(repo.owner, repo.name) { mutableStateOf(repo.defaultBranch) }
+    var actionsNotice by remember { mutableStateOf<String?>(null) }
     var dispatchSchema by remember { mutableStateOf<GHWorkflowDispatchSchema?>(null) }
     var dispatchInputValues by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var dispatching by remember { mutableStateOf(false) }
@@ -152,6 +169,9 @@ internal fun ActionsTab(
                 perPage = 20,
                 page = 1
             )
+            actionsNotice = null
+        } catch (e: Exception) {
+            actionsNotice = actionsFriendlyError(e.message)
         } finally {
             refreshing = false
         }
@@ -168,11 +188,14 @@ internal fun ActionsTab(
 
     LaunchedEffect(workflows, selectedWorkflowId, selectedBranch) {
         val workflow = workflows.firstOrNull { it.id == selectedWorkflowId }
-        dispatchSchema = workflow?.let {
+        val schema = workflow?.let {
             GitHubManager.getWorkflowDispatchSchema(context, repo.owner, repo.name, it.path, selectedBranch)
         }
-        dispatchInputValues = dispatchSchema?.inputs.orEmpty().associate { input ->
-            input.key to input.defaultValue
+        dispatchSchema = schema
+        dispatchInputValues = if (workflow != null && schema != null) {
+            loadSavedDispatchInputValues(context, repo, workflow, schema)
+        } else {
+            emptyMap()
         }
     }
 
@@ -181,15 +204,20 @@ internal fun ActionsTab(
             val hasLive = liveRuns.any { isRunActive(it) }
             nowMs = System.currentTimeMillis()
             if (hasLive) {
-                delay(5000)
+                delay(if (actionsNotice != null) ACTIONS_BACKOFF_DELAY_MS else ACTIONS_POLL_DELAY_MS)
                 if (liveRuns.any { isRunActive(it) }) {
-                    liveRuns = GitHubManager.getWorkflowRuns(
-                        context = context,
-                        owner = repo.owner,
-                        repo = repo.name,
-                        perPage = 20,
-                        page = 1
-                    )
+                    try {
+                        liveRuns = GitHubManager.getWorkflowRuns(
+                            context = context,
+                            owner = repo.owner,
+                            repo = repo.name,
+                            perPage = 20,
+                            page = 1
+                        )
+                        actionsNotice = null
+                    } catch (e: Exception) {
+                        actionsNotice = actionsFriendlyError(e.message)
+                    }
                 }
             } else {
                 delay(1500)
@@ -218,6 +246,11 @@ internal fun ActionsTab(
     }
 
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+        actionsNotice?.let { notice ->
+            Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFFF9500).copy(alpha = 0.1f)).padding(10.dp)) {
+                Text(notice, fontSize = 12.sp, color = TextSecondary)
+            }
+        }
         ActionsOverviewHeader(
             workflows = workflows,
             branches = branches,
@@ -279,6 +312,9 @@ internal fun ActionsTab(
                             )
                             Toast.makeText(context, if (result.success) Strings.done else result.message.ifBlank { Strings.error }, Toast.LENGTH_LONG).show()
                             if (result.success) {
+                                workflows.firstOrNull { it.id == workflowId }?.let { workflow ->
+                                    saveDispatchInputValues(context, repo, workflow, dispatchInputs)
+                                }
                                 val newRun = findNewActionsDispatchRun(
                                     context = context,
                                     repo = repo,
@@ -345,12 +381,14 @@ private fun ActionsRunsHistoryScreen(
     var selectedWorkflowId by remember { mutableStateOf<Long?>(null) }
     var selectedBranch by remember { mutableStateOf<String?>(null) }
     var selectedEvent by remember { mutableStateOf<String?>(null) }
+    var onlyMine by remember { mutableStateOf(false) }
     var page by remember { mutableStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var pullDistance by remember { mutableStateOf(0f) }
     val listState = rememberLazyListState()
+    val currentLogin = remember { GitHubManager.getCachedUser(context)?.login.orEmpty() }
 
     suspend fun load(reset: Boolean = true) {
         refreshing = true
@@ -392,7 +430,7 @@ private fun ActionsRunsHistoryScreen(
         }
     }
 
-    val visibleRuns = remember(runs, query.text, filter) {
+    val visibleRuns = remember(runs, query.text, filter, onlyMine, currentLogin) {
         val q = query.text.trim()
         runs.filter { run ->
             val passesFilter = when (filter) {
@@ -412,7 +450,8 @@ private fun ActionsRunsHistoryScreen(
                 run.actor.contains(q, true) ||
                 run.headSha.contains(q, true) ||
                 run.runNumber.toString().contains(q)
-            passesFilter && passesQuery
+            val passesMine = !onlyMine || currentLogin.isNotBlank() && run.actor.equals(currentLogin, ignoreCase = true)
+            passesFilter && passesQuery && passesMine
         }
     }
 
@@ -456,6 +495,9 @@ private fun ActionsRunsHistoryScreen(
             ActionsFilterChip("Success", filter == ActionsRunFilter.SUCCESS) { filter = ActionsRunFilter.SUCCESS }
             ActionsFilterChip("Cancelled", filter == ActionsRunFilter.CANCELLED) { filter = ActionsRunFilter.CANCELLED }
             ActionsFilterChip("Skipped", filter == ActionsRunFilter.SKIPPED) { filter = ActionsRunFilter.SKIPPED }
+            if (currentLogin.isNotBlank()) {
+                ActionsFilterChip("Mine", onlyMine) { onlyMine = !onlyMine }
+            }
         }
 
         Row(
@@ -1149,6 +1191,50 @@ private fun ArtifactRow(artifact: GHArtifact, busy: Boolean, onDownload: () -> U
 }
 
 @Composable
+private fun ArtifactRunRow(
+    artifact: GHArtifact,
+    downloading: Boolean,
+    deleting: Boolean,
+    onCopyName: () -> Unit,
+    onDownload: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            Modifier.weight(1f).clickable(enabled = !artifact.expired && !downloading, onClick = onDownload),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(Icons.Rounded.Article, null, Modifier.size(20.dp), tint = if (artifact.expired) TextTertiary else Blue)
+            Column(Modifier.weight(1f)) {
+                Text(artifact.name, fontSize = 14.sp, color = if (artifact.expired) TextTertiary else TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    artifactKindBadges(artifact).forEach { (label, color) -> MiniActionsBadge(label, color) }
+                    MiniActionsBadge(formatArtifactSize(artifact.sizeInBytes), TextSecondary)
+                    if (artifact.sizeInBytes <= 0L) MiniActionsBadge("suspect", Color(0xFFFF9500))
+                    if (artifact.expired) MiniActionsBadge(Strings.ghExpired, Color(0xFFFF3B30))
+                    else MiniActionsBadge(artifact.createdAt.take(10), TextTertiary)
+                }
+            }
+        }
+        if (!artifact.expired) {
+            IconButton(onClick = onCopyName) {
+                Icon(Icons.Rounded.ContentCopy, null, tint = TextSecondary)
+            }
+            IconButton(onClick = onDelete) {
+                if (deleting) CircularProgressIndicator(Modifier.size(16.dp), color = Color(0xFFFF3B30), strokeWidth = 2.dp)
+                else Icon(Icons.Rounded.Delete, null, tint = Color(0xFFFF3B30))
+            }
+        }
+        if (downloading) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
+    }
+}
+
+@Composable
 private fun ActionInfoCard(
     title: String,
     subtitle: String,
@@ -1177,6 +1263,19 @@ private fun ActionInfoCard(
 @Composable
 private fun EmptyActionsText(text: String) {
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(18.dp), contentAlignment = Alignment.Center) {
+        Text(text, fontSize = 13.sp, color = TextTertiary)
+    }
+}
+
+@Composable
+private fun LoadingActionsText(text: String) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
+        Spacer(Modifier.width(8.dp))
         Text(text, fontSize = 13.sp, color = TextTertiary)
     }
 }
@@ -1270,6 +1369,34 @@ private fun missingDispatchInputs(schema: GHWorkflowDispatchSchema?, values: Map
 
 private fun dispatchInputValue(input: GHWorkflowDispatchInput, values: Map<String, String>): String =
     values[input.key].orEmpty().ifBlank { input.defaultValue }.trim()
+
+private fun loadSavedDispatchInputValues(
+    context: Context,
+    repo: GHRepo,
+    workflow: GHWorkflow,
+    schema: GHWorkflowDispatchSchema
+): Map<String, String> {
+    val prefs = context.getSharedPreferences(ACTIONS_INPUT_PREFS, Context.MODE_PRIVATE)
+    return schema.inputs.associate { input ->
+        input.key to (prefs.getString(dispatchInputPrefKey(repo, workflow, input.key), null) ?: input.defaultValue)
+    }
+}
+
+private fun saveDispatchInputValues(
+    context: Context,
+    repo: GHRepo,
+    workflow: GHWorkflow,
+    values: Map<String, String>
+) {
+    val editor = context.getSharedPreferences(ACTIONS_INPUT_PREFS, Context.MODE_PRIVATE).edit()
+    values.forEach { (key, value) ->
+        editor.putString(dispatchInputPrefKey(repo, workflow, key), value)
+    }
+    editor.apply()
+}
+
+private fun dispatchInputPrefKey(repo: GHRepo, workflow: GHWorkflow, inputKey: String): String =
+    "${repo.owner}/${repo.name}/${workflow.id}/$inputKey"
 
 @Composable
 private fun ModernRunCard(
@@ -1463,38 +1590,102 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
     var onlyFailedJobs by remember { mutableStateOf(false) }
     var onlyActiveJobs by remember { mutableStateOf(false) }
     var loadedLogsFilter by remember { mutableStateOf(TextFieldValue("")) }
+    var selectedSection by remember { mutableStateOf(RunDetailSection.JOBS) }
     var refreshing by remember { mutableStateOf(false) }
+    var metadataLoaded by remember { mutableStateOf(false) }
+    var artifactsLoaded by remember { mutableStateOf(false) }
+    var checksLoaded by remember { mutableStateOf(false) }
+    var loadingMetadata by remember { mutableStateOf(false) }
+    var loadingArtifacts by remember { mutableStateOf(false) }
+    var loadingChecks by remember { mutableStateOf(false) }
+    var downloadingAllArtifacts by remember { mutableStateOf(false) }
+    var detailNotice by remember { mutableStateOf<String?>(null) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
-    suspend fun refreshAll() {
+    suspend fun loadMetadata(force: Boolean = false) {
+        if (metadataLoaded && !force) return
+        loadingMetadata = true
+        try {
+            pendingDeployments = GitHubManager.getPendingDeployments(context, repo.owner, repo.name, runId)
+            reviewHistory = GitHubManager.getWorkflowRunReviewHistory(context, repo.owner, repo.name, runId)
+            usage = GitHubManager.getWorkflowRunUsage(context, repo.owner, repo.name, runId)
+            metadataLoaded = true
+        } finally {
+            loadingMetadata = false
+        }
+    }
+
+    suspend fun loadArtifacts(force: Boolean = false) {
+        if (artifactsLoaded && !force) return
+        loadingArtifacts = true
+        try {
+            artifacts = GitHubManager.getRunArtifacts(context, repo.owner, repo.name, runId)
+            artifactsLoaded = true
+        } finally {
+            loadingArtifacts = false
+        }
+    }
+
+    suspend fun loadChecks(force: Boolean = false) {
+        if (checksLoaded && !force) return
+        loadingChecks = true
+        try {
+            val currentRun = run ?: GitHubManager.getWorkflowRun(context, repo.owner, repo.name, runId)
+            checkRuns = currentRun?.headSha?.takeIf { it.isNotBlank() }?.let {
+                GitHubManager.getCheckRunsForRef(context, repo.owner, repo.name, it)
+            } ?: emptyList()
+            checksLoaded = true
+        } finally {
+            loadingChecks = false
+        }
+    }
+
+    suspend fun refreshAll(refreshSection: Boolean = true) {
         refreshing = true
-        val latestRun = GitHubManager.getWorkflowRun(context, repo.owner, repo.name, runId)
-        maxAttempt = latestRun?.runAttempt?.coerceAtLeast(1) ?: 1
-        val attempt = selectedAttempt
-        run = if (attempt != null) GitHubManager.getWorkflowRunAttempt(context, repo.owner, repo.name, runId, attempt) ?: latestRun else latestRun
-        jobs = if (attempt != null) GitHubManager.getWorkflowRunAttemptJobs(context, repo.owner, repo.name, runId, attempt)
-            else GitHubManager.getWorkflowRunJobs(context, repo.owner, repo.name, runId)
-        artifacts = GitHubManager.getRunArtifacts(context, repo.owner, repo.name, runId)
-        pendingDeployments = GitHubManager.getPendingDeployments(context, repo.owner, repo.name, runId)
-        reviewHistory = GitHubManager.getWorkflowRunReviewHistory(context, repo.owner, repo.name, runId)
-        usage = GitHubManager.getWorkflowRunUsage(context, repo.owner, repo.name, runId)
-        checkRuns = run?.headSha?.takeIf { it.isNotBlank() }?.let {
-            GitHubManager.getCheckRunsForRef(context, repo.owner, repo.name, it)
-        } ?: emptyList()
+        try {
+            val latestRun = GitHubManager.getWorkflowRun(context, repo.owner, repo.name, runId)
+            maxAttempt = latestRun?.runAttempt?.coerceAtLeast(1) ?: 1
+            val attempt = selectedAttempt
+            run = if (attempt != null) GitHubManager.getWorkflowRunAttempt(context, repo.owner, repo.name, runId, attempt) ?: latestRun else latestRun
+            jobs = if (attempt != null) GitHubManager.getWorkflowRunAttemptJobs(context, repo.owner, repo.name, runId, attempt)
+                else GitHubManager.getWorkflowRunJobs(context, repo.owner, repo.name, runId)
+            if (refreshSection) {
+                when (selectedSection) {
+                    RunDetailSection.SUMMARY -> loadMetadata(force = true)
+                    RunDetailSection.ARTIFACTS -> loadArtifacts(force = true)
+                    RunDetailSection.CHECKS -> loadChecks(force = true)
+                    RunDetailSection.JOBS -> {}
+                }
+            }
+            detailNotice = null
+        } catch (e: Exception) {
+            detailNotice = actionsFriendlyError(e.message)
+        }
         refreshing = false
         loading = false
     }
 
-    LaunchedEffect(runId) { refreshAll() }
+    LaunchedEffect(runId) { refreshAll(refreshSection = false) }
+
+    LaunchedEffect(selectedSection, loading, run?.headSha) {
+        if (!loading) {
+            when (selectedSection) {
+                RunDetailSection.SUMMARY -> loadMetadata()
+                RunDetailSection.ARTIFACTS -> loadArtifacts()
+                RunDetailSection.CHECKS -> loadChecks()
+                RunDetailSection.JOBS -> {}
+            }
+        }
+    }
 
     LaunchedEffect(jobs, expandedJobId, expandedStepKey) {
         while (true) {
             val hasLive = jobs.any { isJobActive(it) }
             nowMs = System.currentTimeMillis()
             if (hasLive) {
-                delay(1000)
+                delay(if (detailNotice != null) ACTIONS_BACKOFF_DELAY_MS else 1000L)
                 if (nowMs % 3000L < 1100L) {
-                    refreshAll()
+                    refreshAll(refreshSection = false)
                     val expandedLiveJob = jobs.firstOrNull {
                         (it.id == expandedJobId || expandedStepKey?.startsWith("${it.id}:") == true) &&
                             isJobActive(it)
@@ -1530,6 +1721,11 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
             IconButton(onClick = { scope.launch { refreshAll() } }) {
                 if (refreshing) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
                 else Icon(Icons.Rounded.Refresh, null, tint = Blue)
+            }
+            run?.htmlUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                IconButton(onClick = { openExternalUrl(context, url) }) {
+                    Icon(Icons.Rounded.Article, null, tint = Blue)
+                }
             }
             IconButton(onClick = {
                 scope.launch {
@@ -1570,6 +1766,29 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
             val failedCount = jobs.count { it.conclusion == "failure" }
             val runningCount = jobs.count { isJobActive(it) }
 
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ActionsFilterChip("Jobs", selectedSection == RunDetailSection.JOBS) { selectedSection = RunDetailSection.JOBS }
+                ActionsFilterChip("Summary", selectedSection == RunDetailSection.SUMMARY) { selectedSection = RunDetailSection.SUMMARY }
+                ActionsFilterChip(
+                    if (artifactsLoaded) "Artifacts ${artifacts.size}" else "Artifacts",
+                    selectedSection == RunDetailSection.ARTIFACTS
+                ) { selectedSection = RunDetailSection.ARTIFACTS }
+                ActionsFilterChip(
+                    if (checksLoaded) "Checks ${checkRuns.size}" else "Checks",
+                    selectedSection == RunDetailSection.CHECKS
+                ) { selectedSection = RunDetailSection.CHECKS }
+            }
+
+            detailNotice?.let { notice ->
+                Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFFF9500).copy(alpha = 0.1f)).padding(10.dp)) {
+                    Text(notice, fontSize = 12.sp, color = TextSecondary)
+                }
+            }
+
+            if (selectedSection == RunDetailSection.JOBS) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1615,6 +1834,7 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                 }
                 Icon(Icons.Rounded.Search, null, tint = Blue)
             }
+            }
 
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp)) {
                 run?.let { currentRun ->
@@ -1644,6 +1864,12 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                             diagnostics = failureDiagnostics,
                             logLoaded = jobLogs[failedJob.id] != null,
                             loading = loadingJobId == failedJob.id,
+                            onCopySummary = {
+                                val summary = failureSummaryText(failedJob, firstFailedStep, failureDiagnostics)
+                                val clip = android.content.ClipData.newPlainText("failure-summary", summary)
+                                (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
+                                Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                            },
                             onOpenFailedLog = {
                                 expandedJobId = failedJob.id
                                 firstFailedStep?.let { step -> expandedStepKey = "${failedJob.id}:${step.number}" }
@@ -1653,6 +1879,10 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                         Spacer(Modifier.height(8.dp))
                     }
                 }
+                if (selectedSection == RunDetailSection.SUMMARY) {
+                    if (loadingMetadata) {
+                        item { LoadingActionsText("Loading run metadata...") }
+                    }
                 usage?.let { runUsage ->
                     item {
                         WorkflowUsageCard(runUsage)
@@ -1707,7 +1937,14 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                         Spacer(Modifier.height(8.dp))
                     }
                 }
-                if (checkRuns.isNotEmpty()) {
+                }
+
+                if (selectedSection == RunDetailSection.CHECKS) {
+                    if (loadingChecks) {
+                        item { LoadingActionsText("Loading checks...") }
+                    } else if (checkRuns.isEmpty()) {
+                        item { EmptyActionsText("No checks found") }
+                    } else {
                     item {
                         CheckRunsCard(
                             checkRuns = checkRuns.filter { checkRun ->
@@ -1732,8 +1969,10 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                         )
                         Spacer(Modifier.height(8.dp))
                     }
+                    }
                 }
 
+                if (selectedSection == RunDetailSection.JOBS) {
                 items(filteredJobs) { job ->
                     val jColor = when {
                         isJobActive(job) -> Blue
@@ -1834,6 +2073,14 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                                     (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
                                     Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
                                 }
+                                Chip(Icons.Rounded.Article, "Save log") {
+                                    val dest = File(
+                                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                                        "GlassFiles_Git/${safeLogFileName(job)}.log"
+                                    )
+                                    val ok = saveTextFile(dest, jobLogs[job.id].orEmpty())
+                                    Toast.makeText(context, if (ok) "${Strings.done}: ${dest.name}" else Strings.error, Toast.LENGTH_SHORT).show()
+                                }
                             }
                             Chip(Icons.Rounded.Refresh, "Rerun job") {
                                 scope.launch {
@@ -1870,61 +2117,86 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                         }
                     }
                 }
+                }
 
-                if (artifacts.isNotEmpty()) {
-                    item {
-                        Spacer(Modifier.height(8.dp))
-                        Text(Strings.ghArtifacts, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    items(artifacts) { artifact ->
-                        Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceWhite)
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                if (selectedSection == RunDetailSection.ARTIFACTS) {
+                    if (loadingArtifacts) {
+                        item { LoadingActionsText("Loading artifacts...") }
+                    } else if (artifacts.isEmpty()) {
+                        item { EmptyActionsText("No artifacts found") }
+                    } else {
+                        item {
+                            Spacer(Modifier.height(8.dp))
                             Row(
-                                Modifier.weight(1f).clickable(enabled = !artifact.expired && downloading != artifact.id) {
-                                    downloading = artifact.id
-                                    scope.launch {
-                                        val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${safeArtifactZipName(artifact)}")
-                                        val ok = GitHubManager.downloadArtifact(context, repo.owner, repo.name, artifact.id, dest)
-                                        Toast.makeText(context, if (ok) "${Strings.done}: ${dest.name}" else Strings.error, Toast.LENGTH_SHORT).show()
-                                        downloading = null
-                                    }
-                                },
+                                Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(Icons.Rounded.Article, null, Modifier.size(20.dp), tint = if (artifact.expired) TextTertiary else Blue)
-                                Column(Modifier.weight(1f)) {
-                                    Text(artifact.name, fontSize = 14.sp, color = if (artifact.expired) TextTertiary else TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        artifactKindBadges(artifact).forEach { (label, color) -> MiniActionsBadge(label, color) }
-                                        MiniActionsBadge(formatArtifactSize(artifact.sizeInBytes), TextSecondary)
-                                        if (artifact.expired) MiniActionsBadge(Strings.ghExpired, Color(0xFFFF3B30))
-                                        else MiniActionsBadge(artifact.createdAt.take(10), TextTertiary)
+                                Text(Strings.ghArtifacts, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                TextButton(
+                                    enabled = !downloadingAllArtifacts && artifacts.any { !it.expired },
+                                    onClick = {
+                                        downloadingAllArtifacts = true
+                                        scope.launch {
+                                            var count = 0
+                                            artifacts.filter { !it.expired }.forEach { artifact ->
+                                                val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${safeArtifactZipName(artifact)}")
+                                                if (GitHubManager.downloadArtifact(context, repo.owner, repo.name, artifact.id, dest)) count++
+                                            }
+                                            downloadingAllArtifacts = false
+                                            Toast.makeText(context, "${Strings.done}: $count/${artifacts.count { !it.expired }}", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
+                                ) {
+                                    if (downloadingAllArtifacts) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
+                                    else Text("Download all", color = Blue, fontSize = 12.sp)
                                 }
                             }
-                            if (!artifact.expired) {
-                                IconButton(onClick = {
-                                    deletingArtifactId = artifact.id
-                                    scope.launch {
-                                        val ok = GitHubManager.deleteArtifact(context, repo.owner, repo.name, artifact.id)
-                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                        deletingArtifactId = null
-                                        refreshAll()
-                                    }
-                                }) {
-                                    if (deletingArtifactId == artifact.id) CircularProgressIndicator(Modifier.size(16.dp), color = Color(0xFFFF3B30), strokeWidth = 2.dp)
-                                    else Icon(Icons.Rounded.Delete, null, tint = Color(0xFFFF3B30))
-                                }
-                            }
-                            if (downloading == artifact.id) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
+                            Spacer(Modifier.height(8.dp))
                         }
-                        Spacer(Modifier.height(6.dp))
+                        groupedArtifacts(artifacts).forEach { group ->
+                            item {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    MiniActionsBadge(group.label, group.color)
+                                    Text("${group.items.size} artifacts", fontSize = 11.sp, color = TextTertiary)
+                                }
+                            }
+                            items(group.items) { artifact ->
+                                ArtifactRunRow(
+                                    artifact = artifact,
+                                    downloading = downloading == artifact.id,
+                                    deleting = deletingArtifactId == artifact.id,
+                                    onCopyName = {
+                                        val clip = android.content.ClipData.newPlainText("artifact-name", artifact.name)
+                                        (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
+                                        Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                                    },
+                                    onDownload = {
+                                        downloading = artifact.id
+                                        scope.launch {
+                                            val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${safeArtifactZipName(artifact)}")
+                                            val ok = GitHubManager.downloadArtifact(context, repo.owner, repo.name, artifact.id, dest)
+                                            Toast.makeText(context, if (ok) "${Strings.done}: ${dest.name}" else Strings.error, Toast.LENGTH_SHORT).show()
+                                            downloading = null
+                                        }
+                                    },
+                                    onDelete = {
+                                        deletingArtifactId = artifact.id
+                                        scope.launch {
+                                            val ok = GitHubManager.deleteArtifact(context, repo.owner, repo.name, artifact.id)
+                                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                            deletingArtifactId = null
+                                            refreshAll()
+                                        }
+                                    }
+                                )
+                                Spacer(Modifier.height(6.dp))
+                            }
+                        }
                     }
                 }
             }
@@ -1971,6 +2243,7 @@ private fun FailureDiagnosisCard(
     diagnostics: List<String>,
     logLoaded: Boolean,
     loading: Boolean,
+    onCopySummary: () -> Unit,
     onOpenFailedLog: () -> Unit
 ) {
     Column(
@@ -2002,6 +2275,10 @@ private fun FailureDiagnosisCard(
             diagnostics.take(3).forEach { message ->
                 Text(message, fontSize = 11.sp, color = TextSecondary, lineHeight = 15.sp)
             }
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Chip(Icons.Rounded.ContentCopy, "Copy failure summary", Color(0xFFFF3B30), onCopySummary)
+            Chip(Icons.Rounded.Article, "Open failed log", Color(0xFFFF3B30), onOpenFailedLog)
         }
     }
 }
@@ -2255,8 +2532,28 @@ private fun buildFailureDiagnostics(job: GHJob?, step: GHStep?, log: String): Li
         "Kernel defconfig was not found or does not match the selected device/branch."
     )
     addIf(
+        listOf("no rule to make target", "dtb", "dtbo", "dts", "device tree"),
+        "Kernel device tree target failed. Check DTB/DTBO paths, selected device, and architecture."
+    )
+    addIf(
+        listOf("mkbootimg", "vendor_boot", "boot.img", "dtbo.img", "ramdisk", "avbtool"),
+        "Image packaging failed. Check boot/vendor_boot/dtbo inputs, ramdisk path, and mkbootimg/avbtool setup."
+    )
+    addIf(
+        listOf("anykernel", "anykernel3", "ak3", "zipalign"),
+        "AnyKernel/Magisk packaging failed. Check AnyKernel directory, module files, and zip output path."
+    )
+    addIf(
         listOf("clang: command not found", "gcc: command not found", "aarch64-linux-android", "toolchain", "cross_compile"),
         "Toolchain problem. Check compiler input, CROSS_COMPILE/CLANG path, and setup step."
+    )
+    addIf(
+        listOf("meson", "ninja", "libdrm", "freedreno", "turnip", "adreno", "vulkan headers", "vulkan-headers", "glslang", "spirv"),
+        "Turnip/Adreno driver build problem. Check Mesa dependencies, Vulkan headers, libdrm, Meson/Ninja, and Android NDK setup."
+    )
+    addIf(
+        listOf("ndk-build", "android ndk", "ndk not found", "sdkmanager", "cmake error"),
+        "Android NDK/CMake setup failed. Check NDK version, SDK packages, and native build inputs."
     )
     addIf(
         listOf("no space left on device", "disk quota exceeded"),
@@ -2283,6 +2580,49 @@ private fun buildFailureDiagnostics(job: GHJob?, step: GHStep?, log: String): Li
         messages += "Failed step: ${step.name}. Open the log and inspect the last error block."
     }
     return messages.toList()
+}
+
+private fun failureSummaryText(job: GHJob, step: GHStep?, diagnostics: List<String>): String {
+    val lines = mutableListOf("Failed job: ${job.name}")
+    if (step != null) lines += "Failed step: ${step.name} (#${step.number})"
+    diagnostics.takeIf { it.isNotEmpty() }?.let { items ->
+        lines += "Likely causes:"
+        lines += items.map { "- $it" }
+    }
+    return lines.joinToString("\n")
+}
+
+private fun openExternalUrl(context: Context, url: String) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    } catch (_: Exception) {
+        Toast.makeText(context, "Cannot open link", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun actionsFriendlyError(message: String?): String {
+    val raw = message.orEmpty()
+    val lower = raw.lowercase()
+    return when {
+        "403" in lower || "forbidden" in lower -> "GitHub API permission or rate limit issue. Polling slowed down."
+        "401" in lower || "unauthorized" in lower -> "GitHub token is missing or expired."
+        "404" in lower || "not found" in lower -> "GitHub resource is not available yet or token has no access."
+        "422" in lower || "validation failed" in lower -> "GitHub rejected the request. Check workflow inputs and ref."
+        "timeout" in lower || "failed to connect" in lower -> "Network issue. Polling slowed down."
+        raw.isNotBlank() -> raw.take(180)
+        else -> "GitHub request failed. Polling slowed down."
+    }
+}
+
+private fun safeLogFileName(job: GHJob): String =
+    "job-${job.id}-${job.name.replace(Regex("""[\\/:*?"<>|]+"""), "_").trim().ifBlank { "log" }}"
+
+private fun saveTextFile(file: File, text: String): Boolean = try {
+    file.parentFile?.mkdirs()
+    file.writeText(text)
+    true
+} catch (_: Exception) {
+    false
 }
 
 private fun splitLogsBySteps(job: GHJob, raw: String): Map<Int, String> {
@@ -2482,32 +2822,62 @@ private fun safeArtifactZipName(artifact: GHArtifact): String {
 private fun artifactKindBadges(artifact: GHArtifact): List<Pair<String, Color>> =
     buildKindBadges(artifact.name)
 
+private fun groupedArtifacts(artifacts: List<GHArtifact>): List<ArtifactGroup> =
+    artifacts.groupBy { artifactKindGroup(it) }
+        .map { (meta, items) -> meta.copy(items = items.sortedBy { it.name.lowercase() }) }
+        .sortedWith(compareBy<ArtifactGroup> { it.order }.thenBy { it.label })
+
+private fun artifactKindGroup(artifact: GHArtifact): ArtifactGroup {
+    val name = artifact.name.lowercase()
+    return when {
+        kernelPatterns.any { it in name } -> ArtifactGroup("Kernel / IMG", Color(0xFF34C759), 0, emptyList())
+        magiskPatterns.any { it in name } -> ArtifactGroup("Magisk / KSU", Color(0xFFFF9500), 1, emptyList())
+        driverPatterns.any { it in name } -> ArtifactGroup("Turnip / Adreno", Color(0xFFBF5AF2), 2, emptyList())
+        androidPatterns.any { it in name } -> ArtifactGroup("Android app", Blue, 3, emptyList())
+        iosPatterns.any { it in name } -> ArtifactGroup("iOS app", Color(0xFF5AC8FA), 4, emptyList())
+        windowsPatterns.any { it in name } -> ArtifactGroup("Windows", Color(0xFF0078D4), 5, emptyList())
+        linuxPatterns.any { it in name } -> ArtifactGroup("Linux", Color(0xFF8E8E93), 6, emptyList())
+        else -> ArtifactGroup("Other", TextSecondary, 99, emptyList())
+    }
+}
+
 private fun buildKindBadges(text: String): List<Pair<String, Color>> {
     val name = text.lowercase()
     val labels = mutableListOf<Pair<String, Color>>()
-    if (listOf("kernel", "anykernel", "boot", "dtbo", "vendor_boot", "image.gz", "ak3").any { it in name }) {
+    if (kernelPatterns.any { it in name }) {
         labels += "Kernel" to Color(0xFF34C759)
     }
-    if (listOf("magisk", "magisk-module", "magisk_module", "ksu", "kernelsu", "apatch").any { it in name }) {
+    if (magiskPatterns.any { it in name }) {
         labels += "Magisk" to Color(0xFFFF9500)
     }
-    if (listOf("driver", "turnip", "adreno", "vulkan", "mesa").any { it in name }) {
+    if (driverPatterns.any { it in name }) {
         labels += "Driver" to Color(0xFFBF5AF2)
     }
-    if (listOf("apk", "aab", "android").any { it in name }) {
+    if (androidPatterns.any { it in name }) {
         labels += "Android" to Blue
     }
-    if (listOf("ipa", "ios", "xcarchive").any { it in name }) {
+    if (iosPatterns.any { it in name }) {
         labels += "iOS" to Color(0xFF5AC8FA)
     }
-    if (listOf("exe", "msi", "windows", "win64", "win32").any { it in name }) {
+    if (windowsPatterns.any { it in name }) {
         labels += "Windows" to Color(0xFF0078D4)
     }
-    if (listOf("appimage", "deb", "rpm", "linux").any { it in name }) {
+    if (linuxPatterns.any { it in name }) {
         labels += "Linux" to Color(0xFF8E8E93)
     }
     return labels
 }
+
+private val kernelPatterns = listOf(
+    "kernel", "anykernel", "anykernel3", "boot", "boot.img", "vendor_boot", "vendor_boot.img",
+    "dtbo", "dtbo.img", "dtb", "image.gz", "image.gz-dtb", "ak3", "zimage"
+)
+private val magiskPatterns = listOf("magisk", "magisk-module", "magisk_module", "ksu", "kernelsu", "apatch")
+private val driverPatterns = listOf("driver", "turnip", "adreno", "freedreno", "vulkan", "mesa", "kgsl")
+private val androidPatterns = listOf("apk", "aab", "android")
+private val iosPatterns = listOf("ipa", "ios", "xcarchive")
+private val windowsPatterns = listOf("exe", "msi", "windows", "win64", "win32")
+private val linuxPatterns = listOf("appimage", ".deb", ".rpm", "linux")
 
 private val ISO_FMT = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
     timeZone = TimeZone.getTimeZone("UTC")
