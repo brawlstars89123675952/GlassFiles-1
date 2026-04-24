@@ -2723,15 +2723,13 @@ private fun buildJobListItems(
     if (jobs.size <= 10) return jobs.map { JobListItem.JobRow(it) }
     val defaultExpanded = totalJobCount <= 20
     val groups = jobs.groupBy { matrixJobGroupName(it.name) }
-    return groups.flatMap { entry ->
-        val groupName = entry.key
-        val groupJobs = entry.value
-        val shouldGroup = groupJobs.size > 1 || groupJobs.any { it.name.contains(" / ") }
-        if (!shouldGroup) {
-            groupJobs.map<JobListItem> { JobListItem.JobRow(it) }
-        } else {
-            val expanded = expandedGroups.getOrPut(groupName) { defaultExpanded }
-            buildList<JobListItem> {
+    return buildList<JobListItem> {
+        groups.forEach { (groupName, groupJobs) ->
+            val shouldGroup = groupJobs.size > 1 || groupJobs.any { it.name.contains(" / ") }
+            if (!shouldGroup) {
+                addAll(groupJobs.map { JobListItem.JobRow(it) })
+            } else {
+                val expanded = expandedGroups.getOrPut(groupName) { defaultExpanded }
                 add(JobListItem.GroupHeader(MatrixJobGroup(groupName, groupJobs), expanded))
                 if (expanded) addAll(groupJobs.map { JobListItem.JobRow(it) })
             }
