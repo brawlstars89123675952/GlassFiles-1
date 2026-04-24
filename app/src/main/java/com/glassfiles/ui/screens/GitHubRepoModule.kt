@@ -673,8 +673,11 @@ private fun PullRequestDetailScreen(
     }
     if (showReviews && current != null) {
         PullReviewHistoryDialog(
+            repo = repo,
+            pr = current,
             reviews = reviews,
-            onDismiss = { showReviews = false }
+            onDismiss = { showReviews = false },
+            onChanged = { scope.launch { refreshPull() } }
         )
     }
     if (showMerge && current != null) {
@@ -1568,7 +1571,20 @@ private fun PullReviewersDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -
 }
 
 @Composable
-private fun PullReviewHistoryDialog(reviews: List<GHPullReview>, onDismiss: () -> Unit) {
+private fun PullReviewHistoryDialog(
+    repo: GHRepo,
+    pr: GHPullRequest,
+    reviews: List<GHPullReview>,
+    onDismiss: () -> Unit,
+    onChanged: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selectedReview by remember { mutableStateOf<GHPullReview?>(null) }
+    var editReview by remember { mutableStateOf<GHPullReview?>(null) }
+    var deleteReview by remember { mutableStateOf<GHPullReview?>(null) }
+    var actionInFlight by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = SurfaceWhite,
@@ -1579,11 +1595,45 @@ private fun PullReviewHistoryDialog(reviews: List<GHPullReview>, onDismiss: () -
             } else {
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(reviews) { review ->
-                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SurfaceLight).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val canMutate = review.state.equals("PENDING", ignoreCase = true)
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(SurfaceLight)
+                                .clickable {
+                                    scope.launch {
+                                        selectedReview = GitHubManager.getPullRequestReview(context, repo.owner, repo.name, pr.number, review.id) ?: review
+                                    }
+                                }
+                                .padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 PullBadge(review.state.ifBlank { "review" }, reviewStateColor(review.state))
                                 Text(review.user.ifBlank { "GitHub" }, fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                                 if (review.submittedAt.isNotBlank()) Text(review.submittedAt.take(10), fontSize = 10.sp, color = TextTertiary)
+                                if (review.htmlUrl.isNotBlank()) {
+                                    IconButton(
+                                        onClick = {
+                                            try {
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(review.htmlUrl)))
+                                            } catch (_: Exception) {
+                                                Toast.makeText(context, Strings.error, Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = TextSecondary)
+                                    }
+                                }
+                                if (canMutate) {
+                                    IconButton(onClick = { editReview = review }, modifier = Modifier.size(28.dp)) {
+                                        Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = Blue)
+                                    }
+                                    IconButton(onClick = { deleteReview = review }, modifier = Modifier.size(28.dp)) {
+                                        Icon(Icons.Rounded.Delete, null, Modifier.size(16.dp), tint = Color(0xFFFF3B30))
+                                    }
+                                }
                             }
                             if (review.body.isNotBlank()) Text(review.body, fontSize = 11.sp, color = TextSecondary, maxLines = 4, overflow = TextOverflow.Ellipsis)
                             if (review.commitId.length >= 7) Text(review.commitId.take(7), fontSize = 10.sp, color = TextTertiary)
@@ -1594,6 +1644,127 @@ private fun PullReviewHistoryDialog(reviews: List<GHPullReview>, onDismiss: () -
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
     )
+
+    selectedReview?.let { review ->
+        PullReviewDetailDialog(review = review, onDismiss = { selectedReview = null })
+    }
+
+    editReview?.let { review ->
+        PullReviewEditDialog(
+            review = review,
+            saving = actionInFlight,
+            onDismiss = { if (!actionInFlight) editReview = null },
+            onSave = { body ->
+                actionInFlight = true
+                scope.launch {
+                    val updated = GitHubManager.updatePullRequestReview(context, repo.owner, repo.name, pr.number, review.id, body)
+                    actionInFlight = false
+                    Toast.makeText(context, if (updated != null) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                    if (updated != null) {
+                        editReview = null
+                        selectedReview = updated
+                        onChanged()
+                    }
+                }
+            }
+        )
+    }
+
+    deleteReview?.let { review ->
+        AlertDialog(
+            onDismissRequest = { if (!actionInFlight) deleteReview = null },
+            containerColor = SurfaceWhite,
+            title = { Text("Delete pending review?", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            text = { Text("Delete review #${review.id}?", fontSize = 13.sp, color = TextSecondary) },
+            confirmButton = {
+                TextButton(
+                    enabled = !actionInFlight,
+                    onClick = {
+                        actionInFlight = true
+                        scope.launch {
+                            val ok = GitHubManager.deletePullRequestReview(context, repo.owner, repo.name, pr.number, review.id)
+                            actionInFlight = false
+                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                            if (ok) {
+                                deleteReview = null
+                                selectedReview = null
+                                onChanged()
+                            }
+                        }
+                    }
+                ) { Text("Delete", color = Color(0xFFFF3B30)) }
+            },
+            dismissButton = { TextButton(enabled = !actionInFlight, onClick = { deleteReview = null }) { Text(Strings.cancel, color = TextSecondary) } }
+        )
+    }
+}
+
+@Composable
+private fun PullReviewDetailDialog(review: GHPullReview, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Review #${review.id}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PullBadge(review.state.ifBlank { "review" }, reviewStateColor(review.state))
+                    if (review.commitId.length >= 7) PullBadge(review.commitId.take(7), TextSecondary)
+                }
+                PullReviewDetailLine("Reviewer", review.user.ifBlank { "GitHub" })
+                PullReviewDetailLine("Submitted", review.submittedAt.take(19).replace('T', ' '))
+                PullReviewDetailLine("Commit", review.commitId)
+                if (review.body.isNotBlank()) {
+                    Text(review.body, fontSize = 13.sp, color = TextPrimary, lineHeight = 18.sp)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+    )
+}
+
+@Composable
+private fun PullReviewEditDialog(
+    review: GHPullReview,
+    saving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var body by remember(review.id) { mutableStateOf(review.body) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Edit pending review", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PullBadge(review.state.ifBlank { "review" }, reviewStateColor(review.state))
+                OutlinedTextField(
+                    value = body,
+                    onValueChange = { body = it },
+                    label = { Text("Review body") },
+                    modifier = Modifier.fillMaxWidth().height(150.dp),
+                    maxLines = 8
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !saving, onClick = { onSave(body) }) {
+                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
+                else Text("Save", color = Blue)
+            }
+        },
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun PullReviewDetailLine(label: String, value: String) {
+    if (value.isBlank()) return
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, fontSize = 11.sp, color = TextTertiary, fontWeight = FontWeight.Medium)
+        Text(value, fontSize = 13.sp, color = TextPrimary)
+    }
 }
 
 @Composable

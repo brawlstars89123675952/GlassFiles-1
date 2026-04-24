@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHCodeScanningAlert
+import com.glassfiles.data.github.GHCommunityProfile
 import com.glassfiles.data.github.GHDependabotAlert
 import com.glassfiles.data.github.GHRepositorySecurityAdvisory
 import com.glassfiles.data.github.GHRepositorySecuritySettings
@@ -37,11 +39,13 @@ import com.glassfiles.data.github.GHSecretScanningAlert
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 private val RULESET_FILTERS = listOf("all", "active", "evaluate", "disabled")
 private val ALERT_SEVERITIES = listOf("all", "critical", "high", "medium", "low")
 private val ALERT_STATES = listOf("open", "fixed", "resolved", "dismissed", "published", "draft", "closed", "all")
-private val SECURITY_TABS = listOf("Dependabot", "Code", "Secrets", "Advisories", "Settings")
+private val SECURITY_TABS = listOf("Dependabot", "Code", "Secrets", "Advisories", "Community", "Settings")
 
 @Composable
 internal fun RulesetsScreen(
@@ -56,6 +60,8 @@ internal fun RulesetsScreen(
     var query by remember { mutableStateOf("") }
     var enforcementFilter by remember { mutableStateOf("all") }
     var selectedRuleset by remember { mutableStateOf<GHRuleset?>(null) }
+    var showCreateRuleset by remember { mutableStateOf(false) }
+    var actionInFlight by remember { mutableStateOf(false) }
 
     fun loadRulesets() {
         loading = true
@@ -72,7 +78,15 @@ internal fun RulesetsScreen(
             repoOwner = repoOwner,
             repoName = repoName,
             ruleset = ruleset,
-            onBack = { selectedRuleset = null }
+            onBack = { selectedRuleset = null },
+            onChanged = {
+                selectedRuleset = null
+                loadRulesets()
+            },
+            onDeleted = {
+                selectedRuleset = null
+                loadRulesets()
+            }
         )
         return
     }
@@ -85,6 +99,9 @@ internal fun RulesetsScreen(
             actions = {
                 IconButton(onClick = { loadRulesets() }, enabled = !loading) {
                     Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
+                }
+                IconButton(onClick = { showCreateRuleset = true }, enabled = !loading) {
+                    Icon(Icons.Rounded.Add, null, Modifier.size(20.dp), tint = Blue)
                 }
             }
         )
@@ -142,6 +159,32 @@ internal fun RulesetsScreen(
             }
         }
     }
+
+    if (showCreateRuleset) {
+        RulesetEditorDialog(
+            title = "New Ruleset",
+            initialName = "",
+            initialTarget = "branch",
+            initialEnforcement = "evaluate",
+            initialInclude = "~DEFAULT_BRANCH",
+            initialExclude = "",
+            initialRulesJson = "[{\"type\":\"non_fast_forward\"}]",
+            confirmLabel = "Create",
+            onDismiss = { showCreateRuleset = false },
+            onSave = { name, target, enforcement, includeRefs, excludeRefs, rulesJson ->
+                actionInFlight = true
+                scope.launch {
+                    val created = GitHubManager.createRuleset(context, repoOwner, repoName, name, target, enforcement, includeRefs, excludeRefs, rulesJson)
+                    actionInFlight = false
+                    if (created != null) {
+                        showCreateRuleset = false
+                        loadRulesets()
+                    }
+                }
+            },
+            enabled = !actionInFlight
+        )
+    }
 }
 
 @Composable
@@ -194,13 +237,19 @@ private fun RulesetDetailScreen(
     repoOwner: String,
     repoName: String,
     ruleset: GHRuleset,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onChanged: () -> Unit,
+    onDeleted: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var detail by remember(ruleset.id) { mutableStateOf<GHRulesetDetail?>(null) }
     var suites by remember(ruleset.id) { mutableStateOf<List<GHRuleSuite>>(emptyList()) }
     var loading by remember(ruleset.id) { mutableStateOf(true) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var selectedSuite by remember { mutableStateOf<GHRuleSuite?>(null) }
+    var actionInFlight by remember { mutableStateOf(false) }
 
     fun loadDetail() {
         loading = true
@@ -221,6 +270,12 @@ private fun RulesetDetailScreen(
             actions = {
                 IconButton(onClick = { loadDetail() }, enabled = !loading) {
                     Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
+                }
+                IconButton(onClick = { showEditDialog = true }, enabled = detail != null) {
+                    Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = Blue)
+                }
+                IconButton(onClick = { showDeleteDialog = true }, enabled = !actionInFlight) {
+                    Icon(Icons.Rounded.Delete, null, Modifier.size(20.dp), tint = Color(0xFFFF3B30))
                 }
                 IconButton(onClick = { openGitHubSecurityUrl(context, ruleset.htmlUrl) }, enabled = ruleset.htmlUrl.isNotBlank()) {
                     Icon(Icons.Rounded.OpenInNew, null, Modifier.size(20.dp), tint = Blue)
@@ -246,11 +301,140 @@ private fun RulesetDetailScreen(
                     item { RulesetConditionsCard(current) }
                     item { RulesetRulesCard(current.rules) }
                     item { RulesetBypassActorsCard(current.bypassActors) }
-                    item { RuleSuitesCard(suites) }
+                    item {
+                        RuleSuitesCard(suites) { suite ->
+                            selectedSuite = suite
+                            scope.launch {
+                                selectedSuite = GitHubManager.getRuleSuite(context, repoOwner, repoName, suite.id) ?: suite
+                            }
+                        }
+                    }
                 }
             }
         }
     }
+
+    detail?.let { current ->
+        if (showEditDialog) {
+            RulesetEditorDialog(
+                title = "Edit Ruleset",
+                initialName = current.name,
+                initialTarget = current.target.ifBlank { "branch" },
+                initialEnforcement = current.enforcement.ifBlank { "evaluate" },
+                initialInclude = current.refNameIncludes.joinToString("\n"),
+                initialExclude = current.refNameExcludes.joinToString("\n"),
+                initialRulesJson = rulesetRulesJson(current.rules),
+                confirmLabel = "Save",
+                onDismiss = { showEditDialog = false },
+                onSave = { name, target, enforcement, includeRefs, excludeRefs, rulesJson ->
+                    actionInFlight = true
+                    scope.launch {
+                        val updated = GitHubManager.updateRuleset(context, repoOwner, repoName, current.id, name, target, enforcement, includeRefs, excludeRefs, rulesJson)
+                        actionInFlight = false
+                        if (updated != null) {
+                            showEditDialog = false
+                            detail = updated
+                            onChanged()
+                        }
+                    }
+                },
+                enabled = !actionInFlight
+            )
+        }
+        if (showDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                containerColor = SurfaceWhite,
+                title = { Text("Delete Ruleset?", fontWeight = FontWeight.Bold, color = TextPrimary) },
+                text = { Text("Delete ${current.name.ifBlank { "ruleset #${current.id}" }}?", fontSize = 14.sp, color = TextSecondary) },
+                confirmButton = {
+                    TextButton(
+                        enabled = !actionInFlight,
+                        onClick = {
+                            actionInFlight = true
+                            scope.launch {
+                                val ok = GitHubManager.deleteRuleset(context, repoOwner, repoName, current.id)
+                                actionInFlight = false
+                                showDeleteDialog = false
+                                if (ok) onDeleted()
+                            }
+                        }
+                    ) { Text("Delete", color = Color(0xFFFF3B30)) }
+                },
+                dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel", color = TextSecondary) } }
+            )
+        }
+    }
+
+    selectedSuite?.let { suite ->
+        RuleSuiteDetailDialog(
+            suite = suite,
+            onDismiss = { selectedSuite = null }
+        )
+    }
+}
+
+@Composable
+private fun RulesetEditorDialog(
+    title: String,
+    initialName: String,
+    initialTarget: String,
+    initialEnforcement: String,
+    initialInclude: String,
+    initialExclude: String,
+    initialRulesJson: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String, List<String>, List<String>, String) -> Unit,
+    enabled: Boolean
+) {
+    var name by remember(initialName) { mutableStateOf(initialName) }
+    var target by remember(initialTarget) { mutableStateOf(initialTarget.ifBlank { "branch" }) }
+    var enforcement by remember(initialEnforcement) { mutableStateOf(initialEnforcement.ifBlank { "evaluate" }) }
+    var includeRefs by remember(initialInclude) { mutableStateOf(initialInclude.ifBlank { "~DEFAULT_BRANCH" }) }
+    var excludeRefs by remember(initialExclude) { mutableStateOf(initialExclude) }
+    var rulesJson by remember(initialRulesJson) { mutableStateOf(initialRulesJson.ifBlank { "[{\"type\":\"non_fast_forward\"}]" }) }
+    val rulesJsonValid = remember(rulesJson) { isJsonArray(rulesJson) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text(title, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    listOf("branch", "tag", "push").forEach { value ->
+                        GitHubSmallChoice(value, target == value) { target = value }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    listOf("active", "evaluate", "disabled").forEach { value ->
+                        GitHubSmallChoice(value, enforcement == value) { enforcement = value }
+                    }
+                }
+                OutlinedTextField(includeRefs, { includeRefs = it }, label = { Text("Include refs") }, minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(excludeRefs, { excludeRefs = it }, label = { Text("Exclude refs") }, minLines = 1, maxLines = 3, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    rulesJson,
+                    { rulesJson = it },
+                    label = { Text("Rules JSON array") },
+                    minLines = 5,
+                    maxLines = 10,
+                    isError = !rulesJsonValid,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (!rulesJsonValid) Text("Rules must be a JSON array", fontSize = 12.sp, color = Color(0xFFFF3B30))
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = enabled && name.isNotBlank() && rulesJsonValid,
+                onClick = { onSave(name, target, enforcement, refList(includeRefs), refList(excludeRefs), rulesJson) }
+            ) { Text(confirmLabel, color = Blue) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+    )
 }
 
 @Composable
@@ -326,7 +510,7 @@ private fun RulesetBypassActorsCard(actors: List<GHRulesetBypassActor>) {
 }
 
 @Composable
-private fun RuleSuitesCard(suites: List<GHRuleSuite>) {
+private fun RuleSuitesCard(suites: List<GHRuleSuite>, onOpen: (GHRuleSuite) -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Recent rule suites", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
         if (suites.isEmpty()) {
@@ -334,7 +518,14 @@ private fun RuleSuitesCard(suites: List<GHRuleSuite>) {
         } else {
             suites.take(12).forEach { suite ->
                 val color = ruleSuiteColor(suite)
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Column(
+                    Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(SurfaceLight)
+                        .clickable { onOpen(suite) }
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SecurityPill(ruleSuiteLabel(suite), color)
                         Text(suite.ref.substringAfterLast('/').ifBlank { "ref" }, fontSize = 12.sp, color = TextPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -349,6 +540,34 @@ private fun RuleSuitesCard(suites: List<GHRuleSuite>) {
 }
 
 @Composable
+private fun RuleSuiteDetailDialog(suite: GHRuleSuite, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Rule suite #${suite.id}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    SecurityPill(ruleSuiteLabel(suite), ruleSuiteColor(suite))
+                    suite.status.takeIf { it.isNotBlank() }?.let { SecurityPill(it, TextSecondary) }
+                    suite.evaluationResult.takeIf { it.isNotBlank() }?.let { SecurityPill(it, TextSecondary) }
+                }
+                SecurityDetailLine("Actor", suite.actor)
+                SecurityDetailLine("Ref", suite.ref)
+                SecurityDetailLine("Before SHA", suite.beforeSha)
+                SecurityDetailLine("After SHA", suite.afterSha)
+                SecurityDetailLine("Status", suite.status)
+                SecurityDetailLine("Result", suite.result)
+                SecurityDetailLine("Evaluation", suite.evaluationResult)
+                SecurityDetailLine("Created", suite.createdAt.take(19).replace('T', ' '))
+                SecurityDetailLine("Updated", suite.updatedAt.take(19).replace('T', ' '))
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+    )
+}
+
+@Composable
 private fun RulesetValueList(label: String, values: List<String>) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, fontSize = 12.sp, color = TextTertiary, fontWeight = FontWeight.Medium)
@@ -357,6 +576,49 @@ private fun RulesetValueList(label: String, values: List<String>) {
         }
     }
 }
+
+private fun refList(value: String): List<String> =
+    value.split('\n', ',').map { it.trim() }.filter { it.isNotBlank() }
+
+private fun isJsonArray(value: String): Boolean =
+    try {
+        JSONArray(value)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+private fun rulesetRulesJson(rules: List<GHRulesetRule>): String {
+    val arr = JSONArray()
+    rules.forEach { rule ->
+        arr.put(JSONObject().apply {
+            put("type", rule.type)
+            if (rule.parameters.isNotEmpty()) {
+                put("parameters", JSONObject().apply {
+                    rule.parameters.forEach { (key, value) -> put(key, parseRulesetParameterValue(value)) }
+                })
+            }
+        })
+    }
+    return arr.toString(2)
+}
+
+private fun parseRulesetParameterValue(value: String): Any =
+    try {
+        JSONObject(value)
+    } catch (_: Exception) {
+        try {
+            JSONArray(value)
+        } catch (_: Exception) {
+            when {
+                value.equals("true", ignoreCase = true) -> true
+                value.equals("false", ignoreCase = true) -> false
+                value.toLongOrNull() != null -> value.toLong()
+                value.toDoubleOrNull() != null -> value.toDouble()
+                else -> value
+            }
+        }
+    }
 
 @Composable
 internal fun SecurityScreen(
@@ -370,14 +632,17 @@ internal fun SecurityScreen(
     var codeAlerts by remember { mutableStateOf<List<GHCodeScanningAlert>>(emptyList()) }
     var secretAlerts by remember { mutableStateOf<List<GHSecretScanningAlert>>(emptyList()) }
     var advisories by remember { mutableStateOf<List<GHRepositorySecurityAdvisory>>(emptyList()) }
+    var communityProfile by remember { mutableStateOf<GHCommunityProfile?>(null) }
     var settings by remember { mutableStateOf<GHRepositorySecuritySettings?>(null) }
     var loading by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
     var severityFilter by remember { mutableStateOf("all") }
     var stateFilter by remember { mutableStateOf("open") }
     var selectedTab by remember { mutableStateOf("Dependabot") }
+    var selectedDependabotAlert by remember { mutableStateOf<GHDependabotAlert?>(null) }
     var selectedCodeAlert by remember { mutableStateOf<GHCodeScanningAlert?>(null) }
     var selectedSecretAlert by remember { mutableStateOf<GHSecretScanningAlert?>(null) }
+    var selectedAdvisory by remember { mutableStateOf<GHRepositorySecurityAdvisory?>(null) }
     var settingsActionInFlight by remember { mutableStateOf(false) }
 
     fun loadAlerts() {
@@ -387,6 +652,7 @@ internal fun SecurityScreen(
                 "Code" -> codeAlerts = GitHubManager.getCodeScanningAlerts(context, repoOwner, repoName)
                 "Secrets" -> secretAlerts = GitHubManager.getSecretScanningAlerts(context, repoOwner, repoName)
                 "Advisories" -> advisories = GitHubManager.getRepositorySecurityAdvisories(context, repoOwner, repoName)
+                "Community" -> communityProfile = GitHubManager.getCommunityProfile(context, repoOwner, repoName)
                 "Settings" -> settings = GitHubManager.getRepositorySecuritySettings(context, repoOwner, repoName)
                 else -> alerts = GitHubManager.getDependabotAlerts(context, repoOwner, repoName)
             }
@@ -435,6 +701,9 @@ internal fun SecurityScreen(
                         "Code" -> CodeScanningSummaryCard(codeAlerts)
                         "Secrets" -> SecretScanningSummaryCard(secretAlerts)
                         "Advisories" -> AdvisorySummaryCard(advisories)
+                        "Community" -> CommunityProfileCard(communityProfile) {
+                            openGitHubSecurityUrl(context, communityProfile?.documentationUrl.orEmpty())
+                        }
                         "Settings" -> SecuritySettingsCard(
                             settings = settings,
                             actionInFlight = settingsActionInFlight,
@@ -466,7 +735,8 @@ internal fun SecurityScreen(
                         else -> SecuritySummaryCard(alerts)
                     }
                 }
-                if (selectedTab != "Settings") item {
+                val searchableTab = selectedTab != "Settings" && selectedTab != "Community"
+                if (searchableTab) item {
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
@@ -476,7 +746,7 @@ internal fun SecurityScreen(
                         leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = TextSecondary) }
                     )
                 }
-                if (selectedTab != "Settings") item {
+                if (searchableTab) item {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                         ALERT_STATES.forEach { state ->
                             GitHubSmallChoice(label = state.replaceFirstChar { it.uppercase() }, selected = stateFilter == state) {
@@ -485,7 +755,7 @@ internal fun SecurityScreen(
                         }
                     }
                 }
-                if (selectedTab != "Secrets" && selectedTab != "Settings") item {
+                if (selectedTab != "Secrets" && selectedTab != "Settings" && selectedTab != "Community") item {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                         ALERT_SEVERITIES.forEach { severity ->
                             GitHubSmallChoice(label = severity.replaceFirstChar { it.uppercase() }, selected = severityFilter == severity) {
@@ -498,6 +768,9 @@ internal fun SecurityScreen(
                     "Settings" -> {
                         item { EmptySecurityResult(false, "", "Security settings changes require repository admin permissions") }
                     }
+                    "Community" -> {
+                        item { CommunityChecklistCard(communityProfile) }
+                    }
                     "Advisories" -> {
                         val visibleAdvisories = advisories.filter { advisory ->
                             (severityFilter == "all" || advisory.severity.equals(severityFilter, ignoreCase = true)) &&
@@ -505,9 +778,18 @@ internal fun SecurityScreen(
                                 advisoryMatches(advisory, query)
                         }
                         items(visibleAdvisories, key = { it.ghsaId.ifBlank { it.url } }) { advisory ->
-                            RepositoryAdvisoryCard(advisory) {
-                                openGitHubSecurityUrl(context, advisory.htmlUrl.ifBlank { advisory.url })
-                            }
+                            RepositoryAdvisoryCard(
+                                advisory = advisory,
+                                onDetails = {
+                                    selectedAdvisory = advisory
+                                    if (advisory.ghsaId.isNotBlank()) {
+                                        scope.launch {
+                                            selectedAdvisory = GitHubManager.getRepositorySecurityAdvisory(context, repoOwner, repoName, advisory.ghsaId) ?: advisory
+                                        }
+                                    }
+                                },
+                                onOpen = { openGitHubSecurityUrl(context, advisory.htmlUrl.ifBlank { advisory.url }) }
+                            )
                         }
                         if (visibleAdvisories.isEmpty()) {
                             item { EmptySecurityResult(advisories.isEmpty(), "No repository security advisories", "No matching advisories") }
@@ -520,7 +802,16 @@ internal fun SecurityScreen(
                                 codeAlertMatches(alert, query)
                         }
                         items(visibleAlerts, key = { it.number }) { alert ->
-                            CodeScanningAlertCard(alert, onOpen = { openGitHubSecurityUrl(context, alert.htmlUrl) }, onDetails = { selectedCodeAlert = alert })
+                            CodeScanningAlertCard(
+                                alert,
+                                onOpen = { openGitHubSecurityUrl(context, alert.htmlUrl) },
+                                onDetails = {
+                                    selectedCodeAlert = alert
+                                    scope.launch {
+                                        selectedCodeAlert = GitHubManager.getCodeScanningAlert(context, repoOwner, repoName, alert.number) ?: alert
+                                    }
+                                }
+                            )
                         }
                         if (visibleAlerts.isEmpty()) {
                             item { EmptySecurityResult(codeAlerts.isEmpty(), "No code scanning alerts", "No matching code scanning alerts") }
@@ -532,7 +823,16 @@ internal fun SecurityScreen(
                                 secretAlertMatches(alert, query)
                         }
                         items(visibleAlerts, key = { it.number }) { alert ->
-                            SecretScanningAlertCard(alert, onOpen = { openGitHubSecurityUrl(context, alert.htmlUrl) }, onDetails = { selectedSecretAlert = alert })
+                            SecretScanningAlertCard(
+                                alert,
+                                onOpen = { openGitHubSecurityUrl(context, alert.htmlUrl) },
+                                onDetails = {
+                                    selectedSecretAlert = alert
+                                    scope.launch {
+                                        selectedSecretAlert = GitHubManager.getSecretScanningAlert(context, repoOwner, repoName, alert.number) ?: alert
+                                    }
+                                }
+                            )
                         }
                         if (visibleAlerts.isEmpty()) {
                             item { EmptySecurityResult(secretAlerts.isEmpty(), "No secret scanning alerts", "No matching secret scanning alerts") }
@@ -545,9 +845,16 @@ internal fun SecurityScreen(
                                 dependabotAlertMatches(alert, query)
                         }
                         items(visibleAlerts, key = { it.number }) { alert ->
-                            AlertCard(alert) {
-                                openGitHubSecurityUrl(context, alert.htmlUrl)
-                            }
+                            AlertCard(
+                                alert = alert,
+                                onDetails = {
+                                    selectedDependabotAlert = alert
+                                    scope.launch {
+                                        selectedDependabotAlert = GitHubManager.getDependabotAlert(context, repoOwner, repoName, alert.number) ?: alert
+                                    }
+                                },
+                                onOpen = { openGitHubSecurityUrl(context, alert.htmlUrl) }
+                            )
                         }
                         if (visibleAlerts.isEmpty()) {
                             item { EmptySecurityResult(alerts.isEmpty(), "No Dependabot alerts", "No matching alerts") }
@@ -558,6 +865,11 @@ internal fun SecurityScreen(
         }
     }
 
+    selectedDependabotAlert?.let { alert ->
+        DependabotDetailDialog(alert, onDismiss = { selectedDependabotAlert = null }) {
+            openGitHubSecurityUrl(context, alert.htmlUrl)
+        }
+    }
     selectedCodeAlert?.let { alert ->
         CodeScanningDetailDialog(alert, onDismiss = { selectedCodeAlert = null }) {
             openGitHubSecurityUrl(context, alert.htmlUrl)
@@ -566,6 +878,11 @@ internal fun SecurityScreen(
     selectedSecretAlert?.let { alert ->
         SecretScanningDetailDialog(alert, onDismiss = { selectedSecretAlert = null }) {
             openGitHubSecurityUrl(context, alert.htmlUrl)
+        }
+    }
+    selectedAdvisory?.let { advisory ->
+        RepositoryAdvisoryDetailDialog(advisory, onDismiss = { selectedAdvisory = null }) {
+            openGitHubSecurityUrl(context, advisory.htmlUrl.ifBlank { advisory.url })
         }
     }
 }
@@ -696,6 +1013,72 @@ private fun SecuritySettingsCard(
 }
 
 @Composable
+private fun CommunityProfileCard(profile: GHCommunityProfile?, onOpenDocs: () -> Unit) {
+    val health = profile?.healthPercentage ?: 0
+    val healthColor = when {
+        health >= 80 -> Color(0xFF34C759)
+        health >= 50 -> Color(0xFFFF9500)
+        else -> Color(0xFFFF3B30)
+    }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Rounded.FactCheck, null, Modifier.size(20.dp), tint = healthColor)
+            Column(Modifier.weight(1f)) {
+                Text("Community profile", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text(profile?.description?.takeIf { it.isNotBlank() } ?: "Repository health and community files", fontSize = 11.sp, color = TextTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Text("$health%", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = healthColor)
+        }
+        LinearProgressIndicator(
+            progress = { (health.coerceIn(0, 100) / 100f) },
+            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(6.dp)),
+            color = healthColor,
+            trackColor = SurfaceLight
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            SecurityPill("Present ${profile?.files?.count { it.present } ?: 0}", Color(0xFF34C759))
+            SecurityPill("Missing ${profile?.files?.count { !it.present } ?: 0}", TextTertiary)
+            profile?.updatedAt?.takeIf { it.isNotBlank() }?.take(10)?.let { SecurityPill("Updated $it", TextSecondary) }
+        }
+        if (!profile?.documentationUrl.isNullOrBlank()) {
+            TextButton(onClick = onOpenDocs, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = Blue)
+                Spacer(Modifier.width(6.dp))
+                Text("Open documentation", color = Blue, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommunityChecklistCard(profile: GHCommunityProfile?) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Community checklist", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+        val files = profile?.files.orEmpty()
+        if (profile == null) {
+            Text("Community profile is unavailable", fontSize = 12.sp, color = TextTertiary)
+        } else if (files.isEmpty()) {
+            Text("No community file metadata returned", fontSize = 12.sp, color = TextTertiary)
+        } else {
+            files.sortedBy { !it.present }.forEach { file ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(if (file.present) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked, null, Modifier.size(18.dp), tint = if (file.present) Color(0xFF34C759) else TextTertiary)
+                    Column(Modifier.weight(1f)) {
+                        Text(file.name.replace('_', ' '), fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(file.key, fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    SecurityPill(if (file.present) "present" else "missing", if (file.present) Color(0xFF34C759) else TextTertiary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SecurityToggleRow(
     title: String,
     subtitle: String,
@@ -718,7 +1101,7 @@ private fun SecurityToggleRow(
 }
 
 @Composable
-private fun AlertCard(alert: GHDependabotAlert, onOpen: () -> Unit) {
+private fun AlertCard(alert: GHDependabotAlert, onDetails: () -> Unit, onOpen: () -> Unit) {
     val severityColor = alertSeverityColor(alert.severity)
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)
@@ -728,6 +1111,9 @@ private fun AlertCard(alert: GHDependabotAlert, onOpen: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(alert.packageName.ifBlank { "Dependency alert #${alert.number}" }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(cleanJoin(listOf(alert.ecosystem, alert.manifestPath)), fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButton(onClick = onDetails) {
+                Icon(Icons.Rounded.Article, null, Modifier.size(18.dp), tint = TextSecondary)
             }
             IconButton(onClick = onOpen, enabled = alert.htmlUrl.isNotBlank()) {
                 Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = Blue)
@@ -757,7 +1143,7 @@ private fun AlertCard(alert: GHDependabotAlert, onOpen: () -> Unit) {
 }
 
 @Composable
-private fun RepositoryAdvisoryCard(advisory: GHRepositorySecurityAdvisory, onOpen: () -> Unit) {
+private fun RepositoryAdvisoryCard(advisory: GHRepositorySecurityAdvisory, onDetails: () -> Unit, onOpen: () -> Unit) {
     val severityColor = alertSeverityColor(advisory.severity)
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)
@@ -767,6 +1153,9 @@ private fun RepositoryAdvisoryCard(advisory: GHRepositorySecurityAdvisory, onOpe
             Column(Modifier.weight(1f)) {
                 Text(advisory.summary.ifBlank { advisory.ghsaId.ifBlank { "Repository advisory" } }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(cleanJoin(listOf(advisory.ghsaId, advisory.cveId)), fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButton(onClick = onDetails) {
+                Icon(Icons.Rounded.Article, null, Modifier.size(18.dp), tint = TextSecondary)
             }
             IconButton(onClick = onOpen, enabled = advisory.htmlUrl.isNotBlank() || advisory.url.isNotBlank()) {
                 Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = Blue)
@@ -919,6 +1308,68 @@ private fun SecretScanningDetailDialog(alert: GHSecretScanningAlert, onDismiss: 
             }
         },
         confirmButton = { TextButton(onClick = onOpen, enabled = alert.htmlUrl.isNotBlank()) { Text("Open", color = Blue) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close", color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun DependabotDetailDialog(alert: GHDependabotAlert, onDismiss: () -> Unit, onOpen: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Dependabot alert #${alert.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SecurityDetailLine("Package", cleanJoin(listOf(alert.ecosystem, alert.packageName)))
+                SecurityDetailLine("Manifest", alert.manifestPath)
+                SecurityDetailLine("Status", cleanJoin(listOf(alert.state, alert.severity)))
+                SecurityDetailLine("Advisory", cleanJoin(listOf(alert.ghsaId, alert.cveId)))
+                SecurityDetailLine("Summary", alert.summary)
+                SecurityDetailLine("Description", alert.description)
+                SecurityDetailLine("Vulnerable requirements", alert.vulnerableRequirements)
+                SecurityDetailLine("Fixed in", alert.fixedIn.joinToString(", "))
+                SecurityDetailLine("Created", alert.createdAt.take(19).replace('T', ' '))
+                SecurityDetailLine("Updated", alert.updatedAt.take(19).replace('T', ' '))
+            }
+        },
+        confirmButton = { TextButton(onClick = onOpen, enabled = alert.htmlUrl.isNotBlank()) { Text("Open", color = Blue) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close", color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun RepositoryAdvisoryDetailDialog(advisory: GHRepositorySecurityAdvisory, onDismiss: () -> Unit, onOpen: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text(advisory.ghsaId.ifBlank { "Repository advisory" }, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SecurityDetailLine("Status", cleanJoin(listOf(advisory.state, advisory.severity)))
+                SecurityDetailLine("CVE", advisory.cveId)
+                SecurityDetailLine("Summary", advisory.summary)
+                SecurityDetailLine("Description", advisory.description)
+                SecurityDetailLine("CVSS", advisory.cvssScore.takeIf { it > 0.0 }?.let { "%.1f".format(it) } ?: "")
+                SecurityDetailLine("CWE", advisory.cweIds.joinToString(", "))
+                SecurityDetailLine("Published", advisory.publishedAt.take(19).replace('T', ' '))
+                SecurityDetailLine("Updated", advisory.updatedAt.take(19).replace('T', ' '))
+                SecurityDetailLine("Withdrawn", advisory.withdrawnAt.take(19).replace('T', ' '))
+                if (advisory.vulnerabilities.isNotEmpty()) {
+                    Text("Vulnerabilities", fontSize = 12.sp, color = TextTertiary, fontWeight = FontWeight.Medium)
+                    advisory.vulnerabilities.forEach { vulnerability ->
+                        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SurfaceLight).padding(8.dp)) {
+                            Text(
+                                cleanJoin(listOf(vulnerability.ecosystem, vulnerability.packageName, vulnerability.vulnerableRange, vulnerability.patchedVersions.takeIf { it.isNotBlank() }?.let { "patched $it" } ?: "")),
+                                fontSize = 12.sp,
+                                color = TextPrimary,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onOpen, enabled = advisory.htmlUrl.isNotBlank() || advisory.url.isNotBlank()) { Text("Open", color = Blue) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close", color = TextSecondary) } }
     )
 }

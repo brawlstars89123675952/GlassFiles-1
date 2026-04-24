@@ -784,3 +784,236 @@
 - Проверка:
   - выполнен `git diff --check`
   - локальная Android compile-проверка не запускалась: в окружении нет Android SDK / `ANDROID_HOME` / `local.properties`
+
+### Projects V2 mutations/items pass
+- Реализован следующий block после Packages: Projects V2 items and mutations.
+- В `GitHubManager.kt` добавлено:
+  - `getProjectV2Detail`
+  - `updateProjectV2`
+  - `addProjectV2DraftIssue`
+  - `updateProjectV2DraftIssue`
+  - `deleteProjectV2Item`
+  - `archiveProjectV2Item`
+  - `updateProjectV2ItemFieldValue`
+  - `clearProjectV2ItemFieldValue`
+  - `moveProjectV2Item`
+  - модели `GHProjectV2Detail`, `GHProjectV2Field`, `GHProjectV2FieldOption`, `GHProjectV2Item`, `GHProjectV2ItemFieldValue`
+- `GitHubProjectsModule.kt` доработан:
+  - V2 карточка теперь открывает detail screen
+  - detail загружает Project V2 fields/items через GraphQL
+  - добавлено создание draft item
+  - добавлено редактирование draft item title/body
+  - добавлено удаление item с confirmation dialog
+  - добавлено archive/unarchive item
+  - добавлено редактирование field values для text/number/date/single-select
+  - добавлено clear field через пустое значение
+  - добавлено move item to top через `updateProjectV2ItemPosition`
+  - добавлено редактирование project title/description/readme/open/public
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - Projects V2 overview/detail/items/mutations перенесены в implemented
+  - remaining gap сдвинут на Projects V2 field/view workflow editing
+  - следующий practical block переключен на Advanced search или Repository rulesets mutations
+- Проверка:
+  - выполнен `git diff --check`
+  - локальную Android compile-проверку дальше не запускать в этом окружении по просьбе пользователя
+
+### Advanced search pass
+- Реализован следующий block после Projects V2 mutations/items: Advanced search.
+- В `GitHubManager.kt` добавлено:
+  - `searchIssuesAdvanced`
+  - `searchCommitsAdvanced`
+  - `searchTopics`
+  - `searchLabels`
+  - URL-encoding для `searchUsers`
+  - lookup repository id для repo-scoped label search
+  - модели `GHSearchIssueResult`, `GHSearchCommitResult`, `GHTopicSearchResult`, `GHLabelSearchResult`
+- Добавлен новый экран `GitHubAdvancedSearchModule.kt`:
+  - глобальный search entry point из GitHub home quick actions
+  - tabs: Repos, Issues, Commits, Topics, Labels, Users
+  - repository results открывают repo detail flow
+  - user results открывают profile flow
+  - issue/PR и commit results открываются на GitHub
+  - topics показывают description, featured/curated markers, aliases
+  - labels работают как repo-scoped search через поле `owner/repo`
+  - pagination для issues/commits/topics/labels через Load more
+- В `GitHubHomeModule.kt` добавлен quick chip `Search`.
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - Advanced search по commits/issues/topics/labels/users перенесен в implemented
+  - Search coverage поднят до 100%
+  - следующий practical block переключен на Repository rulesets mutations
+- Проверка:
+  - выполнен `git diff --check`
+  - локальную Android compile-проверку не запускать в этом окружении по просьбе пользователя
+
+### Repository rulesets mutations pass
+- Реализован следующий block после Advanced search: create/update/delete repository rulesets.
+- В `GitHubManager.kt` добавлено:
+  - `createRuleset`
+  - `updateRuleset`
+  - `deleteRuleset`
+  - payload builder для `name`, `target`, `enforcement`, `conditions.ref_name`, `rules`
+  - общий parser `parseRulesetDetail`
+- `GitHubSecurityModule.kt` доработан:
+  - в Rulesets top bar добавлен create action
+  - добавлен `RulesetEditorDialog`
+  - create/edit поддерживают target `branch/tag/push`
+  - create/edit поддерживают enforcement `active/evaluate/disabled`
+  - include/exclude refs вводятся строками или через comma-separated values
+  - rules редактируются как raw JSON array, чтобы не терять гибкость GitHub ruleset API
+  - detail screen получил edit и delete actions
+  - delete требует confirmation dialog
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - create/update/delete rulesets отмечены как implemented
+  - Repository Rules coverage поднят до 86%
+  - следующий practical block переключен на Projects V2 field/view workflows или Advanced notifications
+- Проверка:
+  - выполнен `git diff --check`
+  - локальную Android compile-проверку не запускать в этом окружении по просьбе пользователя
+
+### Notifications thread subscriptions pass
+- Реализован следующий компактный block после Repository rulesets mutations: notification thread subscriptions.
+- В `GitHubManager.kt` добавлено:
+  - `getThreadSubscription`
+  - `setThreadSubscription`
+  - `deleteThreadSubscription`
+  - модель `GHThreadSubscription`
+- `GitHubNotificationsModule.kt` доработан:
+  - notification card получила action для thread subscription dialog
+  - dialog загружает текущее состояние subscription
+  - доступны действия Subscribe, Ignore и Default
+  - Default удаляет thread subscription через DELETE endpoint
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - Advanced Notifications перенесены в implemented
+  - Notifications coverage поднят до 100%
+  - следующий practical block переключен на Projects V2 field/view workflows или Webhook config/test helpers
+- Проверка:
+  - выполнен `git diff --check`
+  - локальную Android compile-проверку не запускать в этом окружении по просьбе пользователя
+
+### Webhook config/test helpers pass
+- Реализован следующий компактный block после Notifications: webhook config/test helpers.
+- В `GitHubManager.kt` добавлено:
+  - `getWebhook`
+  - `testWebhook`
+  - `getWebhookConfig`
+  - `updateWebhookConfig`
+  - модель `GHWebhookConfig`
+- `GitHubWebhooksModule.kt` доработан:
+  - webhook card теперь открывает detail dialog через `/hooks/{id}`
+  - webhook card получила отдельное действие `Test delivery` через `/hooks/{id}/tests`
+  - webhook card получила отдельное действие `Config`
+  - config dialog загружает актуальный `/hooks/{id}/config`
+  - config dialog редактирует payload URL, content type, SSL verification и write-only secret replacement
+  - после update config список webhooks перечитывается без выхода со страницы
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - get webhook, test webhook, get webhook config и update webhook config отмечены как implemented
+  - Webhooks coverage поднят до 100%
+  - следующий practical block переключен на Projects V2 field/view workflows или Security single-alert detail/community health
+- Проверка:
+  - выполнен `git diff --check`
+  - локальную Android compile-проверку не запускал по просьбе пользователя
+
+### Security single-alert/community pass
+- Реализован следующий compact block после Webhooks: Security single-alert detail и community health.
+- В `GitHubManager.kt` добавлено:
+  - `getDependabotAlert`
+  - `getCodeScanningAlert`
+  - `getSecretScanningAlert`
+  - `getRepositorySecurityAdvisory`
+  - `getCommunityProfile`
+  - модели `GHCommunityProfile` и `GHCommunityProfileFile`
+  - общие parsers для Dependabot/code/secret/advisory alerts, чтобы list и detail endpoints не расходились
+- `GitHubSecurityModule.kt` доработан:
+  - Dependabot cards получили detail dialog с дозагрузкой single alert
+  - Code scanning detail перед открытием дозагружает `/code-scanning/alerts/{alert_number}`
+  - Secret scanning detail перед открытием дозагружает `/secret-scanning/alerts/{alert_number}`
+  - Repository advisory cards получили detail dialog с дозагрузкой `/security-advisories/{ghsa_id}`
+  - добавлена вкладка `Community`
+  - Community tab показывает health percentage, progress bar, documentation link и checklist community-файлов
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - single-alert security endpoints и community profile отмечены как implemented
+  - Security coverage поднят до 100%
+  - следующий practical block переключен на Projects V2 field/view workflows
+- Проверка:
+  - выполнен `git diff --check`
+  - локальную Android compile-проверку не запускал по просьбе пользователя
+
+### Projects V2 field/view workflows pass
+- Реализован следующий practical block после Security: Projects V2 field/view workflows.
+- В `GitHubManager.kt` добавлено:
+  - `ProjectV2.views` и `ProjectV2.workflows` в detail query
+  - `createProjectV2Field`
+  - `updateProjectV2Field`
+  - `deleteProjectV2Field`
+  - модели `GHProjectV2View` и `GHProjectV2Workflow`
+  - расширение `GHProjectV2FieldOption` color/description для single-select schema
+- `GitHubProjectsModule.kt` доработан:
+  - Project V2 detail показывает отдельную секцию schema fields
+  - добавлено создание custom fields: text, number, date, single-select
+  - добавлено редактирование field name и replacement single-select options
+  - добавлено удаление field с confirmation dialog
+  - добавлена секция views с layout/filter/visible fields
+  - добавлена секция workflows с enabled state
+  - Project V2 summary теперь показывает counts по items/fields/views/workflows
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - Projects V2 field schema, views и workflows отмечены как implemented
+  - Projects coverage поднят до 100%
+  - следующий practical block переключен на Repository ruleset suite detail
+- Проверка:
+  - выполнен `git diff --check`
+  - локальную Android compile-проверку не запускал по просьбе пользователя
+
+### Repository rule suite detail pass
+- Реализован один следующий блок: single rule-suite detail.
+- В `GitHubManager.kt` добавлено:
+  - `getRuleSuite`
+  - общий parser `parseRuleSuite`, используемый list и single endpoints
+- `GitHubSecurityModule.kt` доработан:
+  - rule suite cards в ruleset detail стали кликабельными
+  - при открытии suite выполняется дозагрузка `/repos/{owner}/{repo}/rule-suites/{id}`
+  - добавлен detail dialog со status/result/evaluation, actor, ref, before/after SHA и датами
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - single rule suite endpoint отмечен как implemented
+  - Repository Rules coverage поднят до 100%
+  - следующий practical block переключен на Advanced PR review mutations/check suites
+- Проверка:
+  - выполнен `git diff --check`
+  - локальную Android compile-проверку не запускал по просьбе пользователя
+
+### Pull request review mutation pass
+- Реализован один следующий блок: single PR review detail/mutations.
+- В `GitHubManager.kt` добавлено:
+  - `getPullRequestReview`
+  - `updatePullRequestReview`
+  - `deletePullRequestReview`
+  - общий parser `parsePullReview`, используемый list и single endpoints
+- `GitHubRepoModule.kt` доработан:
+  - review history cards стали кликабельными и дозагружают `/pulls/{number}/reviews/{id}`
+  - добавлен detail dialog для single review
+  - pending review можно редактировать через PUT endpoint
+  - pending review можно удалить через DELETE endpoint с confirmation dialog
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - Get/Update/Delete single review отмечены как implemented
+  - Pull Requests Advanced coverage поднят до 60%
+  - следующий practical block переключен на Advanced PR review comment mutations/check suites
+- Проверка:
+  - выполнен `git diff --check`
+  - локальную Android compile-проверку не запускал по просьбе пользователя
+
+### Pull request review comment mutation pass
+- Реализован один следующий блок: PR review comment update/delete UI.
+- API helpers уже были в `GitHubManager.kt`:
+  - `updatePullRequestReviewComment`
+  - `deletePullRequestReviewComment`
+- `GitHubDiffModule.kt` доработан:
+  - общий review comments screen получил edit/delete actions
+  - inline comment bubbles в diff viewer получили edit/delete actions для PR контекста
+  - после update/delete comments перезагружаются через existing refresh callback
+  - delete защищен confirmation dialog
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - Update/Delete review comment отмечены как implemented
+  - Pull Requests Advanced coverage поднят до 73%
+  - следующий practical block переключен на Advanced PR check suites / explicit merge status
+- Проверка:
+  - выполнен `git diff --check`
+  - локальную Android compile-проверку не запускал по просьбе пользователя

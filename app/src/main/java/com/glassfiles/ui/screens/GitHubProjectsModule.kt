@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ViewColumn
 import androidx.compose.material3.AlertDialog
@@ -60,6 +61,12 @@ import com.glassfiles.data.github.GHProject
 import com.glassfiles.data.github.GHProjectCard
 import com.glassfiles.data.github.GHProjectColumn
 import com.glassfiles.data.github.GHProjectV2
+import com.glassfiles.data.github.GHProjectV2Detail
+import com.glassfiles.data.github.GHProjectV2Field
+import com.glassfiles.data.github.GHProjectV2Item
+import com.glassfiles.data.github.GHProjectV2ItemFieldValue
+import com.glassfiles.data.github.GHProjectV2View
+import com.glassfiles.data.github.GHProjectV2Workflow
 import com.glassfiles.data.github.GHRepo
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.theme.Blue
@@ -83,6 +90,7 @@ internal fun ProjectsTab(repo: GHRepo) {
     var selectedKind by remember { mutableStateOf(ProjectsKind.CLASSIC) }
     var query by remember { mutableStateOf("") }
     var selectedProject by remember { mutableStateOf<GHProject?>(null) }
+    var selectedProjectV2 by remember { mutableStateOf<GHProjectV2?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
 
     fun loadProjects() {
@@ -109,6 +117,11 @@ internal fun ProjectsTab(repo: GHRepo) {
                 classicProjects = classicProjects.map { if (it.id == updated.id) updated else it }
             }
         )
+        return
+    }
+
+    selectedProjectV2?.let { project ->
+        ProjectV2DetailScreen(project = project, onBack = { selectedProjectV2 = null })
         return
     }
 
@@ -159,7 +172,7 @@ internal fun ProjectsTab(repo: GHRepo) {
                 if (visibleClassic.isEmpty()) item { EmptyProjectsCard(if (classicProjects.isEmpty()) "No classic projects returned" else "No matching classic projects") }
             }
             ProjectsKind.V2 -> {
-                items(visibleV2) { project -> ProjectV2Card(project) }
+                items(visibleV2) { project -> ProjectV2Card(project) { selectedProjectV2 = project } }
                 if (visibleV2.isEmpty()) item { EmptyProjectsCard(if (v2Projects.isEmpty()) "No Projects V2 returned" else "No matching Projects V2") }
             }
         }
@@ -229,10 +242,10 @@ private fun ClassicProjectCard(project: GHProject, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ProjectV2Card(project: GHProjectV2) {
+private fun ProjectV2Card(project: GHProjectV2, onClick: () -> Unit) {
     val context = LocalContext.current
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).clickable(onClick = onClick).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -251,6 +264,641 @@ private fun ProjectV2Card(project: GHProjectV2) {
             CountPill(if (project.isPublic) "Public" else "Private", 0, TextSecondary, showCount = false)
         }
     }
+}
+
+@Composable
+private fun ProjectV2DetailScreen(project: GHProjectV2, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var detail by remember(project.id) { mutableStateOf<GHProjectV2Detail?>(null) }
+    var loading by remember(project.id) { mutableStateOf(true) }
+    var showEditProject by remember { mutableStateOf(false) }
+    var showAddDraft by remember { mutableStateOf(false) }
+    var showAddField by remember { mutableStateOf(false) }
+    var editSchemaField by remember { mutableStateOf<GHProjectV2Field?>(null) }
+    var deleteSchemaField by remember { mutableStateOf<GHProjectV2Field?>(null) }
+    var editDraft by remember { mutableStateOf<GHProjectV2Item?>(null) }
+    var editField by remember { mutableStateOf<GHProjectV2Item?>(null) }
+    var deleteItem by remember { mutableStateOf<GHProjectV2Item?>(null) }
+    var actionInFlight by remember { mutableStateOf(false) }
+
+    fun loadDetail() {
+        loading = true
+        scope.launch {
+            detail = GitHubManager.getProjectV2Detail(context, project.id)
+            loading = false
+        }
+    }
+
+    LaunchedEffect(project.id) { loadDetail() }
+
+    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+        GHTopBar(
+            title = detail?.title ?: project.title,
+            subtitle = "Project V2 #${project.number}",
+            onBack = onBack,
+            actions = {
+                IconButton(onClick = { loadDetail() }) {
+                    Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
+                }
+                detail?.url?.takeIf { it.isNotBlank() }?.let { url ->
+                    IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }) {
+                        Icon(Icons.Rounded.Language, null, Modifier.size(20.dp), tint = TextSecondary)
+                    }
+                }
+                IconButton(onClick = { showEditProject = true }, enabled = detail != null) {
+                    Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = Blue)
+                }
+                IconButton(onClick = { showAddDraft = true }, enabled = detail != null) {
+                    Icon(Icons.Rounded.Add, null, Modifier.size(20.dp), tint = Blue)
+                }
+            }
+        )
+
+        val current = detail
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+            }
+        } else if (current == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                EmptyProjectsCard("Project V2 detail unavailable")
+            }
+        } else {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item { ProjectV2Summary(current) }
+                item {
+                    Button(onClick = { showAddDraft = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
+                        Text("Add draft item")
+                    }
+                }
+                item {
+                    ProjectV2FieldsCard(
+                        fields = current.fields,
+                        onAdd = { showAddField = true },
+                        onEdit = { editSchemaField = it },
+                        onDelete = { deleteSchemaField = it }
+                    )
+                }
+                item { ProjectV2ViewsCard(current.views) }
+                item { ProjectV2WorkflowsCard(current.workflows) }
+                items(current.items) { item ->
+                    ProjectV2ItemCard(
+                        item = item,
+                        fields = current.fields,
+                        onOpen = {
+                            if (item.url.isNotBlank()) context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.url)))
+                        },
+                        onEditDraft = { editDraft = item },
+                        onEditField = { editField = item },
+                        onArchive = {
+                            actionInFlight = true
+                            scope.launch {
+                                val ok = GitHubManager.archiveProjectV2Item(context, current.id, item.id, !item.archived)
+                                Toast.makeText(context, if (ok) "Item updated" else "Failed", Toast.LENGTH_SHORT).show()
+                                actionInFlight = false
+                                if (ok) loadDetail()
+                            }
+                        },
+                        onMoveTop = {
+                            actionInFlight = true
+                            scope.launch {
+                                val ok = GitHubManager.moveProjectV2Item(context, current.id, item.id, null)
+                                Toast.makeText(context, if (ok) "Item moved" else "Failed", Toast.LENGTH_SHORT).show()
+                                actionInFlight = false
+                                if (ok) loadDetail()
+                            }
+                        },
+                        onDelete = { deleteItem = item }
+                    )
+                }
+                if (current.items.isEmpty()) item { EmptyProjectsCard("No Project V2 items yet") }
+            }
+        }
+    }
+
+    detail?.let { current ->
+        if (showEditProject) {
+            ProjectV2EditorDialog(
+                project = current,
+                onDismiss = { showEditProject = false },
+                onSave = { title, description, readme, closed, isPublic ->
+                    actionInFlight = true
+                    scope.launch {
+                        val ok = GitHubManager.updateProjectV2(context, current.id, title, description, readme, closed, isPublic)
+                        Toast.makeText(context, if (ok) "Project updated" else "Failed", Toast.LENGTH_SHORT).show()
+                        actionInFlight = false
+                        if (ok) {
+                            showEditProject = false
+                            loadDetail()
+                        }
+                    }
+                }
+            )
+        }
+        if (showAddDraft) {
+            DraftIssueDialog(
+                title = "New Draft Item",
+                initialTitle = "",
+                initialBody = "",
+                confirmLabel = "Create",
+                onDismiss = { showAddDraft = false },
+                onSave = { title, body ->
+                    actionInFlight = true
+                    scope.launch {
+                        val item = GitHubManager.addProjectV2DraftIssue(context, current.id, title, body)
+                        Toast.makeText(context, if (item != null) "Draft added" else "Failed", Toast.LENGTH_SHORT).show()
+                        actionInFlight = false
+                        if (item != null) {
+                            showAddDraft = false
+                            loadDetail()
+                        }
+                    }
+                }
+            )
+        }
+        if (showAddField) {
+            ProjectV2SchemaFieldDialog(
+                title = "New Field",
+                initialField = null,
+                confirmLabel = "Create",
+                onDismiss = { showAddField = false },
+                onSave = { name, dataType, options ->
+                    actionInFlight = true
+                    scope.launch {
+                        val field = GitHubManager.createProjectV2Field(context, current.id, name, dataType, options)
+                        Toast.makeText(context, if (field != null) "Field created" else "Failed", Toast.LENGTH_SHORT).show()
+                        actionInFlight = false
+                        if (field != null) {
+                            showAddField = false
+                            loadDetail()
+                        }
+                    }
+                }
+            )
+        }
+        editSchemaField?.let { field ->
+            ProjectV2SchemaFieldDialog(
+                title = "Edit Field",
+                initialField = field,
+                confirmLabel = "Save",
+                onDismiss = { editSchemaField = null },
+                onSave = { name, _, options ->
+                    actionInFlight = true
+                    scope.launch {
+                        val updated = GitHubManager.updateProjectV2Field(context, field, name, options)
+                        Toast.makeText(context, if (updated != null) "Field updated" else "Failed", Toast.LENGTH_SHORT).show()
+                        actionInFlight = false
+                        if (updated != null) {
+                            editSchemaField = null
+                            loadDetail()
+                        }
+                    }
+                }
+            )
+        }
+        deleteSchemaField?.let { field ->
+            AlertDialog(
+                onDismissRequest = { deleteSchemaField = null },
+                containerColor = SurfaceWhite,
+                title = { Text("Delete Field?", fontWeight = FontWeight.Bold, color = TextPrimary) },
+                text = { Text("Delete ${field.name}? Existing values for this field will be removed from the project.", fontSize = 14.sp, color = TextSecondary) },
+                confirmButton = {
+                    TextButton(
+                        enabled = !actionInFlight,
+                        onClick = {
+                            actionInFlight = true
+                            scope.launch {
+                                val ok = GitHubManager.deleteProjectV2Field(context, field.id)
+                                Toast.makeText(context, if (ok) "Field deleted" else "Failed", Toast.LENGTH_SHORT).show()
+                                actionInFlight = false
+                                deleteSchemaField = null
+                                if (ok) loadDetail()
+                            }
+                        }
+                    ) { Text("Delete", color = Color(0xFFFF3B30)) }
+                },
+                dismissButton = { TextButton(onClick = { deleteSchemaField = null }) { Text("Cancel", color = TextSecondary) } }
+            )
+        }
+        editDraft?.let { item ->
+            DraftIssueDialog(
+                title = "Edit Draft Item",
+                initialTitle = item.title,
+                initialBody = item.body,
+                confirmLabel = "Save",
+                onDismiss = { editDraft = null },
+                onSave = { title, body ->
+                    actionInFlight = true
+                    scope.launch {
+                        val ok = GitHubManager.updateProjectV2DraftIssue(context, item.contentId, title, body)
+                        Toast.makeText(context, if (ok) "Draft updated" else "Failed", Toast.LENGTH_SHORT).show()
+                        actionInFlight = false
+                        if (ok) {
+                            editDraft = null
+                            loadDetail()
+                        }
+                    }
+                }
+            )
+        }
+        editField?.let { item ->
+            ProjectV2FieldDialog(
+                item = item,
+                fields = current.fields,
+                onDismiss = { editField = null },
+                onSave = { field, value ->
+                    actionInFlight = true
+                    scope.launch {
+                        val ok = GitHubManager.updateProjectV2ItemFieldValue(context, current.id, item.id, field, value)
+                        Toast.makeText(context, if (ok) "Field updated" else "Failed", Toast.LENGTH_SHORT).show()
+                        actionInFlight = false
+                        if (ok) {
+                            editField = null
+                            loadDetail()
+                        }
+                    }
+                }
+            )
+        }
+        deleteItem?.let { item ->
+            AlertDialog(
+                onDismissRequest = { deleteItem = null },
+                containerColor = SurfaceWhite,
+                title = { Text("Delete Item?", fontWeight = FontWeight.Bold, color = TextPrimary) },
+                text = { Text("Remove ${item.title.ifBlank { "this item" }} from the project?", fontSize = 14.sp, color = TextSecondary) },
+                confirmButton = {
+                    TextButton(
+                        enabled = !actionInFlight,
+                        onClick = {
+                            actionInFlight = true
+                            scope.launch {
+                                val ok = GitHubManager.deleteProjectV2Item(context, current.id, item.id)
+                                Toast.makeText(context, if (ok) "Item deleted" else "Failed", Toast.LENGTH_SHORT).show()
+                                actionInFlight = false
+                                deleteItem = null
+                                if (ok) loadDetail()
+                            }
+                        }
+                    ) { Text("Delete", color = Color(0xFFFF3B30)) }
+                },
+                dismissButton = { TextButton(onClick = { deleteItem = null }) { Text("Cancel", color = TextSecondary) } }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProjectV2Summary(project: GHProjectV2Detail) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Rounded.Dashboard, null, Modifier.size(20.dp), tint = Blue)
+            Column(Modifier.weight(1f)) {
+                Text(project.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text(project.updatedAt.take(10), fontSize = 11.sp, color = TextTertiary)
+            }
+            CountPill(if (project.closed) "Closed" else "Open", 0, if (project.closed) TextSecondary else Color(0xFF34C759), showCount = false)
+        }
+        if (project.shortDescription.isNotBlank()) Text(project.shortDescription, fontSize = 13.sp, color = TextSecondary)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            CountPill("Items", project.itemsCount, Blue)
+            CountPill("Fields", project.fields.size, Color(0xFF34C759))
+            CountPill("Views", project.views.size, TextSecondary)
+            CountPill("Workflows", project.workflows.size, TextSecondary)
+            CountPill(if (project.isPublic) "Public" else "Private", 0, TextSecondary, showCount = false)
+        }
+    }
+}
+
+@Composable
+private fun ProjectV2FieldsCard(
+    fields: List<GHProjectV2Field>,
+    onAdd: () -> Unit,
+    onEdit: (GHProjectV2Field) -> Unit,
+    onDelete: (GHProjectV2Field) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Rounded.ViewColumn, null, Modifier.size(18.dp), tint = Blue)
+            Text("Fields", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
+            IconButton(onClick = onAdd, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = Blue)
+            }
+        }
+        if (fields.isEmpty()) {
+            Text("No Project V2 fields returned", fontSize = 12.sp, color = TextTertiary)
+        } else {
+            fields.forEach { field ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(field.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(projectV2FieldMeta(field), fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    IconButton(onClick = { onEdit(field) }, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Rounded.Edit, null, Modifier.size(17.dp), tint = Blue)
+                    }
+                    IconButton(onClick = { onDelete(field) }, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Rounded.Delete, null, Modifier.size(17.dp), tint = Color(0xFFFF3B30))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectV2ViewsCard(views: List<GHProjectV2View>) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Rounded.Dashboard, null, Modifier.size(18.dp), tint = Blue)
+            Text("Views", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
+            CountPill("${views.size}", 0, TextSecondary, showCount = false)
+        }
+        if (views.isEmpty()) {
+            Text("No Project V2 views returned", fontSize = 12.sp, color = TextTertiary)
+        } else {
+            views.forEach { view ->
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(view.name.ifBlank { "View #${view.number}" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        CountPill(view.layout.ifBlank { "layout" }, 0, Blue, showCount = false)
+                    }
+                    val meta = cleanProjectText(listOf(view.filter, view.updatedAt.take(10)))
+                    if (meta.isNotBlank()) Text(meta, fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (view.fields.isNotEmpty()) {
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            view.fields.take(8).forEach { CountPill(it, 0, TextSecondary, showCount = false) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectV2WorkflowsCard(workflows: List<GHProjectV2Workflow>) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Rounded.ArrowForward, null, Modifier.size(18.dp), tint = Blue)
+            Text("Workflows", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
+            CountPill("${workflows.count { it.enabled }} enabled", 0, Color(0xFF34C759), showCount = false)
+        }
+        if (workflows.isEmpty()) {
+            Text("No Project V2 workflows returned", fontSize = 12.sp, color = TextTertiary)
+        } else {
+            workflows.forEach { workflow ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(Modifier.size(9.dp).clip(CircleShape).background(if (workflow.enabled) Color(0xFF34C759) else TextTertiary))
+                    Column(Modifier.weight(1f)) {
+                        Text(workflow.name.ifBlank { "Workflow #${workflow.number}" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(workflow.updatedAt.take(10), fontSize = 11.sp, color = TextTertiary)
+                    }
+                    CountPill(if (workflow.enabled) "enabled" else "disabled", 0, if (workflow.enabled) Color(0xFF34C759) else TextSecondary, showCount = false)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectV2ItemCard(
+    item: GHProjectV2Item,
+    fields: List<GHProjectV2Field>,
+    onOpen: () -> Unit,
+    onEditDraft: () -> Unit,
+    onEditField: () -> Unit,
+    onArchive: () -> Unit,
+    onMoveTop: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.size(9.dp).clip(CircleShape).background(if (item.archived) TextTertiary else Blue))
+            Column(Modifier.weight(1f)) {
+                Text(item.title.ifBlank { item.type }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(projectV2ItemSubtitle(item), fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (item.url.isNotBlank()) IconButton(onClick = onOpen) { Icon(Icons.Rounded.Language, null, Modifier.size(18.dp), tint = TextSecondary) }
+            if (item.contentType == "DraftIssue" && item.contentId.isNotBlank()) IconButton(onClick = onEditDraft) { Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = Blue) }
+        }
+        if (item.body.isNotBlank()) Text(item.body, fontSize = 12.sp, color = TextSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            item.fieldValues.take(8).forEach { value -> FieldValuePill(value) }
+            if (item.fieldValues.isEmpty()) CountPill("No field values", 0, TextTertiary, showCount = false)
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ProjectChip("Fields", false, onEditField)
+            ProjectChip(if (item.archived) "Unarchive" else "Archive", false, onArchive)
+            ProjectChip("Move top", false, onMoveTop)
+            if (fields.isNotEmpty()) ProjectChip("${fields.size} fields", false) {}
+            ProjectChip("Delete", false, onDelete)
+        }
+    }
+}
+
+@Composable
+private fun ProjectV2EditorDialog(
+    project: GHProjectV2Detail,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String, Boolean, Boolean) -> Unit
+) {
+    var title by remember(project.id) { mutableStateOf(project.title) }
+    var description by remember(project.id) { mutableStateOf(project.shortDescription) }
+    var readme by remember(project.id) { mutableStateOf(project.readme) }
+    var closed by remember(project.id) { mutableStateOf(project.closed) }
+    var isPublic by remember(project.id) { mutableStateOf(project.isPublic) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Edit Project V2", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(description, { description = it }, label = { Text("Description") }, minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(readme, { readme = it }, label = { Text("Readme") }, minLines = 3, maxLines = 6, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ProjectChip("Open", !closed) { closed = false }
+                    ProjectChip("Closed", closed) { closed = true }
+                    ProjectChip("Public", isPublic) { isPublic = !isPublic }
+                }
+            }
+        },
+        confirmButton = { TextButton(enabled = title.isNotBlank(), onClick = { onSave(title, description, readme, closed, isPublic) }) { Text("Save", color = Blue) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun DraftIssueDialog(
+    title: String,
+    initialTitle: String,
+    initialBody: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit
+) {
+    var itemTitle by remember(initialTitle) { mutableStateOf(initialTitle) }
+    var body by remember(initialBody) { mutableStateOf(initialBody) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text(title, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(itemTitle, { itemTitle = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(body, { body = it }, label = { Text("Body") }, minLines = 4, maxLines = 8, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = { TextButton(enabled = itemTitle.isNotBlank(), onClick = { onSave(itemTitle, body) }) { Text(confirmLabel, color = Blue) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun ProjectV2FieldDialog(
+    item: GHProjectV2Item,
+    fields: List<GHProjectV2Field>,
+    onDismiss: () -> Unit,
+    onSave: (GHProjectV2Field, String) -> Unit
+) {
+    val editableFields = fields.filter { it.dataType in listOf("TEXT", "NUMBER", "DATE", "SINGLE_SELECT") }
+    var selectedField by remember(fields) { mutableStateOf(editableFields.firstOrNull()) }
+    var value by remember(item.id, selectedField?.id) {
+        mutableStateOf(item.fieldValues.firstOrNull { it.fieldId == selectedField?.id }?.value.orEmpty())
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Edit Field", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (editableFields.isEmpty()) {
+                    Text("No editable Project V2 fields returned", fontSize = 13.sp, color = TextSecondary)
+                } else {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        editableFields.forEach { field ->
+                            ProjectChip(field.name, selectedField?.id == field.id) {
+                                selectedField = field
+                                value = item.fieldValues.firstOrNull { it.fieldId == field.id }?.value.orEmpty()
+                            }
+                        }
+                    }
+                    selectedField?.let { field ->
+                        if (field.dataType == "SINGLE_SELECT") {
+                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                field.options.forEach { option ->
+                                    ProjectChip(option.name, value.equals(option.name, ignoreCase = true) || value == option.id) { value = option.name }
+                                }
+                            }
+                        } else {
+                            OutlinedTextField(
+                                value = value,
+                                onValueChange = { value = it },
+                                label = { Text(fieldValueLabel(field)) },
+                                singleLine = field.dataType != "TEXT",
+                                minLines = if (field.dataType == "TEXT") 3 else 1,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = selectedField != null, onClick = { selectedField?.let { onSave(it, value) } }) { Text("Save", color = Blue) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun ProjectV2SchemaFieldDialog(
+    title: String,
+    initialField: GHProjectV2Field?,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onSave: (String, String, List<String>) -> Unit
+) {
+    var name by remember(initialField?.id) { mutableStateOf(initialField?.name ?: "") }
+    var dataType by remember(initialField?.id) { mutableStateOf(initialField?.dataType ?: "TEXT") }
+    var optionsRaw by remember(initialField?.id) { mutableStateOf(initialField?.options?.joinToString("\n") { it.name } ?: "Todo\nIn progress\nDone") }
+    val optionList = remember(optionsRaw) {
+        optionsRaw.split('\n', ',').map { it.trim() }.filter { it.isNotBlank() }.distinct()
+    }
+    val canSave = name.isNotBlank() && (dataType != "SINGLE_SELECT" || optionList.isNotEmpty())
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text(title, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Field name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("TEXT", "NUMBER", "DATE", "SINGLE_SELECT").forEach { type ->
+                        ProjectChip(type.replace('_', ' '), dataType == type, enabled = initialField == null) { dataType = type }
+                    }
+                }
+                if (dataType == "SINGLE_SELECT") {
+                    OutlinedTextField(
+                        optionsRaw,
+                        { optionsRaw = it },
+                        label = { Text("Single-select options") },
+                        minLines = 4,
+                        maxLines = 8,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text("One option per line. Saving replaces the current option set.", fontSize = 11.sp, color = TextTertiary)
+                } else if (initialField != null) {
+                    Text("GitHub does not allow changing a field data type after creation.", fontSize = 11.sp, color = TextTertiary)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = canSave, onClick = { onSave(name.trim(), dataType, optionList) }) { Text(confirmLabel, color = Blue) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun FieldValuePill(value: GHProjectV2ItemFieldValue) {
+    CountPill("${value.fieldName}: ${value.value.ifBlank { "-" }}", 0, TextSecondary, showCount = false)
+}
+
+private fun projectV2FieldMeta(field: GHProjectV2Field): String {
+    val options = if (field.options.isNotEmpty()) " - ${field.options.size} options" else ""
+    return "${field.dataType.ifBlank { "FIELD" }}$options"
+}
+
+private fun cleanProjectText(values: List<String>): String =
+    values.filter { it.isNotBlank() && it != "null" }.joinToString(" - ")
+
+private fun projectV2ItemSubtitle(item: GHProjectV2Item): String {
+    val number = if (item.number > 0) " #${item.number}" else ""
+    val state = item.state.takeIf { it.isNotBlank() }?.let { " - $it" }.orEmpty()
+    val updated = item.updatedAt.take(10).takeIf { it.isNotBlank() }?.let { " - $it" }.orEmpty()
+    return "${item.contentType.ifBlank { item.type }}$number$state$updated"
+}
+
+private fun fieldValueLabel(field: GHProjectV2Field): String = when (field.dataType) {
+    "NUMBER" -> "${field.name} (number)"
+    "DATE" -> "${field.name} (YYYY-MM-DD)"
+    else -> field.name
 }
 
 @Composable
@@ -624,13 +1272,18 @@ private fun MoveCardDialog(
 
 @Composable
 private fun ProjectChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    ProjectChip(label = label, selected = selected, enabled = true, onClick = onClick)
+}
+
+@Composable
+private fun ProjectChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.clip(RoundedCornerShape(8.dp))
             .background(if (selected) Blue.copy(0.15f) else SurfaceWhite)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
-        Text(label, fontSize = 12.sp, color = if (selected) Blue else TextPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(label, fontSize = 12.sp, color = if (!enabled) TextTertiary else if (selected) Blue else TextPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 

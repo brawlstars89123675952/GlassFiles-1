@@ -133,6 +133,19 @@
 | List notifications | `/notifications` | ✅ | ✅ | NotificationsScreen |
 | Mark as read | `/notifications/threads/{id}` (PATCH) | ✅ | ✅ | Per notification |
 | Mark all read | `/notifications` (PUT) | ✅ | ✅ | Bulk action |
+| Get thread subscription | `/notifications/threads/{id}/subscription` | ✅ | ✅ | Subscription dialog |
+| Set thread subscription | `/notifications/threads/{id}/subscription` (PUT) | ✅ | ✅ | Subscribe or ignore thread |
+| Delete thread subscription | `/notifications/threads/{id}/subscription` (DELETE) | ✅ | ✅ | Reset to default |
+
+### Search
+| Feature | API Endpoint | Backend | UI | Notes |
+|---------|-------------|---------|-----|-------|
+| Search repositories | `/search/repositories` | ✅ | ✅ | Home search and AdvancedSearchScreen |
+| Search users | `/search/users` | ✅ | ✅ | AdvancedSearchScreen profile navigation |
+| Search issues and PRs | `/search/issues` | ✅ | ✅ | AdvancedSearchScreen with labels/comments/open on GitHub |
+| Search commits | `/search/commits` | ✅ | ✅ | AdvancedSearchScreen with repo/sha/author metadata |
+| Search topics | `/search/topics` | ✅ | ✅ | AdvancedSearchScreen topic cards |
+| Search labels | `/search/labels` | ✅ | ✅ | Repo-scoped AdvancedSearchScreen mode with repository id lookup |
 
 ### Organizations
 | Feature | API Endpoint | Backend | UI | Notes |
@@ -162,7 +175,20 @@
 | List project columns | `/projects/{id}/columns` | ✅ | ✅ | Column cards inside detail |
 | List project cards | `/projects/columns/{id}/cards` | ✅ | ✅ | Cards grouped by column |
 | Move project card | `/projects/columns/cards/{id}/moves` (POST) | ✅ | ✅ | Move note cards between columns |
-| Projects V2 overview | GraphQL `Repository.projectsV2` | ✅ | ⚠️ | Read-only list with item counts/open state |
+| Projects V2 overview | GraphQL `Repository.projectsV2` | ✅ | ✅ | List with item counts/open state |
+| Projects V2 detail | GraphQL `ProjectV2.items`, `ProjectV2.fields`, `ProjectV2.views`, `ProjectV2.workflows` | ✅ | ✅ | Detail screen with fields, views, workflows and items |
+| Update Projects V2 | GraphQL `updateProjectV2` | ✅ | ✅ | Title, description, readme, open/closed, public/private |
+| Create Projects V2 field | GraphQL `createProjectV2Field` | ✅ | ✅ | Text, number, date and single-select fields |
+| Update Projects V2 field | GraphQL `updateProjectV2Field` | ✅ | ✅ | Name and single-select option replacement |
+| Delete Projects V2 field | GraphQL `deleteProjectV2Field` | ✅ | ✅ | Confirmation dialog |
+| Projects V2 views | GraphQL `ProjectV2.views` | ✅ | ✅ | View list with layout, filter and visible fields |
+| Projects V2 workflows | GraphQL `ProjectV2.workflows` | ✅ | ✅ | Workflow list with enabled state |
+| Add Projects V2 draft item | GraphQL `addProjectV2DraftIssue` | ✅ | ✅ | Draft issue creation |
+| Update Projects V2 draft item | GraphQL `updateProjectV2DraftIssue` | ✅ | ✅ | Draft title/body edit |
+| Delete Projects V2 item | GraphQL `deleteProjectV2Item` | ✅ | ✅ | Confirmation dialog |
+| Archive/unarchive Projects V2 item | GraphQL `archiveProjectV2Item`, `unarchiveProjectV2Item` | ✅ | ✅ | Item card actions |
+| Update Projects V2 item field | GraphQL `updateProjectV2ItemFieldValue`, `clearProjectV2ItemFieldValue` | ✅ | ✅ | Text, number, date and single-select fields |
+| Move Projects V2 item | GraphQL `updateProjectV2ItemPosition` | ✅ | ✅ | Move item to top |
 
 ### Packages
 | Feature | API Endpoint | Backend | UI | Notes |
@@ -183,8 +209,13 @@
 | Dependabot security updates | `/repos/{owner}/{repo}/automated-security-fixes` | ✅ | ✅ | Read/toggle enable/disable |
 | Private vulnerability reporting | `/repos/{owner}/{repo}/private-vulnerability-reporting` | ✅ | ✅ | Read/toggle enable/disable |
 | List code scanning alerts | `/repos/{owner}/{repo}/code-scanning/alerts` | ✅ | ✅ | Implemented with filters/detail |
+| Get code scanning alert | `/repos/{owner}/{repo}/code-scanning/alerts/{alert_number}` | ✅ | ✅ | Detail dialog refreshes single alert |
 | List secret scanning alerts | `/repos/{owner}/{repo}/secret-scanning/alerts` | ✅ | ✅ | Implemented with filters/detail |
+| Get secret scanning alert | `/repos/{owner}/{repo}/secret-scanning/alerts/{alert_number}` | ✅ | ✅ | Detail dialog refreshes single alert |
 | List Dependabot alerts | `/repos/{owner}/{repo}/dependabot/alerts` | ✅ | ✅ | Implemented with mobile filters/search |
+| Get Dependabot alert | `/repos/{owner}/{repo}/dependabot/alerts/{alert_number}` | ✅ | ✅ | Detail dialog refreshes single alert |
+| Get repository security advisory | `/repos/{owner}/{repo}/security-advisories/{ghsa_id}` | ✅ | ✅ | Advisory detail dialog |
+| Community profile | `/repos/{owner}/{repo}/community/profile` | ✅ | ✅ | Health percentage and community checklist |
 
 ### User Settings (Advanced)
 | Feature | API Endpoint | Backend | UI | Notes |
@@ -252,13 +283,13 @@
 |---------|-------------|----------|-------|
 | Update PR | `/repos/{owner}/{repo}/pulls/{number}` (PATCH) | Medium | ✅ Implemented: title, body, base, state |
 | List PR reviews | `/repos/{owner}/{repo}/pulls/{number}/reviews` | Medium | ✅ Implemented review history |
-| Get single review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` | Low | |
-| Update review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` (PUT) | Low | |
-| Delete review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` (DELETE) | Low | |
+| Get single review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` | Low | ✅ Implemented from review history |
+| Update review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` (PUT) | Low | ✅ Implemented for pending reviews |
+| Delete review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` (DELETE) | Low | ✅ Implemented for pending reviews |
 | List review comments | `/repos/{owner}/{repo}/pulls/{number}/comments` | Medium | PR line comments |
 | Create review comment | `/repos/{owner}/{repo}/pulls/{number}/comments` (POST) | Medium | Line-level comments |
-| Update review comment | `/repos/{owner}/{repo}/pulls/comments/{id}` (PATCH) | Low | |
-| Delete review comment | `/repos/{owner}/{repo}/pulls/comments/{id}` (DELETE) | Low | |
+| Update review comment | `/repos/{owner}/{repo}/pulls/comments/{id}` (PATCH) | Low | ✅ Implemented from diff/comment views |
+| Delete review comment | `/repos/{owner}/{repo}/pulls/comments/{id}` (DELETE) | Low | ✅ Implemented from diff/comment views |
 | PR check-runs | `/repos/{owner}/{repo}/commits/{ref}/check-runs` | Medium | CI status on PR |
 | PR check-suites | `/repos/{owner}/{repo}/commits/{ref}/check-suites` | Medium | |
 | PR merge status | `/repos/{owner}/{repo}/pulls/{number}/merge` (GET) | Low | Check if mergeable |
@@ -304,14 +335,14 @@
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
 | List webhooks | `/repos/{owner}/{repo}/hooks` | Low | ✅ Implemented |
-| Get webhook | `/repos/{owner}/{repo}/hooks/{id}` | Low | |
+| Get webhook | `/repos/{owner}/{repo}/hooks/{id}` | Low | ✅ Implemented with detail dialog |
 | Create webhook | `/repos/{owner}/{repo}/hooks` (POST) | Low | ✅ Implemented |
 | Update webhook | `/repos/{owner}/{repo}/hooks/{id}` (PATCH) | Low | ✅ Implemented |
 | Delete webhook | `/repos/{owner}/{repo}/hooks/{id}` (DELETE) | Low | ✅ Implemented |
-| Test webhook | `/repos/{owner}/{repo}/hooks/{id}/tests` (POST) | Low | |
+| Test webhook | `/repos/{owner}/{repo}/hooks/{id}/tests` (POST) | Low | ✅ Implemented |
 | Ping webhook | `/repos/{owner}/{repo}/hooks/{id}/pings` (POST) | Low | ✅ Implemented |
-| Get webhook config | `/repos/{owner}/{repo}/hooks/{id}/config` | Low | |
-| Update webhook config | `/repos/{owner}/{repo}/hooks/{id}/config` (PATCH) | Low | |
+| Get webhook config | `/repos/{owner}/{repo}/hooks/{id}/config` | Low | ✅ Implemented |
+| Update webhook config | `/repos/{owner}/{repo}/hooks/{id}/config` (PATCH) | Low | ✅ Implemented |
 | Get webhook deliveries | `/repos/{owner}/{repo}/hooks/{id}/deliveries` | Low | ✅ Implemented with filters and detail dialog |
 | Redeliver webhook | `/repos/{owner}/{repo}/hooks/{id}/deliveries/{delivery_id}/attempts` (POST) | Low | ✅ Implemented |
 
@@ -320,27 +351,20 @@
 |---------|-------------|----------|-------|
 | List rulesets | `/repos/{owner}/{repo}/rulesets` | Medium | ✅ Implemented; newer than branch protection |
 | Get ruleset | `/repos/{owner}/{repo}/rulesets/{id}` | Medium | ✅ Implemented with detail UI |
-| Create ruleset | `/repos/{owner}/{repo}/rulesets` (POST) | Medium | |
-| Update ruleset | `/repos/{owner}/{repo}/rulesets/{id}` (PUT) | Medium | |
-| Delete ruleset | `/repos/{owner}/{repo}/rulesets/{id}` (DELETE) | Medium | |
-| Get rule suite | `/repos/{owner}/{repo}/rule-suites/{id}` | Low | |
+| Create ruleset | `/repos/{owner}/{repo}/rulesets` (POST) | Medium | ✅ Implemented with raw rules JSON editor |
+| Update ruleset | `/repos/{owner}/{repo}/rulesets/{id}` (PUT) | Medium | ✅ Implemented with conditions/rules editor |
+| Delete ruleset | `/repos/{owner}/{repo}/rulesets/{id}` (DELETE) | Medium | ✅ Implemented with confirmation dialog |
+| Get rule suite | `/repos/{owner}/{repo}/rule-suites/{id}` | Low | ✅ Implemented with detail dialog |
 | List rule suites | `/repos/{owner}/{repo}/rule-suites` | Low | ✅ Implemented in ruleset detail |
-
-### Advanced Notifications
-| Feature | API Endpoint | Priority | Notes |
-|---------|-------------|----------|-------|
-| Get thread subscription | `/notifications/threads/{id}/subscription` | Low | |
-| Set thread subscription | `/notifications/threads/{id}/subscription` (PUT) | Low | |
-| Delete thread subscription | `/notifications/threads/{id}/subscription` (DELETE) | Low | |
 
 ### Search (Advanced)
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
-| Search commits | `/search/commits` | Low | |
-| Search issues | `/search/issues` | Low | Already have basic issue list |
-| Search users | `/search/users` | ✅ | Already implemented |
-| Search topics | `/search/topics` | Low | |
-| Search labels | `/search/labels` | Low | |
+| Search commits | `/search/commits` | ✅ | Implemented in AdvancedSearchScreen |
+| Search issues | `/search/issues` | ✅ | Implemented in AdvancedSearchScreen |
+| Search users | `/search/users` | ✅ | Implemented in AdvancedSearchScreen |
+| Search topics | `/search/topics` | ✅ | Implemented in AdvancedSearchScreen |
+| Search labels | `/search/labels` | ✅ | Implemented in AdvancedSearchScreen with `repository_id` lookup |
 
 ### GitHub Apps / OAuth
 | Feature | API Endpoint | Priority | Notes |
@@ -374,20 +398,21 @@
 | Issues (Basic) | 11 | 0 | 0 | 100% |
 | Issues (Advanced) | 6 | 0 | 2 | 75% |
 | Pull Requests (Basic) | 7 | 0 | 0 | 100% |
-| Pull Requests (Advanced) | 6 | 0 | 9+ | 40% |
+| Pull Requests (Advanced) | 11 | 0 | 4+ | 73% |
 | Releases | 5 | 0 | 0 | 100% |
 | GitHub Actions | 13 | 0 | 8+ | 62% |
 | Gists | 4 | 0 | 0 | 100% |
-| Notifications | 3 | 0 | 3 | 50% |
+| Notifications | 6 | 0 | 0 | 100% |
+| Search | 5 | 0 | 0 | 100% |
 | Organizations | 2 | 0 | 0 | 100% |
 | User Settings | 20+ | 0 | 0 | 100% |
 | Git Data | 0 | 0 | 10+ | 0% |
 | Discussions | 7 | 0 | 0 | 100% |
-| Projects | 8 | 1 | 0 | 89% |
+| Projects | 22 | 0 | 0 | 100% |
 | Packages | 6 | 0 | 0 | 100% |
-| Security | 8 | 0 | 3 | 73% |
-| Webhooks | 7 | 0 | 4 | 64% |
-| Repository Rules | 3 | 0 | 3 | 50% |
+| Security | 13 | 0 | 0 | 100% |
+| Webhooks | 11 | 0 | 0 | 100% |
+| Repository Rules | 7 | 0 | 0 | 100% |
 
 ### Overall Assessment
 
@@ -401,31 +426,28 @@
 - ✅ Releases (full CRUD)
 - ✅ GitHub Actions (runs, logs, dispatch)
 - ✅ Gists
-- ✅ Notifications (basic)
+- ✅ Notifications
+- ✅ Advanced search (repositories, users, issues, commits, topics, labels)
 - ✅ Organizations
 - ✅ Discussions
+- ✅ Projects and Projects V2
 - ✅ Packages
 - ✅ User settings (comprehensive)
 - ✅ Security alerts and controls
+- ✅ Security single-alert detail and community profile
+- ✅ Webhooks (detail, create/edit/delete, ping/test, config, deliveries and redelivery)
+- ✅ Repository rulesets and rule suites
 
 **Partially Implemented / In Progress:**
 - ⚠️ Commits (diff viewing, but no compare)
 - ⚠️ GitHub Actions (missing advanced features)
 - ⚠️ Issues Advanced (timeline, lock/unlock, reactions and comment edit/delete implemented; remaining gaps are issue events and deeper timeline event actions)
-- ⚠️ Notifications (missing thread subscription)
-- ⚠️ Projects V2 (read-only overview implemented; mutations/items/field editing still future work)
 
 **Not Implemented / Early Coverage — Major Gaps:**
-- ⚠️ Advanced PR features (review comments, check runs, reviewers, review history and merge methods implemented; remaining gaps are review mutation/detail and check suites)
+- ⚠️ Advanced PR features (review detail/mutations, review comments, review comment mutations, check runs, reviewers, review history and merge methods implemented; remaining gaps are check suites and explicit merge status)
 - ⚠️ Advanced issue features (timeline, lock/unlock, reactions, edit/delete comments implemented; remaining gaps are issue events and deeper timeline event actions)
-- ⚠️ Webhooks (list/create/update/delete/ping plus delivery history/redelivery implemented; remaining gaps are advanced config/test helpers)
-- ⚠️ Security features (alerts, advisories and controls implemented; remaining gaps are single-alert fetch APIs and community health)
-- ⚠️ Repository rulesets (list/detail/rule suites implemented; create/update/delete still missing)
-- ❌ Advanced search (commits, issues, topics)
 
 ### Recommendations for Next Implementation
 
 **Low Priority (nice to have):**
-1. **Projects V2 mutations/items** — Full new Projects editing model
-2. **Advanced search** — commits, issues, topics
-3. **Repository rulesets mutations** — create/update/delete rulesets
+1. **Advanced PR check suites / explicit merge status** — remaining PR polish

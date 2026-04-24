@@ -71,6 +71,7 @@ fun DiffViewerScreen(
             repoName = repoName!!,
             pullNumber = pullNumber,
             comments = comments,
+            onCommentChanged = onCommentAdded,
             onBack = { showComments = false }
         )
         return
@@ -159,6 +160,10 @@ private fun FileDiffScreen(
     var showCommentDialog by remember { mutableStateOf(false) }
     var commentLine by remember { mutableStateOf<Int?>(null) }
     var commentPath by remember { mutableStateOf("") }
+    var editComment by remember { mutableStateOf<GHReviewComment?>(null) }
+    var deleteComment by remember { mutableStateOf<GHReviewComment?>(null) }
+    var commentActionInFlight by remember { mutableStateOf(false) }
+    val canMutateComments = repoOwner != null && repoName != null && pullNumber != null
 
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         GHTopBar(
@@ -207,7 +212,11 @@ private fun FileDiffScreen(
                     // Show comments for this line
                     if (lineComments.isNotEmpty()) {
                         lineComments.forEach { comment ->
-                            CommentBubble(comment)
+                            CommentBubble(
+                                comment = comment,
+                                onEdit = if (canMutateComments) ({ editComment = comment }) else null,
+                                onDelete = if (canMutateComments) ({ deleteComment = comment }) else null
+                            )
                         }
                     }
                 }
@@ -254,6 +263,46 @@ private fun FileDiffScreen(
             dismissButton = {
                 TextButton(onClick = { showCommentDialog = false }) {
                     Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    editComment?.let { comment ->
+        ReviewCommentEditDialog(
+            comment = comment,
+            saving = commentActionInFlight,
+            onDismiss = { if (!commentActionInFlight) editComment = null },
+            onSave = { body ->
+                commentActionInFlight = true
+                scope.launch {
+                    val ok = GitHubManager.updatePullRequestReviewComment(context, repoOwner!!, repoName!!, comment.id, body)
+                    commentActionInFlight = false
+                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                    if (ok) {
+                        editComment = null
+                        onCommentAdded()
+                    }
+                }
+            }
+        )
+    }
+
+    deleteComment?.let { comment ->
+        ReviewCommentDeleteDialog(
+            comment = comment,
+            deleting = commentActionInFlight,
+            onDismiss = { if (!commentActionInFlight) deleteComment = null },
+            onDelete = {
+                commentActionInFlight = true
+                scope.launch {
+                    val ok = GitHubManager.deletePullRequestReviewComment(context, repoOwner!!, repoName!!, comment.id)
+                    commentActionInFlight = false
+                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                    if (ok) {
+                        deleteComment = null
+                        onCommentAdded()
+                    }
                 }
             }
         )
@@ -359,7 +408,11 @@ private fun DiffLineItem(line: PatchDiffLine, viewMode: DiffViewMode, onAddComme
 }
 
 @Composable
-private fun CommentBubble(comment: GHReviewComment) {
+private fun CommentBubble(
+    comment: GHReviewComment,
+    onEdit: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null
+) {
     Column(
         Modifier.fillMaxWidth().padding(start = 48.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
             .clip(RoundedCornerShape(8.dp)).background(SurfaceWhite)
@@ -368,6 +421,17 @@ private fun CommentBubble(comment: GHReviewComment) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(comment.author, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Blue)
             Text(comment.createdAt.take(10), fontSize = 10.sp, color = TextTertiary)
+            Spacer(Modifier.weight(1f))
+            if (onEdit != null) {
+                IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Rounded.Edit, null, Modifier.size(15.dp), tint = Blue)
+                }
+            }
+            if (onDelete != null) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Rounded.Delete, null, Modifier.size(15.dp), tint = Color(0xFFFF3B30))
+                }
+            }
         }
         Spacer(Modifier.height(4.dp))
         Text(comment.body, fontSize = 13.sp, color = TextPrimary, lineHeight = 18.sp)
@@ -380,8 +444,15 @@ fun PRReviewCommentsScreen(
     repoName: String,
     pullNumber: Int,
     comments: List<GHReviewComment>,
+    onCommentChanged: () -> Unit = {},
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var editComment by remember { mutableStateOf<GHReviewComment?>(null) }
+    var deleteComment by remember { mutableStateOf<GHReviewComment?>(null) }
+    var commentActionInFlight by remember { mutableStateOf(false) }
+
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         GHTopBar(
             title = "Review Comments",
@@ -406,6 +477,13 @@ fun PRReviewCommentsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(comment.path.substringAfterLast("/"), fontSize = 12.sp, color = Blue, fontWeight = FontWeight.Medium)
                             Text("Line ${comment.line}", fontSize = 11.sp, color = TextTertiary)
+                            Spacer(Modifier.weight(1f))
+                            IconButton(onClick = { editComment = comment }, modifier = Modifier.size(30.dp)) {
+                                Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = Blue)
+                            }
+                            IconButton(onClick = { deleteComment = comment }, modifier = Modifier.size(30.dp)) {
+                                Icon(Icons.Rounded.Delete, null, Modifier.size(16.dp), tint = Color(0xFFFF3B30))
+                            }
                         }
                         Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -419,6 +497,103 @@ fun PRReviewCommentsScreen(
             }
         }
     }
+
+    editComment?.let { comment ->
+        ReviewCommentEditDialog(
+            comment = comment,
+            saving = commentActionInFlight,
+            onDismiss = { if (!commentActionInFlight) editComment = null },
+            onSave = { body ->
+                commentActionInFlight = true
+                scope.launch {
+                    val ok = GitHubManager.updatePullRequestReviewComment(context, repoOwner, repoName, comment.id, body)
+                    commentActionInFlight = false
+                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                    if (ok) {
+                        editComment = null
+                        onCommentChanged()
+                    }
+                }
+            }
+        )
+    }
+
+    deleteComment?.let { comment ->
+        ReviewCommentDeleteDialog(
+            comment = comment,
+            deleting = commentActionInFlight,
+            onDismiss = { if (!commentActionInFlight) deleteComment = null },
+            onDelete = {
+                commentActionInFlight = true
+                scope.launch {
+                    val ok = GitHubManager.deletePullRequestReviewComment(context, repoOwner, repoName, comment.id)
+                    commentActionInFlight = false
+                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                    if (ok) {
+                        deleteComment = null
+                        onCommentChanged()
+                    }
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun ReviewCommentEditDialog(
+    comment: GHReviewComment,
+    saving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var body by remember(comment.id) { mutableStateOf(comment.body) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Edit review comment", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("${comment.path}:${comment.line}", fontSize = 12.sp, color = TextTertiary)
+                OutlinedTextField(
+                    value = body,
+                    onValueChange = { body = it },
+                    label = { Text("Comment") },
+                    modifier = Modifier.fillMaxWidth().height(140.dp),
+                    maxLines = 8
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !saving && body.isNotBlank(), onClick = { onSave(body) }) {
+                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
+                else Text("Save", color = Blue)
+            }
+        },
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun ReviewCommentDeleteDialog(
+    comment: GHReviewComment,
+    deleting: Boolean,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Delete review comment?", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = { Text("Delete comment on ${comment.path}:${comment.line}?", fontSize = 13.sp, color = TextSecondary) },
+        confirmButton = {
+            TextButton(enabled = !deleting, onClick = onDelete) {
+                if (deleting) CircularProgressIndicator(Modifier.size(14.dp), color = Color(0xFFFF3B30), strokeWidth = 2.dp)
+                else Text("Delete", color = Color(0xFFFF3B30))
+            }
+        },
+        dismissButton = { TextButton(enabled = !deleting, onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+    )
 }
 
 // PR Diff Screen wrapper

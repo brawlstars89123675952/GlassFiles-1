@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.glassfiles.data.github.GHNotification
+import com.glassfiles.data.github.GHThreadSubscription
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
@@ -33,6 +34,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
     var notifications by remember { mutableStateOf<List<GHNotification>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var showAll by remember { mutableStateOf(false) }
+    var selectedSubscription by remember { mutableStateOf<GHNotification?>(null) }
 
     LaunchedEffect(showAll) {
         notifications = GitHubManager.getNotifications(context, showAll)
@@ -86,20 +88,31 @@ fun NotificationsScreen(onBack: () -> Unit) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
             items(notifications.size) { index ->
                 val notification = notifications[index]
-                NotificationCard(notification) {
-                    scope.launch {
-                        GitHubManager.markNotificationRead(context, notification.id)
-                        notifications = GitHubManager.getNotifications(context, showAll)
-                    }
-                }
+                NotificationCard(
+                    notification = notification,
+                    onMarkRead = {
+                        scope.launch {
+                            GitHubManager.markNotificationRead(context, notification.id)
+                            notifications = GitHubManager.getNotifications(context, showAll)
+                        }
+                    },
+                    onSubscription = { selectedSubscription = notification }
+                )
                 if (index < notifications.lastIndex) Spacer(Modifier.height(8.dp))
             }
         }
     }
+
+    selectedSubscription?.let { notification ->
+        NotificationSubscriptionDialog(
+            notification = notification,
+            onDismiss = { selectedSubscription = null }
+        )
+    }
 }
 
 @Composable
-private fun NotificationCard(notification: GHNotification, onMarkRead: () -> Unit) {
+private fun NotificationCard(notification: GHNotification, onMarkRead: () -> Unit, onSubscription: () -> Unit) {
     val icon = when (notification.type) {
         "PullRequest" -> Icons.Rounded.MergeType
         "Issue" -> Icons.Rounded.ErrorOutline
@@ -130,18 +143,104 @@ private fun NotificationCard(notification: GHNotification, onMarkRead: () -> Uni
                 Spacer(Modifier.height(2.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(notification.repoName.substringAfter("/"), fontSize = 11.sp, color = TextSecondary)
-                    Text("•", fontSize = 11.sp, color = TextTertiary)
+                    Text("-", fontSize = 11.sp, color = TextTertiary)
                     Text(notification.type, fontSize = 11.sp, color = TextSecondary)
                 }
             }
             if (notification.unread) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(Blue))
             }
+            IconButton(onClick = onSubscription) {
+                Icon(Icons.Rounded.Tune, null, Modifier.size(18.dp), tint = TextSecondary)
+            }
         }
         if (notification.reason.isNotBlank()) {
             Spacer(Modifier.height(6.dp))
             Text(notification.reason.replace("_", " "), fontSize = 11.sp, color = reasonColor, fontWeight = FontWeight.Medium)
         }
+    }
+}
+
+@Composable
+private fun NotificationSubscriptionDialog(notification: GHNotification, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var loading by remember(notification.id) { mutableStateOf(true) }
+    var actionInFlight by remember { mutableStateOf(false) }
+    var subscription by remember(notification.id) { mutableStateOf<GHThreadSubscription?>(null) }
+
+    fun loadSubscription() {
+        loading = true
+        scope.launch {
+            subscription = GitHubManager.getThreadSubscription(context, notification.id)
+            loading = false
+        }
+    }
+
+    LaunchedEffect(notification.id) { loadSubscription() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Thread subscription", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(notification.title, fontSize = 14.sp, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (loading) {
+                    Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    }
+                } else {
+                    val current = subscription
+                    val status = when {
+                        current?.ignored == true -> "Ignored"
+                        current?.subscribed == true -> "Subscribed"
+                        else -> "Default"
+                    }
+                    Text(status, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (current?.ignored == true) Color(0xFFFF3B30) else Blue)
+                    if (!current?.reason.isNullOrBlank()) Text(current!!.reason, fontSize = 12.sp, color = TextSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        ThreadActionChip("Subscribe", enabled = !actionInFlight) {
+                            actionInFlight = true
+                            scope.launch {
+                                GitHubManager.setThreadSubscription(context, notification.id, subscribed = true, ignored = false)
+                                actionInFlight = false
+                                loadSubscription()
+                            }
+                        }
+                        ThreadActionChip("Ignore", enabled = !actionInFlight) {
+                            actionInFlight = true
+                            scope.launch {
+                                GitHubManager.setThreadSubscription(context, notification.id, subscribed = false, ignored = true)
+                                actionInFlight = false
+                                loadSubscription()
+                            }
+                        }
+                        ThreadActionChip("Default", enabled = !actionInFlight) {
+                            actionInFlight = true
+                            scope.launch {
+                                GitHubManager.deleteThreadSubscription(context, notification.id)
+                                actionInFlight = false
+                                loadSubscription()
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+    )
+}
+
+@Composable
+private fun ThreadActionChip(label: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(8.dp))
+            .background(if (enabled) Blue.copy(alpha = 0.12f) else SurfaceLight)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 7.dp)
+    ) {
+        Text(label, fontSize = 12.sp, color = if (enabled) Blue else TextTertiary, fontWeight = FontWeight.Medium)
     }
 }
 

@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHWebhook
+import com.glassfiles.data.github.GHWebhookConfig
 import com.glassfiles.data.github.GHWebhookDelivery
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.theme.*
@@ -49,6 +50,8 @@ internal fun WebhooksScreen(
     var createNew by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<GHWebhook?>(null) }
     var deliveriesHook by remember { mutableStateOf<GHWebhook?>(null) }
+    var configHook by remember { mutableStateOf<GHWebhook?>(null) }
+    var detailHook by remember { mutableStateOf<GHWebhook?>(null) }
     var query by remember { mutableStateOf("") }
 
     fun loadWebhooks() {
@@ -119,7 +122,14 @@ internal fun WebhooksScreen(
                     WebhookCard(
                         hook = hook,
                         disabled = actionInFlight,
+                        onOpen = {
+                            detailHook = hook
+                            scope.launch {
+                                detailHook = GitHubManager.getWebhook(context, repoOwner, repoName, hook.id) ?: hook
+                            }
+                        },
                         onDeliveries = { deliveriesHook = hook },
+                        onConfig = { configHook = hook },
                         onEdit = { showEditor = hook },
                         onPing = {
                             if (!actionInFlight) {
@@ -127,6 +137,17 @@ internal fun WebhooksScreen(
                                 scope.launch {
                                     val ok = GitHubManager.pingWebhook(context, repoOwner, repoName, hook.id)
                                     Toast.makeText(context, if (ok) "Ping sent" else "Failed to ping webhook", Toast.LENGTH_SHORT).show()
+                                    webhooks = GitHubManager.getWebhooks(context, repoOwner, repoName)
+                                    actionInFlight = false
+                                }
+                            }
+                        },
+                        onTest = {
+                            if (!actionInFlight) {
+                                actionInFlight = true
+                                scope.launch {
+                                    val ok = GitHubManager.testWebhook(context, repoOwner, repoName, hook.id)
+                                    Toast.makeText(context, if (ok) "Test delivery queued" else "Failed to test webhook", Toast.LENGTH_SHORT).show()
                                     webhooks = GitHubManager.getWebhooks(context, repoOwner, repoName)
                                     actionInFlight = false
                                 }
@@ -182,6 +203,34 @@ internal fun WebhooksScreen(
         )
     }
 
+    detailHook?.let { hook ->
+        WebhookDetailDialog(
+            hook = hook,
+            onDismiss = { detailHook = null },
+            onDeliveries = {
+                detailHook = null
+                deliveriesHook = hook
+            },
+            onConfig = {
+                detailHook = null
+                configHook = hook
+            }
+        )
+    }
+
+    configHook?.let { hook ->
+        WebhookConfigDialog(
+            repoOwner = repoOwner,
+            repoName = repoName,
+            webhook = hook,
+            onDismiss = { configHook = null },
+            onSaved = {
+                configHook = null
+                webhooks = it
+            }
+        )
+    }
+
     deleteTarget?.let { hook ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
@@ -233,14 +282,21 @@ private fun WebhooksSummaryCard(webhooks: List<GHWebhook>) {
 private fun WebhookCard(
     hook: GHWebhook,
     disabled: Boolean,
+    onOpen: () -> Unit,
     onDeliveries: () -> Unit,
+    onConfig: () -> Unit,
     onEdit: () -> Unit,
     onPing: () -> Unit,
+    onTest: () -> Unit,
     onDelete: () -> Unit
 ) {
     val responseColor = webhookResponseColor(hook)
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(SurfaceWhite)
+            .clickable(enabled = !disabled, onClick = onOpen)
+            .padding(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(
@@ -253,18 +309,16 @@ private fun WebhookCard(
                 Text(hook.url.ifBlank { "Webhook #${hook.id}" }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("${hook.contentType.ifBlank { "json" }} · ${if (hook.active) "Active" else "Inactive"}", fontSize = 11.sp, color = TextTertiary)
             }
-            IconButton(onClick = onPing, enabled = !disabled) {
-                Icon(Icons.Rounded.Send, null, Modifier.size(18.dp), tint = Blue)
-            }
-            IconButton(onClick = onDeliveries, enabled = !disabled) {
-                Icon(Icons.Rounded.History, null, Modifier.size(18.dp), tint = Blue)
-            }
-            IconButton(onClick = onEdit, enabled = !disabled) {
-                Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = TextSecondary)
-            }
-            IconButton(onClick = onDelete, enabled = !disabled) {
-                Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30))
-            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            WebhookIconAction(Icons.Rounded.Send, Blue, disabled, onPing)
+            WebhookIconAction(Icons.Rounded.PlayArrow, Color(0xFFFF9500), disabled, onTest)
+            WebhookIconAction(Icons.Rounded.History, Blue, disabled, onDeliveries)
+            WebhookIconAction(Icons.Rounded.Settings, TextSecondary, disabled, onConfig)
+            WebhookIconAction(Icons.Rounded.Edit, TextSecondary, disabled, onEdit)
+            WebhookIconAction(Icons.Rounded.Delete, Color(0xFFFF3B30), disabled, onDelete)
         }
 
         Spacer(Modifier.height(8.dp))
@@ -284,6 +338,64 @@ private fun WebhookCard(
             Spacer(Modifier.height(4.dp))
             Text(hook.lastResponseMessage, fontSize = 11.sp, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
+    }
+}
+
+@Composable
+private fun WebhookIconAction(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, disabled: Boolean, onClick: () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        enabled = !disabled,
+        modifier = Modifier.size(36.dp)
+    ) {
+        Icon(icon, null, Modifier.size(18.dp), tint = tint)
+    }
+}
+
+@Composable
+private fun WebhookDetailDialog(
+    hook: GHWebhook,
+    onDismiss: () -> Unit,
+    onDeliveries: () -> Unit,
+    onConfig: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Webhook #${hook.id}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    WebhookPill(if (hook.active) "Active" else "Inactive", if (hook.active) Color(0xFF34C759) else TextTertiary)
+                    WebhookPill(hook.contentType.ifBlank { "json" }, TextSecondary)
+                    if (hook.insecureSsl == "1") WebhookPill("SSL off", Color(0xFFFF9500))
+                    WebhookPill(webhookLastResponseLabel(hook), webhookResponseColor(hook))
+                }
+                WebhookDetailRow("Payload URL", hook.url)
+                WebhookDetailRow("Name", hook.name.ifBlank { "web" })
+                WebhookDetailRow("Events", hook.events.joinToString(", ").ifBlank { "No events" })
+                WebhookDetailRow("Created", hook.createdAt.ifBlank { "-" })
+                WebhookDetailRow("Updated", hook.updatedAt.ifBlank { "-" })
+                if (hook.lastResponseMessage.isNotBlank()) {
+                    DeliveryBlock("Last response", hook.lastResponseMessage)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfig) { Text("Config", color = Blue) } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDeliveries) { Text("Deliveries", color = TextSecondary) }
+                TextButton(onClick = onDismiss) { Text("Close", color = TextSecondary) }
+            }
+        }
+    )
+}
+
+@Composable
+private fun WebhookDetailRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(label, fontSize = 11.sp, color = TextTertiary, fontWeight = FontWeight.Medium)
+        Text(value.ifBlank { "-" }, fontSize = 13.sp, color = TextPrimary)
     }
 }
 
@@ -366,6 +478,106 @@ private fun WebhookEditorDialog(
             ) { Text("Save", color = Blue) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun WebhookConfigDialog(
+    repoOwner: String,
+    repoName: String,
+    webhook: GHWebhook,
+    onDismiss: () -> Unit,
+    onSaved: (List<GHWebhook>) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var loading by remember(webhook.id) { mutableStateOf(true) }
+    var saving by remember(webhook.id) { mutableStateOf(false) }
+    var config by remember(webhook.id) { mutableStateOf<GHWebhookConfig?>(null) }
+    var url by remember(webhook.id) { mutableStateOf(webhook.url) }
+    var contentType by remember(webhook.id) { mutableStateOf(webhook.contentType.ifBlank { "json" }) }
+    var insecureSsl by remember(webhook.id) { mutableStateOf(webhook.insecureSsl == "1") }
+    var secret by remember(webhook.id) { mutableStateOf("") }
+    val canSave = !loading && !saving && (url.startsWith("http://") || url.startsWith("https://"))
+
+    LaunchedEffect(webhook.id) {
+        loading = true
+        val loaded = GitHubManager.getWebhookConfig(context, repoOwner, repoName, webhook.id)
+        config = loaded
+        loaded?.let {
+            url = it.url.ifBlank { webhook.url }
+            contentType = it.contentType.ifBlank { webhook.contentType.ifBlank { "json" } }
+            insecureSsl = it.insecureSsl == "1"
+        }
+        loading = false
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        containerColor = SurfaceWhite,
+        title = { Text("Webhook config", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (loading) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Text("Loading config", fontSize = 13.sp, color = TextSecondary)
+                    }
+                }
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text("Payload URL") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    listOf("json", "form").forEach { type ->
+                        WebhookChoiceChip(type, selected = contentType == type) { contentType = type }
+                    }
+                }
+                OutlinedTextField(
+                    value = secret,
+                    onValueChange = { secret = it },
+                    label = { Text("New secret (leave blank to keep)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                val remoteSecret = config?.secret.orEmpty()
+                Text(
+                    if (remoteSecret.isNotBlank()) "Existing secret is write-only and stays unchanged unless replaced." else "GitHub does not expose existing webhook secrets.",
+                    fontSize = 11.sp,
+                    color = TextTertiary
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Checkbox(checked = insecureSsl, onCheckedChange = { insecureSsl = it })
+                    Text("Disable SSL verification", fontSize = 13.sp, color = TextPrimary)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = canSave,
+                onClick = {
+                    if (!canSave) return@TextButton
+                    saving = true
+                    scope.launch {
+                        val payload = mutableMapOf(
+                            "url" to url.trim(),
+                            "content_type" to contentType,
+                            "insecure_ssl" to if (insecureSsl) "1" else "0"
+                        )
+                        if (secret.isNotBlank()) payload["secret"] = secret
+                        val ok = GitHubManager.updateWebhookConfig(context, repoOwner, repoName, webhook.id, payload)
+                        Toast.makeText(context, if (ok) "Webhook config updated" else "Failed to update config", Toast.LENGTH_SHORT).show()
+                        if (ok) onSaved(GitHubManager.getWebhooks(context, repoOwner, repoName))
+                        saving = false
+                    }
+                }
+            ) { Text(if (saving) "Saving" else "Save config", color = Blue) }
+        },
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
     )
 }
 
