@@ -1098,13 +1098,13 @@ object GitHubManager {
             (0 until arr.length()).map { i ->
                 val j = arr.getJSONObject(i)
                 GHCheckAnnotation(
-                    path = j.optString("path"),
+                    path = j.optString("path").trim().takeUnless { it.equals("null", ignoreCase = true) } ?: "",
                     startLine = j.optInt("start_line", 0),
                     endLine = j.optInt("end_line", 0),
-                    annotationLevel = j.optString("annotation_level"),
-                    message = j.optString("message"),
-                    title = j.optString("title", ""),
-                    rawDetails = j.optString("raw_details", "")
+                    annotationLevel = j.optString("annotation_level").trim().takeUnless { it.equals("null", ignoreCase = true) } ?: "",
+                    message = j.optString("message").trim().takeUnless { it.equals("null", ignoreCase = true) } ?: "",
+                    title = j.optString("title", "").trim().takeUnless { it.equals("null", ignoreCase = true) } ?: "",
+                    rawDetails = j.optString("raw_details", "").trim().takeUnless { it.equals("null", ignoreCase = true) } ?: ""
                 )
             }
         } catch (e: Exception) { emptyList() }
