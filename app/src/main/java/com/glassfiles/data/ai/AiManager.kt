@@ -40,12 +40,7 @@ enum class AiProviderType(
     QWEN("qwen", "Qwen", AiVendor.ALIBABA, "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", supportsRegion = true),
     OPENAI("openai", "OpenAI / ChatGPT", AiVendor.OPENAI, "https://api.openai.com/v1"),
     XAI("xai", "xAI / Grok", AiVendor.XAI, "https://api.x.ai/v1"),
-    KIMI("kimi", "Kimi", AiVendor.MOONSHOT, "https://api.moonshot.ai/v1");
-
-    companion object {
-        fun fromProviderStorageKey(storageKey: String?): AiProviderType? =
-            entries.firstOrNull { it.storageKey.equals(storageKey, ignoreCase = true) }
-    }
+    KIMI("kimi", "Kimi", AiVendor.MOONSHOT, "https://api.moonshot.ai/v1")
 }
 
 enum class AiCapability(val storageKey: String) {
@@ -404,7 +399,6 @@ enum class AiProvider(
     val modelId: String get() = spec.modelId
     val supportsVision: Boolean get() = spec.supportsVision
     val desc: String get() = spec.description
-    val description: String get() = spec.description
     val supportsFiles: Boolean get() = spec.supportsFiles
     val category: String get() = spec.category
     val vendor: AiVendor get() = spec.providerType.vendor
@@ -421,12 +415,6 @@ enum class AiProvider(
             return entries.firstOrNull { it.name.equals(value, ignoreCase = true) }
                 ?: entries.firstOrNull { it.modelId.equals(value, ignoreCase = true) }
                 ?: entries.firstOrNull { it.spec.key.equals(value, ignoreCase = true) }
-        }
-
-        fun fromModelId(modelId: String?): AiProvider? {
-            if (modelId.isNullOrBlank()) return null
-            return entries.firstOrNull { it.modelId.equals(modelId, ignoreCase = true) }
-                ?: entries.firstOrNull { it.spec.key.equals(modelId, ignoreCase = true) }
         }
     }
 }

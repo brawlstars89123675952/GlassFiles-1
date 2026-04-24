@@ -219,12 +219,6 @@
   - badges `Vision / Files / Code` теперь тоже централизованы через локализацию
   - состояние доведено до аккуратной точки остановки без запуска server-side сборок
 
-- После CI-ошибок выполнен compile-fix по AI-модулю:
-  - убран конфликтующий дубликат `Strings.nothingFound` в `Localization.kt`
-  - добавлен `AiProvider.fromModelId(...)` для нового provider-aware AI flow
-  - восстановлен alias `AiProvider.description`, который использовался новым UI
-  - исправлен разбор `providerType` через `storageKey`, а не через `enum.name`, чтобы не ломать сохранённые AI sessions
-
 ### Текущее состояние
 - Builder больше не опирается на статичные списки параметров формы или build-пресеты.
 - Последняя проверенная сборка прошла успешно.

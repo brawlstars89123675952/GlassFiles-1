@@ -323,7 +323,7 @@ private fun AiSessionList(sessions: List<ChatSession>, onNew: () -> Unit, onOpen
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(48.dp), tint = Accent)
-                    Text(if (search.isNotBlank()) Strings.folderEmpty else Strings.noChats, color = T2, fontSize = 16.sp)
+                    Text(if (search.isNotBlank()) Strings.nothingFound else Strings.noChats, color = T2, fontSize = 16.sp)
                 }
             }
         } else {
@@ -368,12 +368,7 @@ private fun AiConversationScreen(sessionId: String, historyMgr: ChatHistoryManag
     var input by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var currentResponse by remember { mutableStateOf("") }
-    var selectedProviderType by remember {
-        mutableStateOf(
-            session?.providerType?.let { AiProviderType.fromProviderStorageKey(it) }
-                ?: defaultChatProvider(context).providerType
-        )
-    }
+    var selectedProviderType by remember { mutableStateOf(session?.providerType?.let { runCatching { AiProviderType.valueOf(it.uppercase()) }.getOrNull() } ?: defaultChatProvider(context).providerType) }
     var mode by remember { mutableStateOf(AiConversationMode.CHAT) }
     var showSettings by remember { mutableStateOf(false) }
     var showModelPicker by remember { mutableStateOf(false) }
