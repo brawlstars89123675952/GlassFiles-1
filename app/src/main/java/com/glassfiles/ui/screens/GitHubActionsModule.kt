@@ -156,7 +156,6 @@ internal fun ActionsTab(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val jobListState = rememberLazyListState()
     var liveRuns by remember(runs) { mutableStateOf(runs) }
     var refreshing by remember { mutableStateOf(false) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -1588,6 +1587,7 @@ private fun MiniActionsBadge(text: String, color: Color) {
 internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val jobListState = rememberLazyListState()
     var run by remember { mutableStateOf<GHWorkflowRun?>(null) }
     var jobs by remember { mutableStateOf<List<GHJob>>(emptyList()) }
     var artifacts by remember { mutableStateOf<List<GHArtifact>>(emptyList()) }
@@ -2723,13 +2723,15 @@ private fun buildJobListItems(
     if (jobs.size <= 10) return jobs.map { JobListItem.JobRow(it) }
     val defaultExpanded = totalJobCount <= 20
     val groups = jobs.groupBy { matrixJobGroupName(it.name) }
-    return groups.flatMap { (groupName, groupJobs) ->
+    return groups.flatMap { entry ->
+        val groupName = entry.key
+        val groupJobs = entry.value
         val shouldGroup = groupJobs.size > 1 || groupJobs.any { it.name.contains(" / ") }
         if (!shouldGroup) {
-            groupJobs.map { JobListItem.JobRow(it) }
+            groupJobs.map<JobListItem> { JobListItem.JobRow(it) }
         } else {
             val expanded = expandedGroups.getOrPut(groupName) { defaultExpanded }
-            buildList {
+            buildList<JobListItem> {
                 add(JobListItem.GroupHeader(MatrixJobGroup(groupName, groupJobs), expanded))
                 if (expanded) addAll(groupJobs.map { JobListItem.JobRow(it) })
             }

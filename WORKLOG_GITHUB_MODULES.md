@@ -619,3 +619,12 @@
   - выполнен `git diff --check`
   - серверные GitHub Actions/workflow не запускались
   - локальная Android compile-проверка `./gradlew :app:compileDebugKotlin` запускалась, но остановилась на конфигурации проекта: в окружении нет Android SDK / `ANDROID_HOME` / `local.properties`
+
+### Actions CI compile fix
+- Исправлена compile-ошибка в `GitHubActionsModule.kt` после kernel builder enhancements:
+  - `jobListState` перенесен из `ActionsTab` в `WorkflowRunDetailScreen`, где реально используется `LazyColumn` jobs/details
+  - `buildJobListItems(...)` теперь явно возвращает `List<JobListItem>`, чтобы Kotlin не выводил тип ветки `flatMap` как `JobRow` и не падал на `GroupHeader`
+- Проверка:
+  - выполнен `git diff --check`
+  - серверные GitHub Actions/workflow не запускались
+  - локальная Android compile-проверка не запускалась повторно: в окружении нет Android SDK / `ANDROID_HOME` / `local.properties`
