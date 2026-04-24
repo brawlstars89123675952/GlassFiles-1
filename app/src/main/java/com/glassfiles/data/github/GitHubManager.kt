@@ -416,7 +416,8 @@ object GitHubManager {
                     draft = j.optBoolean("draft", false),
                     htmlUrl = j.optString("html_url", ""),
                     headSha = j.optJSONObject("head")?.optString("sha") ?: "",
-                    reviewComments = j.optInt("review_comments", 0)
+                    reviewComments = j.optInt("review_comments", 0),
+                    requestedReviewers = parseUsers(j.optJSONArray("requested_reviewers"))
                 )
             }
         } catch (e: Exception) { emptyList() }
@@ -447,7 +448,8 @@ object GitHubManager {
                 commits = j.optInt("commits", 0),
                 additions = j.optInt("additions", 0),
                 deletions = j.optInt("deletions", 0),
-                changedFiles = j.optInt("changed_files", 0)
+                changedFiles = j.optInt("changed_files", 0),
+                requestedReviewers = parseUsers(j.optJSONArray("requested_reviewers"))
             )
         } catch (e: Exception) { null }
     }
@@ -462,9 +464,64 @@ object GitHubManager {
         return request(context, "/repos/$owner/$repo/pulls", "POST", json).success
     }
 
-    suspend fun mergePullRequest(context: Context, owner: String, repo: String, number: Int, message: String = ""): Boolean {
-        val body = if (message.isNotBlank()) JSONObject().apply { put("commit_message", message) }.toString() else null
-        return request(context, "/repos/$owner/$repo/pulls/$number/merge", "PUT", body ?: "{}").success
+    suspend fun updatePullRequest(context: Context, owner: String, repo: String, number: Int, title: String? = null, body: String? = null, base: String? = null, state: String? = null): Boolean {
+        val json = JSONObject().apply {
+            title?.let { put("title", it) }
+            body?.let { put("body", it) }
+            base?.takeIf { it.isNotBlank() }?.let { put("base", it) }
+            state?.takeIf { it in listOf("open", "closed") }?.let { put("state", it) }
+        }.toString()
+        return request(context, "/repos/$owner/$repo/pulls/$number", "PATCH", json).success
+    }
+
+    suspend fun mergePullRequest(context: Context, owner: String, repo: String, number: Int, message: String = "", method: String = "merge", title: String = ""): Boolean {
+        val body = JSONObject().apply {
+            if (title.isNotBlank()) put("commit_title", title)
+            if (message.isNotBlank()) put("commit_message", message)
+            put("merge_method", method)
+        }.toString()
+        return request(context, "/repos/$owner/$repo/pulls/$number/merge", "PUT", body).success
+    }
+
+    suspend fun getPullRequestReviews(context: Context, owner: String, repo: String, number: Int): List<GHPullReview> {
+        val r = request(context, "/repos/$owner/$repo/pulls/$number/reviews?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHPullReview(
+                    id = j.optLong("id"),
+                    user = j.optJSONObject("user")?.optString("login") ?: "",
+                    state = j.optString("state", ""),
+                    body = j.optString("body", ""),
+                    submittedAt = j.optString("submitted_at", ""),
+                    commitId = j.optString("commit_id", ""),
+                    htmlUrl = j.optString("html_url", "")
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun requestPullRequestReviewers(context: Context, owner: String, repo: String, number: Int, reviewers: List<String>): Boolean {
+        val clean = reviewers.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        if (clean.isEmpty()) return false
+        val body = JSONObject().apply { put("reviewers", JSONArray(clean)) }.toString()
+        return request(context, "/repos/$owner/$repo/pulls/$number/requested_reviewers", "POST", body).success
+    }
+
+    suspend fun removePullRequestReviewers(context: Context, owner: String, repo: String, number: Int, reviewers: List<String>): Boolean {
+        val clean = reviewers.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        if (clean.isEmpty()) return false
+        val body = JSONObject().apply { put("reviewers", JSONArray(clean)) }.toString()
+        return request(context, "/repos/$owner/$repo/pulls/$number/requested_reviewers", "DELETE", body).success
+    }
+
+    private fun parseUsers(arr: JSONArray?): List<String> {
+        if (arr == null) return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            arr.optJSONObject(i)?.optString("login")?.takeIf { it.isNotBlank() && it != "null" }
+        }
     }
 
     suspend fun getIssueComments(context: Context, owner: String, repo: String, number: Int): List<GHComment> {
@@ -489,6 +546,14 @@ object GitHubManager {
         return request(context, "/repos/$owner/$repo/issues/$number/comments", "POST", json).success
     }
 
+    suspend fun updateIssueComment(context: Context, owner: String, repo: String, commentId: Long, body: String): Boolean {
+        val json = JSONObject().apply { put("body", body) }.toString()
+        return request(context, "/repos/$owner/$repo/issues/comments/$commentId", "PATCH", json).success
+    }
+
+    suspend fun deleteIssueComment(context: Context, owner: String, repo: String, commentId: Long): Boolean =
+        request(context, "/repos/$owner/$repo/issues/comments/$commentId", "DELETE").let { it.code == 204 || it.success }
+
     suspend fun closeIssue(context: Context, owner: String, repo: String, number: Int): Boolean {
         val json = JSONObject().apply { put("state", "closed") }.toString()
         return request(context, "/repos/$owner/$repo/issues/$number", "PATCH", json).success
@@ -498,6 +563,16 @@ object GitHubManager {
         val json = JSONObject().apply { put("state", "open") }.toString()
         return request(context, "/repos/$owner/$repo/issues/$number", "PATCH", json).success
     }
+
+    suspend fun lockIssue(context: Context, owner: String, repo: String, number: Int, reason: String = ""): Boolean {
+        val json = JSONObject().apply {
+            if (reason.isNotBlank()) put("lock_reason", reason)
+        }.toString()
+        return request(context, "/repos/$owner/$repo/issues/$number/lock", "PUT", json).let { it.code == 204 || it.success }
+    }
+
+    suspend fun unlockIssue(context: Context, owner: String, repo: String, number: Int): Boolean =
+        request(context, "/repos/$owner/$repo/issues/$number/lock", "DELETE").let { it.code == 204 || it.success }
 
     suspend fun getIssueDetail(context: Context, owner: String, repo: String, number: Int): GHIssueDetail? {
         val r = request(context, "/repos/$owner/$repo/issues/$number")
@@ -515,7 +590,9 @@ object GitHubManager {
                 createdAt = j.optString("created_at"), comments = j.optInt("comments", 0),
                 labels = labels, isPR = j.has("pull_request"),
                 assignee = j.optJSONObject("assignee")?.optString("login") ?: "",
-                milestoneTitle = j.optJSONObject("milestone")?.optString("title") ?: ""
+                milestoneTitle = j.optJSONObject("milestone")?.optString("title") ?: "",
+                locked = j.optBoolean("locked", false),
+                activeLockReason = j.optString("active_lock_reason", "")
             )
         } catch (e: Exception) { null }
     }
@@ -2617,9 +2694,56 @@ object GitHubManager {
         return r.code == 204 || r.success
     }
 
+    suspend fun getWebhookDeliveries(context: Context, owner: String, repo: String, hookId: Long): List<GHWebhookDelivery> {
+        val r = request(context, "/repos/$owner/$repo/hooks/$hookId/deliveries?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).mapNotNull { i ->
+                parseWebhookDelivery(arr.optJSONObject(i) ?: return@mapNotNull null)
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getWebhookDelivery(context: Context, owner: String, repo: String, hookId: Long, deliveryId: Long): GHWebhookDelivery? {
+        val r = request(context, "/repos/$owner/$repo/hooks/$hookId/deliveries/$deliveryId")
+        if (!r.success) return null
+        return try { parseWebhookDelivery(JSONObject(r.body)) } catch (e: Exception) { null }
+    }
+
+    suspend fun redeliverWebhookDelivery(context: Context, owner: String, repo: String, hookId: Long, deliveryId: Long): Boolean {
+        val r = request(context, "/repos/$owner/$repo/hooks/$hookId/deliveries/$deliveryId/attempts", "POST", "{}")
+        return r.code == 202 || r.success
+    }
+
     suspend fun deleteWebhook(context: Context, owner: String, repo: String, hookId: Long): Boolean {
         val r = request(context, "/repos/$owner/$repo/hooks/$hookId", "DELETE")
         return r.code == 204 || r.success
+    }
+
+    private fun parseWebhookDelivery(j: JSONObject): GHWebhookDelivery {
+        val request = j.optJSONObject("request")
+        val response = j.optJSONObject("response")
+        return GHWebhookDelivery(
+            id = j.optLong("id"),
+            guid = j.optString("guid", ""),
+            event = j.optString("event", ""),
+            action = j.optString("action", ""),
+            deliveredAt = j.optString("delivered_at", ""),
+            duration = j.optDouble("duration", 0.0),
+            status = j.optString("status", ""),
+            statusCode = j.optInt("status_code", 0),
+            redelivery = j.optBoolean("redelivery", false),
+            requestHeaders = parseHeaderMap(request?.optJSONObject("headers")),
+            requestPayload = request?.opt("payload")?.toString() ?: "",
+            responseHeaders = parseHeaderMap(response?.optJSONObject("headers")),
+            responsePayload = response?.opt("payload")?.toString() ?: ""
+        )
+    }
+
+    private fun parseHeaderMap(headers: JSONObject?): List<Pair<String, String>> {
+        if (headers == null) return emptyList()
+        return headers.keys().asSequence().map { key -> key to headers.optString(key, "") }.toList()
     }
 
     // ═══════════════════════════════════
@@ -2700,6 +2824,83 @@ object GitHubManager {
         } catch (e: Exception) { emptyList() }
     }
 
+    suspend fun getRulesetDetail(context: Context, owner: String, repo: String, rulesetId: Int): GHRulesetDetail? {
+        val r = request(context, "/repos/$owner/$repo/rulesets/$rulesetId", extraHeaders = mapOf("Accept" to "application/vnd.github+json"))
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            GHRulesetDetail(
+                id = j.optInt("id"),
+                name = j.optString("name", ""),
+                target = j.optString("target", ""),
+                sourceType = j.optString("source_type", ""),
+                source = j.optString("source", ""),
+                enforcement = j.optString("enforcement", ""),
+                createdAt = j.optString("created_at", ""),
+                updatedAt = j.optString("updated_at", ""),
+                rules = parseRulesetRules(j.optJSONArray("rules")),
+                bypassActors = parseRulesetBypassActors(j.optJSONArray("bypass_actors")),
+                refNameIncludes = parseStringArray(j.optJSONObject("conditions")?.optJSONObject("ref_name")?.optJSONArray("include")),
+                refNameExcludes = parseStringArray(j.optJSONObject("conditions")?.optJSONObject("ref_name")?.optJSONArray("exclude")),
+                htmlUrl = "https://github.com/$owner/$repo/settings/rules/${j.optInt("id")}"
+            )
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun getRuleSuites(context: Context, owner: String, repo: String): List<GHRuleSuite> {
+        val r = request(context, "/repos/$owner/$repo/rule-suites?per_page=100", extraHeaders = mapOf("Accept" to "application/vnd.github+json"))
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).optJSONArray("rule_suites") ?: JSONArray(r.body)
+            (0 until arr.length()).mapNotNull { i ->
+                val j = arr.optJSONObject(i) ?: return@mapNotNull null
+                GHRuleSuite(
+                    id = j.optLong("id"),
+                    actor = j.optJSONObject("actor")?.optString("login") ?: "",
+                    beforeSha = j.optString("before_sha", ""),
+                    afterSha = j.optString("after_sha", ""),
+                    ref = j.optString("ref", ""),
+                    status = j.optString("status", ""),
+                    result = j.optString("result", ""),
+                    evaluationResult = j.optString("evaluation_result", ""),
+                    createdAt = j.optString("created_at", ""),
+                    updatedAt = j.optString("updated_at", "")
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    private fun parseRulesetRules(arr: JSONArray?): List<GHRulesetRule> {
+        if (arr == null) return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val j = arr.optJSONObject(i) ?: return@mapNotNull null
+            val parameters = j.optJSONObject("parameters")
+            GHRulesetRule(
+                type = j.optString("type", ""),
+                parameters = parameters?.keys()?.asSequence()?.map { key ->
+                    key to parameters.opt(key).toString()
+                }?.toList().orEmpty()
+            )
+        }
+    }
+
+    private fun parseRulesetBypassActors(arr: JSONArray?): List<GHRulesetBypassActor> {
+        if (arr == null) return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val j = arr.optJSONObject(i) ?: return@mapNotNull null
+            GHRulesetBypassActor(
+                actorId = j.optLong("actor_id"),
+                actorType = j.optString("actor_type", ""),
+                bypassMode = j.optString("bypass_mode", "")
+            )
+        }
+    }
+
+    private fun parseStringArray(arr: JSONArray?): List<String> {
+        if (arr == null) return emptyList()
+        return (0 until arr.length()).mapNotNull { i -> arr.optString(i).takeIf { it.isNotBlank() && it != "null" } }
+    }
+
     // ═══════════════════════════════════
     // Security - Dependabot Alerts
     // ═══════════════════════════════════
@@ -2734,6 +2935,67 @@ object GitHubManager {
                             listOf(firstPatched)
                         }.filter { it.isNotBlank() }.distinct()
                     } ?: emptyList()
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getCodeScanningAlerts(context: Context, owner: String, repo: String): List<GHCodeScanningAlert> {
+        val r = request(context, "/repos/$owner/$repo/code-scanning/alerts?per_page=100", extraHeaders = mapOf("Accept" to "application/vnd.github+json"))
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                val rule = j.optJSONObject("rule")
+                val tool = j.optJSONObject("tool")
+                val instance = j.optJSONObject("most_recent_instance")
+                val message = instance?.optJSONObject("message")
+                val location = instance?.optJSONObject("location")
+                GHCodeScanningAlert(
+                    number = j.optInt("number"),
+                    state = j.optString("state", ""),
+                    ruleId = rule?.optString("id") ?: "",
+                    ruleName = rule?.optString("name") ?: "",
+                    severity = rule?.optString("security_severity_level")?.takeIf { it.isNotBlank() && it != "null" }
+                        ?: rule?.optString("severity") ?: "",
+                    description = rule?.optString("description") ?: "",
+                    toolName = tool?.optString("name") ?: "",
+                    message = message?.optString("text") ?: "",
+                    path = location?.optString("path") ?: "",
+                    startLine = location?.optInt("start_line", 0) ?: 0,
+                    ref = instance?.optString("ref") ?: "",
+                    category = instance?.optString("category") ?: "",
+                    createdAt = j.optString("created_at", ""),
+                    fixedAt = j.optString("fixed_at", ""),
+                    dismissedAt = j.optString("dismissed_at", ""),
+                    dismissedReason = j.optString("dismissed_reason", ""),
+                    htmlUrl = j.optString("html_url", "")
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getSecretScanningAlerts(context: Context, owner: String, repo: String): List<GHSecretScanningAlert> {
+        val r = request(context, "/repos/$owner/$repo/secret-scanning/alerts?per_page=100", extraHeaders = mapOf("Accept" to "application/vnd.github+json"))
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHSecretScanningAlert(
+                    number = j.optInt("number"),
+                    state = j.optString("state", ""),
+                    resolution = j.optString("resolution", ""),
+                    secretType = j.optString("secret_type", ""),
+                    secretTypeDisplayName = j.optString("secret_type_display_name", ""),
+                    secret = j.optString("secret", ""),
+                    validity = j.optString("validity", ""),
+                    public = j.optBoolean("public", false),
+                    pushProtectionBypassed = j.optBoolean("push_protection_bypassed", false),
+                    createdAt = j.optString("created_at", ""),
+                    resolvedAt = j.optString("resolved_at", ""),
+                    htmlUrl = j.optString("html_url", "")
                 )
             }
         } catch (e: Exception) { emptyList() }
@@ -2801,7 +3063,8 @@ data class GHIssue(val number: Int, val title: String, val state: String, val au
 
 data class GHIssueDetail(val number: Int, val title: String, val body: String, val state: String,
     val author: String, val avatarUrl: String, val createdAt: String, val comments: Int,
-    val labels: List<String>, val isPR: Boolean, val assignee: String, val milestoneTitle: String = "")
+    val labels: List<String>, val isPR: Boolean, val assignee: String, val milestoneTitle: String = "",
+    val locked: Boolean = false, val activeLockReason: String = "")
 
 data class GHContent(val name: String, val path: String, val type: String, val size: Long,
     val downloadUrl: String, val sha: String)
@@ -2820,7 +3083,18 @@ data class GHPullRequest(val number: Int, val title: String, val state: String, 
     val commits: Int = 0,
     val additions: Int = 0,
     val deletions: Int = 0,
-    val changedFiles: Int = 0)
+    val changedFiles: Int = 0,
+    val requestedReviewers: List<String> = emptyList())
+
+data class GHPullReview(
+    val id: Long,
+    val user: String,
+    val state: String,
+    val body: String,
+    val submittedAt: String,
+    val commitId: String,
+    val htmlUrl: String
+)
 
 data class GHComment(val id: Long, val body: String, val author: String, val avatarUrl: String, val createdAt: String)
 
@@ -3088,6 +3362,22 @@ data class GHWebhook(
     val lastResponseMessage: String = ""
 )
 
+data class GHWebhookDelivery(
+    val id: Long,
+    val guid: String,
+    val event: String,
+    val action: String,
+    val deliveredAt: String,
+    val duration: Double,
+    val status: String,
+    val statusCode: Int,
+    val redelivery: Boolean,
+    val requestHeaders: List<Pair<String, String>> = emptyList(),
+    val requestPayload: String = "",
+    val responseHeaders: List<Pair<String, String>> = emptyList(),
+    val responsePayload: String = ""
+)
+
 data class GHDiscussion(
     val number: Int,
     val title: String,
@@ -3110,6 +3400,46 @@ data class GHRuleset(
     val htmlUrl: String = ""
 )
 
+data class GHRulesetDetail(
+    val id: Int,
+    val name: String,
+    val target: String,
+    val sourceType: String,
+    val source: String,
+    val enforcement: String,
+    val createdAt: String,
+    val updatedAt: String,
+    val rules: List<GHRulesetRule>,
+    val bypassActors: List<GHRulesetBypassActor>,
+    val refNameIncludes: List<String>,
+    val refNameExcludes: List<String>,
+    val htmlUrl: String
+)
+
+data class GHRulesetRule(
+    val type: String,
+    val parameters: List<Pair<String, String>>
+)
+
+data class GHRulesetBypassActor(
+    val actorId: Long,
+    val actorType: String,
+    val bypassMode: String
+)
+
+data class GHRuleSuite(
+    val id: Long,
+    val actor: String,
+    val beforeSha: String,
+    val afterSha: String,
+    val ref: String,
+    val status: String,
+    val result: String,
+    val evaluationResult: String,
+    val createdAt: String,
+    val updatedAt: String
+)
+
 data class GHDependabotAlert(
     val number: Int,
     val state: String,
@@ -3126,4 +3456,39 @@ data class GHDependabotAlert(
     val htmlUrl: String = "",
     val updatedAt: String = "",
     val fixedIn: List<String> = emptyList()
+)
+
+data class GHCodeScanningAlert(
+    val number: Int,
+    val state: String,
+    val ruleId: String,
+    val ruleName: String,
+    val severity: String,
+    val description: String,
+    val toolName: String,
+    val message: String,
+    val path: String,
+    val startLine: Int,
+    val ref: String,
+    val category: String,
+    val createdAt: String,
+    val fixedAt: String,
+    val dismissedAt: String,
+    val dismissedReason: String,
+    val htmlUrl: String
+)
+
+data class GHSecretScanningAlert(
+    val number: Int,
+    val state: String,
+    val resolution: String,
+    val secretType: String,
+    val secretTypeDisplayName: String,
+    val secret: String,
+    val validity: String,
+    val public: Boolean,
+    val pushProtectionBypassed: Boolean,
+    val createdAt: String,
+    val resolvedAt: String,
+    val htmlUrl: String
 )

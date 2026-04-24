@@ -115,6 +115,8 @@
 | Dispatch workflow | `/repos/{owner}/{repo}/actions/workflows/{id}/dispatches` (POST) | ✅ | ✅ | DispatchWorkflowDialog |
 | List artifacts | `/repos/{owner}/{repo}/actions/runs/{id}/artifacts` | ✅ | ✅ | WorkflowRunDetailScreen |
 | Download artifact | `/repos/{owner}/{repo}/actions/artifacts/{id}/zip` | ✅ | ✅ | To local file |
+| Matrix job grouping | Local UI over run jobs | - | ✅ | Collapsible prefix groups for large kernel matrices |
+| Kernel failure diagnostics | Local asset/cache/remote pattern catalog | - | ✅ | Remote-updatable kernel builder error summaries |
 
 ### Gists
 | Feature | API Endpoint | Backend | UI | Notes |
@@ -191,19 +193,19 @@
 ### Issues (Advanced)
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
-| Lock/unlock issue | `/repos/{owner}/{repo}/issues/{number}/lock` (PUT/DELETE) | Low | |
-| Issue timeline | `/repos/{owner}/{repo}/issues/{number}/timeline` | Medium | Full history |
+| Lock/unlock issue | `/repos/{owner}/{repo}/issues/{number}/lock` (PUT/DELETE) | ✅ | Lock dialog with GitHub lock reasons |
+| Issue timeline | `/repos/{owner}/{repo}/issues/{number}/timeline` | ✅ | Full history dialog |
 | Issue events | `/repos/{owner}/{repo}/issues/events` | Low | |
-| Issue reactions (CRUD) | `/repos/{owner}/{repo}/issues/{number}/reactions` | Low | Emoji reactions |
-| Comment reactions (CRUD) | `/repos/{owner}/{repo}/issues/comments/{id}/reactions` | Low | Emoji reactions |
-| Update comment | `/repos/{owner}/{repo}/issues/comments/{id}` (PATCH) | Low | Edit existing comment |
-| Delete comment | `/repos/{owner}/{repo}/issues/comments/{id}` (DELETE) | Low | Delete comment |
+| Issue reactions (CRUD) | `/repos/{owner}/{repo}/issues/{number}/reactions` | ✅ | Emoji reactions |
+| Comment reactions (CRUD) | `/repos/{owner}/{repo}/issues/comments/{id}/reactions` | ✅ | Emoji reactions on issue comments |
+| Update comment | `/repos/{owner}/{repo}/issues/comments/{id}` (PATCH) | ✅ | Edit existing comment |
+| Delete comment | `/repos/{owner}/{repo}/issues/comments/{id}` (DELETE) | ✅ | Delete comment with confirmation |
 
 ### Pull Requests (Advanced)
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
-| Update PR | `/repos/{owner}/{repo}/pulls/{number}` (PATCH) | Medium | Title, body, state |
-| List PR reviews | `/repos/{owner}/{repo}/pulls/{number}/reviews` | Medium | Review history |
+| Update PR | `/repos/{owner}/{repo}/pulls/{number}` (PATCH) | Medium | ✅ Implemented: title, body, base, state |
+| List PR reviews | `/repos/{owner}/{repo}/pulls/{number}/reviews` | Medium | ✅ Implemented review history |
 | Get single review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` | Low | |
 | Update review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` (PUT) | Low | |
 | Delete review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` (DELETE) | Low | |
@@ -214,10 +216,10 @@
 | PR check-runs | `/repos/{owner}/{repo}/commits/{ref}/check-runs` | Medium | CI status on PR |
 | PR check-suites | `/repos/{owner}/{repo}/commits/{ref}/check-suites` | Medium | |
 | PR merge status | `/repos/{owner}/{repo}/pulls/{number}/merge` (GET) | Low | Check if mergeable |
-| Squash merge | `/repos/{owner}/{repo}/pulls/{number}/merge` (PUT) with `squash` | Low | Different merge methods |
-| Rebase merge | `/repos/{owner}/{repo}/pulls/{number}/merge` (PUT) with `rebase` | Low | |
-| Request reviewers | `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers` (POST) | Medium | Assign reviewers |
-| Remove reviewers | `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers` (DELETE) | Medium | |
+| Squash merge | `/repos/{owner}/{repo}/pulls/{number}/merge` (PUT) with `squash` | Low | ✅ Implemented merge method selector |
+| Rebase merge | `/repos/{owner}/{repo}/pulls/{number}/merge` (PUT) with `rebase` | Low | ✅ Implemented merge method selector |
+| Request reviewers | `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers` (POST) | Medium | ✅ Implemented |
+| Remove reviewers | `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers` (DELETE) | Medium | ✅ Implemented |
 
 ### Git Data (Advanced)
 | Feature | API Endpoint | Priority | Notes |
@@ -290,9 +292,9 @@
 | List security advisories | `/repos/{owner}/{repo}/security-advisories` | Low | |
 | Enable Dependabot alerts | `/repos/{owner}/{repo}/vulnerability-alerts` (PUT) | Low | |
 | Disable Dependabot alerts | `/repos/{owner}/{repo}/vulnerability-alerts` (DELETE) | Low | |
-| List code scanning alerts | `/repos/{owner}/{repo}/code-scanning/alerts` | Low | |
+| List code scanning alerts | `/repos/{owner}/{repo}/code-scanning/alerts` | Low | ✅ Implemented with filters/detail |
 | Get code scanning alert | `/repos/{owner}/{repo}/code-scanning/alerts/{id}` | Low | |
-| List secret scanning alerts | `/repos/{owner}/{repo}/secret-scanning/alerts` | Low | |
+| List secret scanning alerts | `/repos/{owner}/{repo}/secret-scanning/alerts` | Low | ✅ Implemented with filters/detail |
 | Get secret scanning alert | `/repos/{owner}/{repo}/secret-scanning/alerts/{id}` | Low | |
 | List Dependabot alerts | `/repos/{owner}/{repo}/dependabot/alerts` | Low | ✅ Implemented with mobile filters/search |
 | Repo security analysis | `/repos/{owner}/{repo}/community/profile` | Low | Community health |
@@ -309,19 +311,19 @@
 | Ping webhook | `/repos/{owner}/{repo}/hooks/{id}/pings` (POST) | Low | ✅ Implemented |
 | Get webhook config | `/repos/{owner}/{repo}/hooks/{id}/config` | Low | |
 | Update webhook config | `/repos/{owner}/{repo}/hooks/{id}/config` (PATCH) | Low | |
-| Get webhook deliveries | `/repos/{owner}/{repo}/hooks/{id}/deliveries` | Low | |
-| Redeliver webhook | `/repos/{owner}/{repo}/hooks/{id}/deliveries/{delivery_id}/attempts` (POST) | Low | |
+| Get webhook deliveries | `/repos/{owner}/{repo}/hooks/{id}/deliveries` | Low | ✅ Implemented with filters and detail dialog |
+| Redeliver webhook | `/repos/{owner}/{repo}/hooks/{id}/deliveries/{delivery_id}/attempts` (POST) | Low | ✅ Implemented |
 
 ### Repository Rules
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
 | List rulesets | `/repos/{owner}/{repo}/rulesets` | Medium | ✅ Implemented; newer than branch protection |
-| Get ruleset | `/repos/{owner}/{repo}/rulesets/{id}` | Medium | |
+| Get ruleset | `/repos/{owner}/{repo}/rulesets/{id}` | Medium | ✅ Implemented with detail UI |
 | Create ruleset | `/repos/{owner}/{repo}/rulesets` (POST) | Medium | |
 | Update ruleset | `/repos/{owner}/{repo}/rulesets/{id}` (PUT) | Medium | |
 | Delete ruleset | `/repos/{owner}/{repo}/rulesets/{id}` (DELETE) | Medium | |
 | Get rule suite | `/repos/{owner}/{repo}/rule-suites/{id}` | Low | |
-| List rule suites | `/repos/{owner}/{repo}/rule-suites` | Low | |
+| List rule suites | `/repos/{owner}/{repo}/rule-suites` | Low | ✅ Implemented in ruleset detail |
 
 ### Advanced Notifications
 | Feature | API Endpoint | Priority | Notes |
@@ -369,11 +371,11 @@
 | Branches | 4 | 0 | 5 | 44% |
 | Commits | 3 | 0 | 2 | 60% |
 | Issues (Basic) | 11 | 0 | 0 | 100% |
-| Issues (Advanced) | 0 | 0 | 8 | 0% |
+| Issues (Advanced) | 6 | 0 | 2 | 75% |
 | Pull Requests (Basic) | 7 | 0 | 0 | 100% |
-| Pull Requests (Advanced) | 0 | 0 | 15+ | 0% |
+| Pull Requests (Advanced) | 6 | 0 | 9+ | 40% |
 | Releases | 5 | 0 | 0 | 100% |
-| GitHub Actions | 11 | 0 | 10+ | 52% |
+| GitHub Actions | 13 | 0 | 8+ | 62% |
 | Gists | 4 | 0 | 0 | 100% |
 | Notifications | 3 | 0 | 3 | 50% |
 | Organizations | 2 | 0 | 0 | 100% |
@@ -382,9 +384,9 @@
 | Discussions | 0 | 0 | 6 | 0% |
 | Projects | 0 | 0 | 8 | 0% |
 | Packages | 0 | 0 | 4 | 0% |
-| Security | 1 | 0 | 8+ | 11% |
-| Webhooks | 5 | 0 | 6 | 45% |
-| Repository Rules | 1 | 0 | 4 | 20% |
+| Security | 3 | 0 | 6+ | 33% |
+| Webhooks | 7 | 0 | 4 | 64% |
+| Repository Rules | 3 | 0 | 3 | 50% |
 
 ### Overall Assessment
 
@@ -402,21 +404,22 @@
 - ✅ Organizations
 - ✅ User settings (comprehensive)
 
-**Partially Implemented (40-70% coverage):**
+**Partially Implemented / In Progress:**
 - ⚠️ Commits (diff viewing, but no compare)
 - ⚠️ GitHub Actions (missing advanced features)
+- ⚠️ Issues Advanced (timeline, lock/unlock, reactions and comment edit/delete implemented; remaining gaps are issue events and deeper timeline event actions)
 - ⚠️ Notifications (missing thread subscription)
 
 **Not Implemented / Early Coverage — Major Gaps:**
 - ❌ Repository teams
-- ❌ Advanced PR features (review comments, check runs, squash/rebase merge)
-- ❌ Advanced issue features (reactions, timeline, lock/unlock)
+- ⚠️ Advanced PR features (review comments, check runs, reviewers, review history and merge methods implemented; remaining gaps are review mutation/detail and check suites)
+- ⚠️ Advanced issue features (timeline, lock/unlock, reactions, edit/delete comments implemented; remaining gaps are issue events and deeper timeline event actions)
 - ❌ Discussions
 - ❌ Projects (classic & V2)
-- ⚠️ Webhooks (list/create/update/delete/ping implemented; delivery history/redelivery still missing)
-- ⚠️ Security features (Dependabot alerts implemented; code scanning and secret scanning still missing)
+- ⚠️ Webhooks (list/create/update/delete/ping plus delivery history/redelivery implemented; remaining gaps are advanced config/test helpers)
+- ⚠️ Security features (Dependabot, code scanning and secret scanning alerts implemented; advisory management and enable/disable controls still missing)
 - ❌ Packages
-- ⚠️ Repository rulesets (list/read UI implemented; create/update/delete still missing)
+- ⚠️ Repository rulesets (list/detail/rule suites implemented; create/update/delete still missing)
 - ❌ Advanced search (commits, issues, topics)
 
 ### Recommendations for Next Implementation
@@ -425,10 +428,9 @@
 1. **Repository Teams** — Org repo team permissions
 
 **Medium Priority:**
-4. **Webhook Deliveries** — delivery history, redelivery and payload inspection
+2. **Discussions** — If the app targets communities
+3. **Projects** — If project management is needed
 
 **Low Priority (nice to have):**
-9. **Discussions** — If the app targets communities
-10. **Projects** — If project management is needed
-11. **Security Tab** — code scanning and secret scanning alerts
-12. **Packages** — GitHub Packages integration
+4. **Security Tab** — advisories and enable/disable controls
+5. **Packages** — GitHub Packages integration

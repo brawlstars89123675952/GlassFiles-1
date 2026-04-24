@@ -1,4 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Glass Files</string>
+    <string name="actions_copy_failure_summary">Copy failure summary</string>
+    <string name="actions_share">Share</string>
+    <string name="actions_share_failure_summary">Share failure summary</string>
+    <string name="actions_share_failure_subject">Build failed: %1$s #%2$d</string>
+    <string name="actions_share_failure_body">\uD83D\uDD34 Build failed: %1$s #%2$d\nRepo: %3$s/%4$s\nBranch: %5$s\nFailed step: %6$s (step %7$d) in %8$s\n\n%9$s\n\nRun: %10$s</string>
+    <string name="actions_kernel_patterns_info">Patterns: v%1$d (%2$s)</string>
+    <string name="kernel_err_missing_path_title">Missing file or path</string>
+    <string name="kernel_err_missing_path_desc">For kernel builds, check defconfig, device tree path, toolchain path, and artifact paths.</string>
+    <string name="kernel_err_defconfig_title">Kernel defconfig not found</string>
+    <string name="kernel_err_defconfig_desc">The defconfig may not match the selected device, branch, or kernel tree.</string>
+    <string name="kernel_err_device_tree_title">Device tree target failed</string>
+    <string name="kernel_err_device_tree_desc">Check DTB/DTBO paths, selected device, architecture, and make target.</string>
+    <string name="kernel_err_image_packaging_title">Image packaging failed</string>
+    <string name="kernel_err_image_packaging_desc">Check boot, vendor_boot, dtbo inputs, ramdisk path, mkbootimg, and avbtool setup.</string>
+    <string name="kernel_err_anykernel_title">AnyKernel or Magisk packaging failed</string>
+    <string name="kernel_err_anykernel_desc">Check AnyKernel directory, module files, zip output path, and packaging scripts.</string>
+    <string name="kernel_err_toolchain_title">Toolchain problem</string>
+    <string name="kernel_err_toolchain_desc">Check compiler input, CROSS_COMPILE, CLANG path, and setup step.</string>
+    <string name="kernel_err_turnip_title">Turnip or Adreno driver build problem</string>
+    <string name="kernel_err_turnip_desc">Check Mesa dependencies, Vulkan headers, libdrm, Meson, Ninja, and Android NDK setup.</string>
+    <string name="kernel_err_ndk_title">Android NDK or CMake setup failed</string>
+    <string name="kernel_err_ndk_desc">Check NDK version, SDK packages, CMake, and native build inputs.</string>
+    <string name="kernel_err_storage_title">Runner storage is full</string>
+    <string name="kernel_err_storage_desc">Clean build outputs or cache, or use a larger/self-hosted runner.</string>
+    <string name="kernel_err_permission_title">Permission problem</string>
+    <string name="kernel_err_permission_desc">Check executable bits, script permissions, and protected paths.</string>
+    <string name="kernel_err_repo_auth_title">Repository or auth problem</string>
+    <string name="kernel_err_repo_auth_desc">Check token permissions, private submodules, and checkout credentials.</string>
+    <string name="kernel_err_artifact_title">Artifact upload found no files</string>
+    <string name="kernel_err_artifact_desc">The build may have failed before packaging, or the artifact path is wrong.</string>
+    <string name="kernel_err_generic_exit_title">Command failed in this step</string>
+    <string name="kernel_err_generic_exit_desc">Open the failed log and inspect the lines just above the exit code.</string>
 </resources>

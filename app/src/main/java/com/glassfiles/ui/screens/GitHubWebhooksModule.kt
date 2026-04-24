@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHWebhook
+import com.glassfiles.data.github.GHWebhookDelivery
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
@@ -46,6 +48,7 @@ internal fun WebhooksScreen(
     var showEditor by remember { mutableStateOf<GHWebhook?>(null) }
     var createNew by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<GHWebhook?>(null) }
+    var deliveriesHook by remember { mutableStateOf<GHWebhook?>(null) }
     var query by remember { mutableStateOf("") }
 
     fun loadWebhooks() {
@@ -57,6 +60,16 @@ internal fun WebhooksScreen(
     }
 
     LaunchedEffect(repoOwner, repoName) { loadWebhooks() }
+
+    deliveriesHook?.let { hook ->
+        WebhookDeliveriesScreen(
+            repoOwner = repoOwner,
+            repoName = repoName,
+            hook = hook,
+            onBack = { deliveriesHook = null }
+        )
+        return
+    }
 
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         GHTopBar(
@@ -106,6 +119,7 @@ internal fun WebhooksScreen(
                     WebhookCard(
                         hook = hook,
                         disabled = actionInFlight,
+                        onDeliveries = { deliveriesHook = hook },
                         onEdit = { showEditor = hook },
                         onPing = {
                             if (!actionInFlight) {
@@ -219,6 +233,7 @@ private fun WebhooksSummaryCard(webhooks: List<GHWebhook>) {
 private fun WebhookCard(
     hook: GHWebhook,
     disabled: Boolean,
+    onDeliveries: () -> Unit,
     onEdit: () -> Unit,
     onPing: () -> Unit,
     onDelete: () -> Unit
@@ -240,6 +255,9 @@ private fun WebhookCard(
             }
             IconButton(onClick = onPing, enabled = !disabled) {
                 Icon(Icons.Rounded.Send, null, Modifier.size(18.dp), tint = Blue)
+            }
+            IconButton(onClick = onDeliveries, enabled = !disabled) {
+                Icon(Icons.Rounded.History, null, Modifier.size(18.dp), tint = Blue)
             }
             IconButton(onClick = onEdit, enabled = !disabled) {
                 Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = TextSecondary)
@@ -352,6 +370,235 @@ private fun WebhookEditorDialog(
 }
 
 @Composable
+private fun WebhookDeliveriesScreen(
+    repoOwner: String,
+    repoName: String,
+    hook: GHWebhook,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var deliveries by remember(hook.id) { mutableStateOf<List<GHWebhookDelivery>>(emptyList()) }
+    var loading by remember(hook.id) { mutableStateOf(true) }
+    var actionInFlight by remember { mutableStateOf(false) }
+    var selectedDelivery by remember { mutableStateOf<GHWebhookDelivery?>(null) }
+    var query by remember { mutableStateOf("") }
+    var statusFilter by remember { mutableStateOf("all") }
+
+    fun loadDeliveries() {
+        loading = true
+        scope.launch {
+            deliveries = GitHubManager.getWebhookDeliveries(context, repoOwner, repoName, hook.id)
+            loading = false
+        }
+    }
+
+    LaunchedEffect(hook.id) { loadDeliveries() }
+
+    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+        GHTopBar(
+            title = "Webhook deliveries",
+            subtitle = hook.url.ifBlank { "$repoOwner/$repoName" },
+            onBack = onBack,
+            actions = {
+                IconButton(onClick = { loadDeliveries() }, enabled = !loading) {
+                    Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
+                }
+            }
+        )
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+            }
+        } else {
+            val visibleDeliveries = deliveries.filter { delivery ->
+                val statusOk = when (statusFilter) {
+                    "success" -> delivery.statusCode in 200..299
+                    "failed" -> delivery.statusCode >= 300 || delivery.status.equals("failed", ignoreCase = true)
+                    "redelivery" -> delivery.redelivery
+                    else -> true
+                }
+                val q = query.trim()
+                statusOk && (
+                    q.isBlank() ||
+                        delivery.event.contains(q, ignoreCase = true) ||
+                        delivery.action.contains(q, ignoreCase = true) ||
+                        delivery.guid.contains(q, ignoreCase = true) ||
+                        delivery.status.contains(q, ignoreCase = true) ||
+                        delivery.statusCode.toString().contains(q)
+                    )
+            }
+
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item { DeliverySummaryCard(deliveries) }
+                item {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text("Search event, guid or status") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = TextSecondary) }
+                    )
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        listOf("all", "success", "failed", "redelivery").forEach { filter ->
+                            WebhookChoiceChip(filter.replaceFirstChar { it.uppercase() }, selected = statusFilter == filter) {
+                                statusFilter = filter
+                            }
+                        }
+                    }
+                }
+                items(visibleDeliveries, key = { it.id }) { delivery ->
+                    DeliveryCard(
+                        delivery = delivery,
+                        disabled = actionInFlight,
+                        onOpen = {
+                            scope.launch {
+                                selectedDelivery = GitHubManager.getWebhookDelivery(context, repoOwner, repoName, hook.id, delivery.id) ?: delivery
+                            }
+                        },
+                        onRedeliver = {
+                            if (actionInFlight) return@DeliveryCard
+                            actionInFlight = true
+                            scope.launch {
+                                val ok = GitHubManager.redeliverWebhookDelivery(context, repoOwner, repoName, hook.id, delivery.id)
+                                Toast.makeText(context, if (ok) "Redelivery queued" else "Failed to redeliver", Toast.LENGTH_SHORT).show()
+                                deliveries = GitHubManager.getWebhookDeliveries(context, repoOwner, repoName, hook.id)
+                                actionInFlight = false
+                            }
+                        }
+                    )
+                }
+                if (visibleDeliveries.isEmpty()) {
+                    item {
+                        Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text(if (deliveries.isEmpty()) "No deliveries found" else "No matching deliveries", fontSize = 14.sp, color = TextTertiary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    selectedDelivery?.let { delivery ->
+        DeliveryDetailDialog(
+            delivery = delivery,
+            onDismiss = { selectedDelivery = null },
+            onRedeliver = {
+                if (actionInFlight) return@DeliveryDetailDialog
+                actionInFlight = true
+                scope.launch {
+                    val ok = GitHubManager.redeliverWebhookDelivery(context, repoOwner, repoName, hook.id, delivery.id)
+                    Toast.makeText(context, if (ok) "Redelivery queued" else "Failed to redeliver", Toast.LENGTH_SHORT).show()
+                    deliveries = GitHubManager.getWebhookDeliveries(context, repoOwner, repoName, hook.id)
+                    actionInFlight = false
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun DeliverySummaryCard(deliveries: List<GHWebhookDelivery>) {
+    val success = deliveries.count { it.statusCode in 200..299 }
+    val failed = deliveries.count { it.statusCode >= 300 || it.status.equals("failed", ignoreCase = true) }
+    val redeliveries = deliveries.count { it.redelivery }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Rounded.History, null, Modifier.size(20.dp), tint = Blue)
+            Text("Recent deliveries", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
+            Text("${deliveries.size}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            WebhookPill("Success $success", Color(0xFF34C759))
+            WebhookPill("Failed $failed", if (failed > 0) Color(0xFFFF3B30) else TextTertiary)
+            WebhookPill("Redelivered $redeliveries", TextSecondary)
+        }
+    }
+}
+
+@Composable
+private fun DeliveryCard(
+    delivery: GHWebhookDelivery,
+    disabled: Boolean,
+    onOpen: () -> Unit,
+    onRedeliver: () -> Unit
+) {
+    val color = deliveryStatusColor(delivery)
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(if (delivery.statusCode in 200..299) Icons.Rounded.CheckCircle else Icons.Rounded.Error, null, Modifier.size(18.dp), tint = color)
+            Column(Modifier.weight(1f)) {
+                Text(delivery.event.ifBlank { "Delivery ${delivery.id}" }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(delivery.guid.ifBlank { delivery.deliveredAt.take(19).replace('T', ' ') }, fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButton(onClick = onOpen, enabled = !disabled) {
+                Icon(Icons.Rounded.Article, null, Modifier.size(18.dp), tint = Blue)
+            }
+            IconButton(onClick = onRedeliver, enabled = !disabled) {
+                Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = Color(0xFFFF9500))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            WebhookPill(deliveryStatusLabel(delivery), color)
+            if (delivery.action.isNotBlank()) WebhookPill(delivery.action, TextSecondary)
+            if (delivery.redelivery) WebhookPill("redelivery", Color(0xFFFF9500))
+            if (delivery.duration > 0.0) WebhookPill("${"%.2f".format(delivery.duration)}s", TextTertiary)
+            if (delivery.deliveredAt.isNotBlank()) WebhookPill(delivery.deliveredAt.take(10), TextTertiary)
+        }
+    }
+}
+
+@Composable
+private fun DeliveryDetailDialog(
+    delivery: GHWebhookDelivery,
+    onDismiss: () -> Unit,
+    onRedeliver: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Delivery ${delivery.id}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                    WebhookPill(delivery.event.ifBlank { "event" }, TextSecondary)
+                    WebhookPill(deliveryStatusLabel(delivery), deliveryStatusColor(delivery))
+                    if (delivery.redelivery) WebhookPill("redelivery", Color(0xFFFF9500))
+                }
+                DeliveryBlock("Request headers", formatHeaders(delivery.requestHeaders))
+                DeliveryBlock("Request payload", prettyPayload(delivery.requestPayload))
+                DeliveryBlock("Response headers", formatHeaders(delivery.responseHeaders))
+                DeliveryBlock("Response payload", prettyPayload(delivery.responsePayload))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onRedeliver) { Text("Redeliver", color = Color(0xFFFF9500)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close", color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun DeliveryBlock(title: String, body: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SurfaceLight).padding(8.dp)) {
+            Text(body.ifBlank { "No data" }, fontSize = 10.sp, color = TextSecondary, lineHeight = 14.sp)
+        }
+    }
+}
+
+@Composable
 private fun WebhookPill(label: String, color: Color) {
     Text(
         label,
@@ -384,4 +631,24 @@ private fun webhookResponseColor(hook: GHWebhook): Color = when {
     hook.lastResponseCode in 200..299 || hook.lastResponseStatus.equals("ok", ignoreCase = true) -> Color(0xFF34C759)
     hook.lastResponseCode >= 400 || hook.lastResponseStatus.equals("failed", ignoreCase = true) -> Color(0xFFFF3B30)
     else -> TextTertiary
+}
+
+private fun deliveryStatusLabel(delivery: GHWebhookDelivery): String {
+    val status = delivery.status.takeIf { it.isNotBlank() && it != "null" }
+    val code = delivery.statusCode.takeIf { it > 0 }?.toString()
+    return listOfNotNull(status, code).joinToString(" · ").ifBlank { "No response" }
+}
+
+private fun deliveryStatusColor(delivery: GHWebhookDelivery): Color = when {
+    delivery.statusCode in 200..299 -> Color(0xFF34C759)
+    delivery.statusCode >= 300 || delivery.status.equals("failed", ignoreCase = true) -> Color(0xFFFF3B30)
+    else -> TextTertiary
+}
+
+private fun formatHeaders(headers: List<Pair<String, String>>): String =
+    headers.joinToString("\n") { (key, value) -> "$key: $value" }
+
+private fun prettyPayload(payload: String): String {
+    if (payload.isBlank() || payload == "null") return ""
+    return payload.take(12000)
 }

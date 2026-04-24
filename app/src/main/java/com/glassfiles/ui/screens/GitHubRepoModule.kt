@@ -485,9 +485,14 @@ private fun PullRequestDetailScreen(
     var files by remember { mutableStateOf<List<GHPullFile>>(emptyList()) }
     var comments by remember { mutableStateOf<List<GHReviewComment>>(emptyList()) }
     var checks by remember { mutableStateOf<List<GHCheckRun>>(emptyList()) }
+    var reviews by remember { mutableStateOf<List<GHPullReview>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var showReview by remember { mutableStateOf(false) }
     var showChecks by remember { mutableStateOf(false) }
+    var showEdit by remember { mutableStateOf(false) }
+    var showReviewers by remember { mutableStateOf(false) }
+    var showReviews by remember { mutableStateOf(false) }
+    var showMerge by remember { mutableStateOf(false) }
     var merging by remember { mutableStateOf(false) }
 
     suspend fun refreshPull() {
@@ -496,6 +501,7 @@ private fun PullRequestDetailScreen(
         pr = detail
         files = GitHubManager.getPullRequestFiles(context, repo.owner, repo.name, pullNumber)
         comments = GitHubManager.getPullRequestReviewComments(context, repo.owner, repo.name, pullNumber)
+        reviews = GitHubManager.getPullRequestReviews(context, repo.owner, repo.name, pullNumber)
         checks = detail?.let { GitHubManager.getPullRequestCheckRuns(context, repo.owner, repo.name, it.headSha.ifBlank { it.head }) }.orEmpty()
         loading = false
     }
@@ -570,6 +576,12 @@ private fun PullRequestDetailScreen(
                         Spacer(Modifier.height(10.dp))
                         Text(current.body, fontSize = 12.sp, color = TextSecondary, maxLines = 8, overflow = TextOverflow.Ellipsis)
                     }
+                    if (current.requestedReviewers.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            current.requestedReviewers.forEach { reviewer -> PullBadge("review: $reviewer", TextSecondary) }
+                        }
+                    }
                 }
             }
 
@@ -580,6 +592,7 @@ private fun PullRequestDetailScreen(
                     PullMetric("+${current.additions.takeIf { it > 0 } ?: files.sumOf { f -> f.additions }}", "added", Color(0xFF34C759))
                     PullMetric("-${current.deletions.takeIf { it > 0 } ?: files.sumOf { f -> f.deletions }}", "deleted", Color(0xFFFF3B30))
                     PullMetric("${comments.size}", "review comments", TextSecondary)
+                    PullMetric("${reviews.size}", "reviews", TextSecondary)
                 }
             }
 
@@ -589,20 +602,15 @@ private fun PullRequestDetailScreen(
 
             item {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Chip(Icons.Rounded.Edit, "Edit", TextSecondary) { showEdit = true }
                     Chip(Icons.Rounded.Article, "Files", Blue) { onOpenFiles(pullNumber) }
                     Chip(Icons.Rounded.RateReview, "Review", Blue) { showReview = true }
+                    Chip(Icons.Rounded.Group, "Reviewers", Blue) { showReviewers = true }
+                    Chip(Icons.Rounded.History, "Reviews", TextSecondary) { showReviews = true }
                     Chip(Icons.Rounded.FactCheck, "Checks", Blue) { showChecks = true }
                     if (current.state == "open" && !current.merged && !current.draft) {
                         Chip(Icons.Rounded.CallMerge, if (merging) "Merging..." else Strings.ghMerge, Color(0xFF34C759)) {
-                            if (!merging) {
-                                merging = true
-                                scope.launch {
-                                    val ok = GitHubManager.mergePullRequest(context, repo.owner, repo.name, pullNumber)
-                                    merging = false
-                                    Toast.makeText(context, if (ok) Strings.ghMerged else Strings.error, Toast.LENGTH_SHORT).show()
-                                    if (ok) refreshPull()
-                                }
-                            }
+                            if (!merging) showMerge = true
                         }
                     }
                 }
@@ -634,6 +642,53 @@ private fun PullRequestDetailScreen(
             onDone = {
                 showReview = false
                 scope.launch { refreshPull() }
+            }
+        )
+    }
+    if (showEdit && current != null) {
+        PullEditDialog(
+            repo = repo,
+            pr = current,
+            onDismiss = { showEdit = false },
+            onDone = {
+                showEdit = false
+                scope.launch { refreshPull() }
+            }
+        )
+    }
+    if (showReviewers && current != null) {
+        PullReviewersDialog(
+            repo = repo,
+            pr = current,
+            onDismiss = { showReviewers = false },
+            onDone = {
+                showReviewers = false
+                scope.launch { refreshPull() }
+            }
+        )
+    }
+    if (showReviews && current != null) {
+        PullReviewHistoryDialog(
+            reviews = reviews,
+            onDismiss = { showReviews = false }
+        )
+    }
+    if (showMerge && current != null) {
+        PullMergeDialog(
+            pr = current,
+            merging = merging,
+            onDismiss = { showMerge = false },
+            onMerge = { method, title, message ->
+                if (!merging) {
+                    merging = true
+                    scope.launch {
+                        val ok = GitHubManager.mergePullRequest(context, repo.owner, repo.name, pullNumber, message = message, method = method, title = title)
+                        merging = false
+                        showMerge = false
+                        Toast.makeText(context, if (ok) Strings.ghMerged else Strings.error, Toast.LENGTH_SHORT).show()
+                        if (ok) refreshPull()
+                    }
+                }
             }
         )
     }
@@ -777,6 +832,9 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
     var showReactions by remember { mutableStateOf(false) }
     var showTimeline by remember { mutableStateOf(false) }
     var commentReactionTarget by remember { mutableStateOf<GHComment?>(null) }
+    var editingComment by remember { mutableStateOf<GHComment?>(null) }
+    var deleteCommentTarget by remember { mutableStateOf<GHComment?>(null) }
+    var showLockDialog by remember { mutableStateOf(false) }
 
     suspend fun refreshIssueDetail(showLoader: Boolean = false) {
         if (showLoader) loading = true
@@ -801,6 +859,14 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
                 }
                 IconButton(onClick = { showMetaDialog = true }) {
                     Icon(Icons.Rounded.Tune, null, Modifier.size(20.dp), tint = Blue)
+                }
+                IconButton(onClick = { showLockDialog = true }) {
+                    Icon(
+                        if (detail!!.locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
+                        null,
+                        Modifier.size(20.dp),
+                        tint = if (detail!!.locked) Color(0xFF34C759) else Color(0xFFFF9500)
+                    )
                 }
                 val isOpen = detail!!.state == "open"
                 IconButton(onClick = {
@@ -856,7 +922,12 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
                     }
                 }
                 items(comments) { c ->
-                    IssueCommentCard(comment = c, onReactions = { commentReactionTarget = c })
+                    IssueCommentCard(
+                        comment = c,
+                        onReactions = { commentReactionTarget = c },
+                        onEdit = { editingComment = c },
+                        onDelete = { deleteCommentTarget = c }
+                    )
                 }
             }
             Column(
@@ -944,6 +1015,50 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
             onDismiss = { showTimeline = false }
         )
     }
+
+    if (showLockDialog && detail != null) {
+        IssueLockDialog(
+            repo = repo,
+            detail = detail!!,
+            onDismiss = { showLockDialog = false },
+            onDone = {
+                showLockDialog = false
+                scope.launch { refreshIssueDetail() }
+            }
+        )
+    }
+
+    editingComment?.let { comment ->
+        IssueCommentEditDialog(
+            repo = repo,
+            comment = comment,
+            onDismiss = { editingComment = null },
+            onDone = {
+                editingComment = null
+                scope.launch { comments = GitHubManager.getIssueComments(context, repo.owner, repo.name, issueNumber) }
+            }
+        )
+    }
+
+    deleteCommentTarget?.let { comment ->
+        AlertDialog(
+            onDismissRequest = { deleteCommentTarget = null },
+            containerColor = SurfaceWhite,
+            title = { Text("Delete comment", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            text = { Text(comment.body.lineSequence().firstOrNull().orEmpty().take(160), color = TextSecondary, fontSize = 13.sp) },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        val ok = GitHubManager.deleteIssueComment(context, repo.owner, repo.name, comment.id)
+                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        if (ok) comments = GitHubManager.getIssueComments(context, repo.owner, repo.name, issueNumber)
+                        deleteCommentTarget = null
+                    }
+                }) { Text("Delete", color = Color(0xFFFF3B30)) }
+            },
+            dismissButton = { TextButton(onClick = { deleteCommentTarget = null }) { Text(Strings.cancel, color = TextSecondary) } }
+        )
+    }
 }
 
 
@@ -971,6 +1086,7 @@ private fun IssueHeaderCard(
             Chip(Icons.Rounded.Label, "Meta", Blue, onMeta)
             Chip(Icons.Rounded.EmojiEmotions, "Reactions ${reactions.size}", Blue, onReactions)
             Chip(Icons.Rounded.Timeline, "Timeline", Blue, onTimeline)
+            if (detail.locked) PullBadge("Locked ${detail.activeLockReason}".trim(), Color(0xFFFF9500))
         }
         if (reactions.isNotEmpty()) {
             IssueReactionSummary(reactions)
@@ -1016,7 +1132,7 @@ private fun IssueBodyCard(body: String) {
 }
 
 @Composable
-private fun IssueCommentCard(comment: GHComment, onReactions: () -> Unit) {
+private fun IssueCommentCard(comment: GHComment, onReactions: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
         AsyncImage(comment.avatarUrl, null, Modifier.size(28.dp).clip(CircleShape))
         Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1026,6 +1142,12 @@ private fun IssueCommentCard(comment: GHComment, onReactions: () -> Unit) {
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onReactions, modifier = Modifier.size(28.dp)) {
                     Icon(Icons.Rounded.EmojiEmotions, null, Modifier.size(16.dp), tint = TextSecondary)
+                }
+                IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = TextSecondary)
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Rounded.Delete, null, Modifier.size(16.dp), tint = Color(0xFFFF3B30))
                 }
             }
             IssueMarkdownBlock(comment.body)
@@ -1074,6 +1196,113 @@ private fun IssueMarkdownBlock(text: String) {
             }
         }
     }
+}
+
+@Composable
+private fun IssueLockDialog(repo: GHRepo, detail: GHIssueDetail, onDismiss: () -> Unit, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var reason by remember(detail.number) { mutableStateOf(detail.activeLockReason.ifBlank { "resolved" }) }
+    var saving by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text(if (detail.locked) "Unlock issue" else "Lock issue", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(detail.title, fontSize = 13.sp, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (!detail.locked) {
+                    Text("Reason", fontSize = 12.sp, color = TextSecondary)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("resolved", "off-topic", "too heated", "spam").forEach { value ->
+                            val selected = reason == value
+                            Box(
+                                Modifier.clip(RoundedCornerShape(6.dp))
+                                    .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+                                    .clickable { reason = value }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(value, fontSize = 12.sp, color = if (selected) Blue else TextSecondary)
+                            }
+                        }
+                    }
+                } else if (detail.activeLockReason.isNotBlank()) {
+                    PullBadge("Reason: ${detail.activeLockReason}", Color(0xFFFF9500))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !saving,
+                onClick = {
+                    saving = true
+                    scope.launch {
+                        val ok = if (detail.locked) {
+                            GitHubManager.unlockIssue(context, repo.owner, repo.name, detail.number)
+                        } else {
+                            GitHubManager.lockIssue(context, repo.owner, repo.name, detail.number, reason)
+                        }
+                        saving = false
+                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        if (ok) onDone()
+                    }
+                }
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
+                } else {
+                    Text(if (detail.locked) "Unlock" else "Lock", color = if (detail.locked) Color(0xFF34C759) else Color(0xFFFF9500))
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun IssueCommentEditDialog(repo: GHRepo, comment: GHComment, onDismiss: () -> Unit, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var body by remember(comment.id) { mutableStateOf(comment.body) }
+    var saving by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Edit comment", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            OutlinedTextField(
+                value = body,
+                onValueChange = { body = it },
+                label = { Text("Comment") },
+                minLines = 6,
+                maxLines = 10,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !saving && body.isNotBlank(),
+                onClick = {
+                    saving = true
+                    scope.launch {
+                        val ok = GitHubManager.updateIssueComment(context, repo.owner, repo.name, comment.id, body)
+                        saving = false
+                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        if (ok) onDone()
+                    }
+                }
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
+                } else {
+                    Text("Save", color = Blue)
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+    )
 }
 
 private fun issueEmojiMap(): Map<String, String> = mapOf(
@@ -1201,6 +1430,219 @@ private fun IssueMetaDialog(repo: GHRepo, detail: GHIssueDetail, onDismiss: () -
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
     )
+}
+
+@Composable
+private fun PullEditDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Unit, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var title by remember(pr.number) { mutableStateOf(pr.title) }
+    var body by remember(pr.number) { mutableStateOf(pr.body) }
+    var base by remember(pr.number) { mutableStateOf(pr.base) }
+    var state by remember(pr.number) { mutableStateOf(pr.state) }
+    var saving by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Edit PR #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(body, { body = it }, label = { Text("Body") }, minLines = 4, maxLines = 8, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(base, { base = it.trim() }, label = { Text("Base branch") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("open" to "Open", "closed" to "Closed").forEach { (value, label) ->
+                        val selected = state == value
+                        Box(
+                            Modifier.clip(RoundedCornerShape(6.dp))
+                                .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+                                .clickable { state = value }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(label, fontSize = 12.sp, color = if (selected) Blue else TextSecondary)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !saving && title.isNotBlank() && base.isNotBlank(),
+                onClick = {
+                    if (saving) return@TextButton
+                    saving = true
+                    scope.launch {
+                        val ok = GitHubManager.updatePullRequest(
+                            context = context,
+                            owner = repo.owner,
+                            repo = repo.name,
+                            number = pr.number,
+                            title = title.trim(),
+                            body = body,
+                            base = base.trim(),
+                            state = state
+                        )
+                        saving = false
+                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        if (ok) onDone()
+                    }
+                }
+            ) {
+                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
+                else Text("Save", color = Blue)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun PullReviewersDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Unit, onDone: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var reviewersRaw by remember { mutableStateOf(pr.requestedReviewers.joinToString(",")) }
+    var saving by remember { mutableStateOf(false) }
+    val reviewers = reviewersRaw.split(",").map { it.trim().removePrefix("@") }.filter { it.isNotBlank() }.distinct()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Reviewers #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (pr.requestedReviewers.isNotEmpty()) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        pr.requestedReviewers.forEach { reviewer -> PullBadge(reviewer, TextSecondary) }
+                    }
+                } else {
+                    Text("No requested reviewers", fontSize = 12.sp, color = TextTertiary)
+                }
+                OutlinedTextField(
+                    value = reviewersRaw,
+                    onValueChange = { reviewersRaw = it },
+                    label = { Text("Usernames, comma-separated") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("Request adds reviewers; remove removes the typed usernames.", fontSize = 11.sp, color = TextTertiary)
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    enabled = !saving && reviewers.isNotEmpty(),
+                    onClick = {
+                        saving = true
+                        scope.launch {
+                            val ok = GitHubManager.removePullRequestReviewers(context, repo.owner, repo.name, pr.number, reviewers)
+                            saving = false
+                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                            if (ok) onDone()
+                        }
+                    }
+                ) { Text("Remove", color = Color(0xFFFF3B30)) }
+                TextButton(
+                    enabled = !saving && reviewers.isNotEmpty(),
+                    onClick = {
+                        saving = true
+                        scope.launch {
+                            val ok = GitHubManager.requestPullRequestReviewers(context, repo.owner, repo.name, pr.number, reviewers)
+                            saving = false
+                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                            if (ok) onDone()
+                        }
+                    }
+                ) {
+                    if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
+                    else Text("Request", color = Blue)
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+    )
+}
+
+@Composable
+private fun PullReviewHistoryDialog(reviews: List<GHPullReview>, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceWhite,
+        title = { Text("Review history", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            if (reviews.isEmpty()) {
+                Text("No reviews yet", fontSize = 13.sp, color = TextTertiary)
+            } else {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(reviews) { review ->
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SurfaceLight).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                PullBadge(review.state.ifBlank { "review" }, reviewStateColor(review.state))
+                                Text(review.user.ifBlank { "GitHub" }, fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                                if (review.submittedAt.isNotBlank()) Text(review.submittedAt.take(10), fontSize = 10.sp, color = TextTertiary)
+                            }
+                            if (review.body.isNotBlank()) Text(review.body, fontSize = 11.sp, color = TextSecondary, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                            if (review.commitId.length >= 7) Text(review.commitId.take(7), fontSize = 10.sp, color = TextTertiary)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+    )
+}
+
+@Composable
+private fun PullMergeDialog(
+    pr: GHPullRequest,
+    merging: Boolean,
+    onDismiss: () -> Unit,
+    onMerge: (method: String, title: String, message: String) -> Unit
+) {
+    var method by remember { mutableStateOf("merge") }
+    var title by remember { mutableStateOf("${pr.title} (#${pr.number})") }
+    var message by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = { if (!merging) onDismiss() },
+        containerColor = SurfaceWhite,
+        title = { Text("Merge PR #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("merge" to "Merge", "squash" to "Squash", "rebase" to "Rebase").forEach { (value, label) ->
+                        val selected = method == value
+                        Box(
+                            Modifier.clip(RoundedCornerShape(6.dp))
+                                .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+                                .clickable { method = value }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(label, fontSize = 12.sp, color = if (selected) Blue else TextSecondary)
+                        }
+                    }
+                }
+                OutlinedTextField(title, { title = it }, label = { Text("Commit title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(message, { message = it }, label = { Text("Commit message") }, minLines = 3, maxLines = 5, modifier = Modifier.fillMaxWidth())
+                Text("${pr.head} -> ${pr.base}", fontSize = 11.sp, color = TextTertiary)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !merging && title.isNotBlank(), onClick = { onMerge(method, title, message) }) {
+                if (merging) CircularProgressIndicator(Modifier.size(14.dp), color = Color(0xFF34C759), strokeWidth = 2.dp)
+                else Text(Strings.ghMerge, color = Color(0xFF34C759))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !merging) { Text(Strings.cancel, color = TextSecondary) } }
+    )
+}
+
+private fun reviewStateColor(state: String): Color = when (state.lowercase()) {
+    "approved" -> Color(0xFF34C759)
+    "changes_requested" -> Color(0xFFFF3B30)
+    "commented" -> Blue
+    "dismissed" -> TextTertiary
+    else -> TextSecondary
 }
 
 @Composable

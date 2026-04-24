@@ -429,3 +429,193 @@
 - Проверка:
   - выполнен `git diff --check`
   - локальная Gradle/Android сборка не запускалась
+
+### Actions kernel builder enhancements — Task 1
+- Доработан jobs viewer в `GitHubActionsModule.kt`:
+  - matrix jobs с именами формата `prefix / child` группируются по `prefix`, если в текущем списке больше 10 jobs
+  - группы показывают aggregate status, количество jobs и duration по longest child job
+  - при общем количестве jobs больше 20 группы по умолчанию collapsed, иначе expanded
+  - expanded/collapsed state хранится per run только в текущей сессии
+  - для 10 или менее jobs остается прежний flat list
+  - карточка job вынесена в локальный composable без изменения публичного API экрана
+- Gotchas:
+  - `GitHubManager.kt` не трогался для этого task
+  - серверные GitHub Actions/workflow не запускались
+  - локальная `./gradlew :app:compileDebugKotlin` была запущена, но compile не дошел до Kotlin из-за окружения: сначала sandbox запрещал Gradle читать network interfaces, после escalated запуска Gradle остановился на `SDK location not found`; Android SDK / `ANDROID_HOME` / `local.properties` в текущем окружении отсутствуют
+
+### Actions kernel builder enhancements — Task 2
+- Добавлен `Jump to next failed job` FAB в `WorkflowRunDetailScreen`:
+  - FAB показывается только на секции Jobs и только если в текущем run/list есть failed jobs
+  - нажатие прокручивает список к следующему failed job ниже текущей позиции и делает wrap к началу
+  - если failed job находится внутри collapsed matrix group, FAB раскрывает группу и скроллит к ее header
+  - используется существующий mobile visual style: маленький bottom-right FAB с error icon
+- Gotchas:
+  - серверные GitHub Actions/workflow не запускались
+  - локальная `./gradlew :app:compileDebugKotlin` снова остановилась на `SDK location not found`; Android SDK / `ANDROID_HOME` / `local.properties` отсутствуют в текущем окружении
+
+### Actions kernel builder enhancements — Task 3
+- Добавлен share failure summary в kernel failure card:
+  - рядом с `Copy failure summary` появилась кнопка `Share`
+  - share открывает стандартный Android share sheet через `ACTION_SEND` / `text/plain`
+  - текст включает workflow name, run number, repo, branch, failed step, job name, summary и URL run
+  - новые пользовательские строки вынесены в `app/src/main/res/values/strings.xml`
+- Gotchas:
+  - существующий copy-summary behavior сохранен
+  - серверные GitHub Actions/workflow не запускались
+  - локальная `./gradlew :app:compileDebugKotlin` снова остановилась на `SDK location not found`; Android SDK / `ANDROID_HOME` / `local.properties` отсутствуют в текущем окружении
+
+### Actions kernel builder enhancements — Task 4
+- Kernel failure diagnostics переведены на remote-updatable pattern catalog:
+  - добавлен bundled fallback asset `app/src/main/assets/kernel_errors.json`
+  - добавлен loader `KernelErrorPatterns` с порядком remote -> cached -> bundled
+  - remote URL оставлен TODO-константой внутри loader, как просили
+  - remote fetch использует короткие timeouts по 3 секунды
+  - успешный remote JSON кешируется в app storage
+  - если remote недоступен, используется cache; если cache нет, используется bundled asset
+  - regex patterns применяются к tail последних 200 строк failed log
+  - прежние hardcoded kernel patterns перенесены в bundled JSON
+  - в failure card добавлена low-key строка `Patterns: vN (source)` для проверки активного источника
+  - descriptions/titles вынесены в `strings.xml` по keys из JSON
+- Новые файлы:
+  - `app/src/main/java/com/glassfiles/data/github/KernelErrorPatterns.kt` — загрузка, кеширование и matching pattern catalog
+  - `app/src/main/assets/kernel_errors.json` — bundled fallback catalog для kernel/AnyKernel/Magisk/Turnip/NDK/toolchain ошибок
+- Gotchas:
+  - `GitHubManager.kt` не трогался
+  - remote URL пока пустой TODO, поэтому до настройки URL активным источником будет bundled или cache
+  - серверные GitHub Actions/workflow не запускались
+  - локальная `./gradlew :app:compileDebugKotlin` снова остановилась на `SDK location not found`; Android SDK / `ANDROID_HOME` / `local.properties` отсутствуют в текущем окружении
+
+### Actions kernel builder enhancements — Task 5
+- Обновлена документация по Actions kernel builder changes:
+  - Task 1-4 записаны в этот worklog по отдельности
+  - указаны новые файлы и их назначение
+  - зафиксирован главный blocker проверки: в текущем окружении нет Android SDK / `ANDROID_HOME` / `local.properties`
+  - зафиксировано, что серверные GitHub Actions/workflow не запускались
+- Обновлен `GITHUB_API_ANALYSIS.md`:
+  - добавлены строки про matrix job grouping и kernel failure diagnostics
+  - Actions module coverage поднят с 52% до 62% с учетом новой kernel-builder функциональности
+- Проверка:
+  - выполнен `git diff --check`
+  - финальная локальная `./gradlew :app:compileDebugKotlin` снова остановилась на `SDK location not found`; Android SDK / `ANDROID_HOME` / `local.properties` отсутствуют в текущем окружении
+
+### Webhook deliveries pass
+- Доработан Webhooks module:
+  - добавлен переход из webhook card в отдельный экран `Webhook deliveries`
+  - delivery history загружается через GitHub API `/repos/{owner}/{repo}/hooks/{hook_id}/deliveries`
+  - добавлены summary counters: total, success, failed, redelivered
+  - добавлены search и фильтры `all/success/failed/redelivery`
+  - delivery card показывает event, guid/date, status/code, action, duration и redelivery marker
+  - detail dialog показывает request headers, request payload, response headers и response payload
+  - добавлен redeliver action из карточки и из detail dialog через `/attempts`
+- В `GitHubManager.kt` добавлено:
+  - `getWebhookDeliveries`
+  - `getWebhookDelivery`
+  - `redeliverWebhookDelivery`
+  - `GHWebhookDelivery`
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - webhook deliveries и redelivery отмечены как implemented
+  - Webhooks coverage поднят с 45% до 64%
+  - следующий recommended block переключен на Security Scanning
+- Проверка:
+  - выполнен `git diff --check`
+  - серверные GitHub Actions/workflow не запускались
+  - локальная Android compile-проверка не запускалась: в окружении все еще нет Android SDK / `ANDROID_HOME` / `local.properties`
+
+### Security scanning pass
+- Доработан `SecurityScreen`:
+  - добавлены вкладки `Dependabot`, `Code`, `Secrets`
+  - Dependabot alerts сохранены с прежними фильтрами и карточками
+  - Code scanning alerts загружаются через `/repos/{owner}/{repo}/code-scanning/alerts`
+  - Secret scanning alerts загружаются через `/repos/{owner}/{repo}/secret-scanning/alerts`
+  - для Code scanning добавлены summary counters, state/severity filters, search по rule/tool/path/ref/message
+  - для Secret scanning добавлены summary counters, state filters, search по secret type/state/resolution/validity
+  - добавлены detail dialogs для code/secret alerts
+  - secret values маскируются в UI
+  - пустые/null поля скрываются через общий detail-row helper
+- В `GitHubManager.kt` добавлено:
+  - `getCodeScanningAlerts`
+  - `getSecretScanningAlerts`
+  - `GHCodeScanningAlert`
+  - `GHSecretScanningAlert`
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - code scanning alerts и secret scanning alerts отмечены как implemented
+  - Security coverage поднят с 11% до 33%
+  - следующий recommended block переключен на Repository Rulesets Detail
+- Проверка:
+  - выполнен `git diff --check`
+  - серверные GitHub Actions/workflow не запускались
+  - локальная Android compile-проверка не запускалась: в окружении все еще нет Android SDK / `ANDROID_HOME` / `local.properties`
+
+### Repository rulesets detail pass
+- Доработан Rulesets module:
+  - ruleset card теперь открывает detail screen без изменения create/update/delete behavior
+  - detail screen показывает summary: target, source type, source, enforcement, rules count, bypass actors count, updated date
+  - добавлена секция Conditions с include/exclude ref name patterns
+  - добавлена секция Rules с type и parameters
+  - добавлена секция Bypass actors с actor type, bypass mode и actor id
+  - добавлена секция Recent rule suites со статусом/result/evaluation, actor, ref, sha и датой
+  - Open in GitHub сохранен отдельной кнопкой
+- В `GitHubManager.kt` добавлено:
+  - `getRulesetDetail`
+  - `getRuleSuites`
+  - `GHRulesetDetail`
+  - `GHRulesetRule`
+  - `GHRulesetBypassActor`
+  - `GHRuleSuite`
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - get ruleset и list rule suites отмечены как implemented
+  - Repository Rules coverage поднят с 20% до 50%
+  - следующий recommended block переключен на Pull Request Polish
+- Проверка:
+  - выполнен `git diff --check`
+  - серверные GitHub Actions/workflow не запускались
+  - локальная Android compile-проверка не запускалась: в окружении все еще нет Android SDK / `ANDROID_HOME` / `local.properties`
+
+### Pull request polish pass
+- Доработан PR detail flow:
+  - добавлено редактирование PR title/body/base/state через `PATCH /pulls/{number}`
+  - добавлен dialog для requested reviewers: request/remove usernames через `/requested_reviewers`
+  - requested reviewers показываются в header PR detail
+  - добавлен review history dialog через `/pulls/{number}/reviews`
+  - merge теперь открывает confirm dialog с выбором merge method: merge/squash/rebase
+  - merge dialog поддерживает commit title и commit message
+  - прежний `mergePullRequest(...)` API сохранен совместимым за счет optional параметров
+- В `GitHubManager.kt` добавлено:
+  - `updatePullRequest`
+  - `getPullRequestReviews`
+  - `requestPullRequestReviewers`
+  - `removePullRequestReviewers`
+  - `GHPullReview`
+  - `requestedReviewers` в `GHPullRequest`
+  - `mergePullRequest` получил optional `method` и `title`
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - Update PR, review history, squash/rebase merge, request/remove reviewers отмечены как implemented
+  - Pull Requests Advanced coverage поднят с 0% до 40%
+  - следующий recommended block переключен на Issues Timeline Polish
+- Проверка:
+  - выполнен `git diff --check`
+  - серверные GitHub Actions/workflow не запускались
+  - локальная Android compile-проверка не запускалась: в окружении все еще нет Android SDK / `ANDROID_HOME` / `local.properties`
+
+### Issues timeline polish pass
+- Доработан Issue detail flow:
+  - issue header теперь показывает locked state и lock reason
+  - добавлен lock/unlock dialog с GitHub-compatible reasons: `resolved`, `off-topic`, `too heated`, `spam`
+  - comments получили actions для edit/delete рядом с reactions
+  - edit comment открывает отдельный dialog и обновляет список комментариев после сохранения
+  - delete comment требует confirmation и обновляет список после удаления
+  - существующий timeline dialog сохранен как отдельный lightweight history view
+- В `GitHubManager.kt` добавлено:
+  - `updateIssueComment`
+  - `deleteIssueComment`
+  - `lockIssue`
+  - `unlockIssue`
+  - `locked` и `activeLockReason` в `GHIssueDetail`
+- В `GITHUB_API_ANALYSIS.md` обновлено покрытие:
+  - Issues Advanced теперь отмечает timeline, lock/unlock, issue/comment reactions, edit/delete comments как implemented
+  - Issues Advanced coverage поднят с 0% до 75%
+  - следующий practical block переключен на Discussions / Projects
+- Проверка:
+  - выполнен `git diff --check`
+  - серверные GitHub Actions/workflow не запускались
+  - локальная Android compile-проверка `./gradlew :app:compileDebugKotlin` запускалась, но остановилась на конфигурации проекта: в окружении нет Android SDK / `ANDROID_HOME` / `local.properties`

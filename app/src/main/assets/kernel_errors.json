@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "patterns": [
+    {
+      "id": "missing_path",
+      "match": ["no such file or directory", "cannot stat", "not found"],
+      "title_key": "kernel_err_missing_path_title",
+      "description_key": "kernel_err_missing_path_desc",
+      "category": "filesystem"
+    },
+    {
+      "id": "defconfig_missing",
+      "match": ["defconfig", "can't find default configuration", "can't find default config"],
+      "title_key": "kernel_err_defconfig_title",
+      "description_key": "kernel_err_defconfig_desc",
+      "category": "defconfig"
+    },
+    {
+      "id": "device_tree",
+      "match": ["no rule to make target", "dtb", "dtbo", "dts", "device tree"],
+      "title_key": "kernel_err_device_tree_title",
+      "description_key": "kernel_err_device_tree_desc",
+      "category": "device_tree"
+    },
+    {
+      "id": "image_packaging",
+      "match": ["mkbootimg", "vendor_boot", "boot\\.img", "dtbo\\.img", "ramdisk", "avbtool"],
+      "title_key": "kernel_err_image_packaging_title",
+      "description_key": "kernel_err_image_packaging_desc",
+      "category": "image"
+    },
+    {
+      "id": "anykernel_packaging",
+      "match": ["anykernel", "anykernel3", "ak3", "zipalign"],
+      "title_key": "kernel_err_anykernel_title",
+      "description_key": "kernel_err_anykernel_desc",
+      "category": "packaging"
+    },
+    {
+      "id": "toolchain",
+      "match": ["clang: command not found", "gcc: command not found", "aarch64-linux-android", "toolchain", "cross_compile"],
+      "title_key": "kernel_err_toolchain_title",
+      "description_key": "kernel_err_toolchain_desc",
+      "category": "toolchain"
+    },
+    {
+      "id": "turnip_adreno",
+      "match": ["meson", "ninja", "libdrm", "freedreno", "turnip", "adreno", "vulkan headers", "vulkan-headers", "glslang", "spirv"],
+      "title_key": "kernel_err_turnip_title",
+      "description_key": "kernel_err_turnip_desc",
+      "category": "gpu"
+    },
+    {
+      "id": "ndk_cmake",
+      "match": ["ndk-build", "android ndk", "ndk not found", "sdkmanager", "cmake error"],
+      "title_key": "kernel_err_ndk_title",
+      "description_key": "kernel_err_ndk_desc",
+      "category": "android_native"
+    },
+    {
+      "id": "runner_storage",
+      "match": ["no space left on device", "disk quota exceeded"],
+      "title_key": "kernel_err_storage_title",
+      "description_key": "kernel_err_storage_desc",
+      "category": "runner"
+    },
+    {
+      "id": "permission_problem",
+      "match": ["permission denied", "operation not permitted"],
+      "title_key": "kernel_err_permission_title",
+      "description_key": "kernel_err_permission_desc",
+      "category": "permissions"
+    },
+    {
+      "id": "repo_auth",
+      "match": ["repository not found", "authentication failed", "could not read from remote repository", "permission to"],
+      "title_key": "kernel_err_repo_auth_title",
+      "description_key": "kernel_err_repo_auth_desc",
+      "category": "auth"
+    },
+    {
+      "id": "artifact_upload",
+      "match": ["upload-artifact", "no files were found with the provided path", "path does not exist"],
+      "title_key": "kernel_err_artifact_title",
+      "description_key": "kernel_err_artifact_desc",
+      "category": "artifact"
+    },
+    {
+      "id": "generic_exit",
+      "match": ["exit code 1", "process completed with exit code", "make: \\*\\*\\*"],
+      "title_key": "kernel_err_generic_exit_title",
+      "description_key": "kernel_err_generic_exit_desc",
+      "category": "generic"
+    }
+  ]
+}
