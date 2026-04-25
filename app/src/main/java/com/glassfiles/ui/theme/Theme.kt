@@ -17,13 +17,13 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.glassfiles.data.AppThemeMode
 
-private val AccentGreen = Color(0xFF4CAF50)
+private val FallbackAccent = Color(0xFF007AFF)
 
 private val LightScheme = lightColorScheme(
-    primary = AccentGreen,
+    primary = FallbackAccent,
     onPrimary = Color.White,
-    secondary = AccentGreen,
-    tertiary = AccentGreen,
+    secondary = FallbackAccent,
+    tertiary = FallbackAccent,
     background = Color(0xFFF2F2F7),
     onBackground = Color(0xFF1C1C1E),
     surface = Color(0xFFFFFFFF),
@@ -33,10 +33,10 @@ private val LightScheme = lightColorScheme(
 )
 
 private val DarkScheme = darkColorScheme(
-    primary = AccentGreen,
+    primary = FallbackAccent,
     onPrimary = Color.White,
-    secondary = AccentGreen,
-    tertiary = AccentGreen,
+    secondary = FallbackAccent,
+    tertiary = FallbackAccent,
     background = Color(0xFF1C1C1E),
     onBackground = Color(0xFFE5E5EA),
     surface = Color(0xFF2C2C2E),
@@ -46,10 +46,10 @@ private val DarkScheme = darkColorScheme(
 )
 
 private val AmoledScheme = darkColorScheme(
-    primary = AccentGreen,
+    primary = FallbackAccent,
     onPrimary = Color.White,
-    secondary = AccentGreen,
-    tertiary = AccentGreen,
+    secondary = FallbackAccent,
+    tertiary = FallbackAccent,
     background = Color.Black,
     onBackground = Color(0xFFE5E5EA),
     surface = Color(0xFF0A0A0A),
@@ -83,10 +83,7 @@ fun GlassFilesTheme(themeMode: AppThemeMode = AppThemeMode.LIGHT, accentColor: a
         else -> themeMode
     }
 
-    val effectiveAccent = when (resolvedMode) {
-        AppThemeMode.LIGHT -> AccentGreen
-        else -> accentColor ?: ThemeState.accent
-    }
+    val effectiveAccent = accentColor ?: ThemeState.accent
 
     // Update global ThemeState so Color.kt properties react
     ThemeState.mode = resolvedMode
