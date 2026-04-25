@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.FlashOn
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
@@ -112,6 +114,11 @@ import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.data.github.KernelErrorCatalog
 import com.glassfiles.data.github.KernelErrorPatterns
 import com.glassfiles.ui.theme.Blue
+import com.glassfiles.ui.theme.Green
+import com.glassfiles.ui.theme.Orange
+import com.glassfiles.ui.theme.Purple
+import com.glassfiles.ui.theme.Red
+import com.glassfiles.ui.theme.Teal
 import com.glassfiles.ui.theme.SeparatorColor
 import com.glassfiles.ui.theme.SurfaceLight
 import com.glassfiles.ui.theme.SurfaceWhite
@@ -267,10 +274,26 @@ internal fun ActionsTab(
         missingDispatchInputs(dispatchSchema, dispatchInputValues)
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(SurfaceLight)
+            .verticalScroll(rememberScrollState())
+            .imePadding()
+    ) {
         actionsNotice?.let { notice ->
-            Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFFF9500).copy(alpha = 0.1f)).padding(10.dp)) {
-                Text(notice, fontSize = 12.sp, color = TextSecondary)
+            Row(
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, Orange.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Rounded.Info, null, tint = Orange, modifier = Modifier.size(16.dp))
+                Text(notice, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 16.sp)
             }
         }
         ActionsOverviewHeader(
@@ -477,6 +500,7 @@ private fun ActionsRunsHistoryScreen(
         }
     }
 
+    val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         GHTopBar("Build history", subtitle = "${visibleRuns.size} workflow runs", onBack = onBack) {
             IconButton(onClick = { scope.launch { load(reset = true) } }) {
@@ -486,35 +510,43 @@ private fun ActionsRunsHistoryScreen(
         }
 
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(colors.surface)
+                .border(1.dp, colors.outlineVariant.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(
-                Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(SurfaceWhite)
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                if (query.text.isEmpty()) Text("Search runs", color = TextTertiary, fontSize = 14.sp)
+            Icon(Icons.Rounded.Search, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Box(Modifier.weight(1f)) {
+                if (query.text.isEmpty()) {
+                    Text("Search runs", color = colors.onSurfaceVariant, fontSize = 14.sp)
+                }
                 BasicTextField(
                     value = query,
                     onValueChange = { query = it },
-                    textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = colors.onSurface, fontSize = 14.sp),
                     singleLine = true,
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Blue),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-            Icon(Icons.Rounded.Search, null, tint = Blue)
+            if (query.text.isNotEmpty()) {
+                IconButton(onClick = { query = TextFieldValue("") }, modifier = Modifier.size(20.dp)) {
+                    Icon(Icons.Rounded.Cancel, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                }
+            }
         }
 
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        FilterRow {
             ActionsFilterChip("All", filter == ActionsRunFilter.ALL) { filter = ActionsRunFilter.ALL }
             ActionsFilterChip("Active", filter == ActionsRunFilter.ACTIVE) { filter = ActionsRunFilter.ACTIVE }
             ActionsFilterChip("Queued", filter == ActionsRunFilter.QUEUED) { filter = ActionsRunFilter.QUEUED }
-            ActionsFilterChip("Failed", filter == ActionsRunFilter.FAILED) { filter = ActionsRunFilter.FAILED }
             ActionsFilterChip("Success", filter == ActionsRunFilter.SUCCESS) { filter = ActionsRunFilter.SUCCESS }
+            ActionsFilterChip("Failed", filter == ActionsRunFilter.FAILED) { filter = ActionsRunFilter.FAILED }
             ActionsFilterChip("Cancelled", filter == ActionsRunFilter.CANCELLED) { filter = ActionsRunFilter.CANCELLED }
             ActionsFilterChip("Skipped", filter == ActionsRunFilter.SKIPPED) { filter = ActionsRunFilter.SKIPPED }
             if (currentLogin.isNotBlank()) {
@@ -522,29 +554,35 @@ private fun ActionsRunsHistoryScreen(
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ActionsFilterChip("All workflows", selectedWorkflowId == null) { selectedWorkflowId = null }
-            workflows.forEach { workflow ->
-                ActionsFilterChip(workflow.name.ifBlank { workflow.path.substringAfterLast('/') }, selectedWorkflowId == workflow.id) {
-                    selectedWorkflowId = workflow.id
+        if (workflows.isNotEmpty()) {
+            FilterRow {
+                ActionsFilterChip("All workflows", selectedWorkflowId == null) { selectedWorkflowId = null }
+                workflows.forEach { workflow ->
+                    ActionsFilterChip(
+                        workflow.name.ifBlank { workflow.path.substringAfterLast('/') },
+                        selectedWorkflowId == workflow.id
+                    ) { selectedWorkflowId = workflow.id }
                 }
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ActionsFilterChip("All branches", selectedBranch == null) { selectedBranch = null }
-            branches.forEach { branch -> ActionsFilterChip(branch, selectedBranch == branch) { selectedBranch = branch } }
+        if (branches.isNotEmpty()) {
+            FilterRow {
+                ActionsFilterChip("All branches", selectedBranch == null) { selectedBranch = null }
+                branches.forEach { branch ->
+                    ActionsFilterChip(branch, selectedBranch == branch) { selectedBranch = branch }
+                }
+            }
+        }
+
+        FilterRow {
             ActionsFilterChip("All events", selectedEvent == null) { selectedEvent = null }
             listOf("workflow_dispatch", "push", "pull_request", "schedule").forEach { event ->
                 ActionsFilterChip(event, selectedEvent == event) { selectedEvent = event }
             }
         }
+
+        Spacer(Modifier.height(4.dp))
 
         if (visibleRuns.isEmpty() && !refreshing) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -651,103 +689,138 @@ private fun ActionsOverviewHeader(
         Row(
             Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            StatCard("Total", totalRuns.toString(), Icons.Rounded.Timeline, Blue)
-            StatCard("Active", activeCount.toString(), Icons.Rounded.FlashOn, Color(0xFF58A6FF))
-            StatCard("Success", successCount.toString(), Icons.Rounded.CheckCircle, Color(0xFF34C759))
-            StatCard("Failed", failedCount.toString(), Icons.Rounded.Error, Color(0xFFFF3B30))
+            StatCard(Modifier.weight(1f), "Total", totalRuns.toString(), Icons.Rounded.Timeline, Blue)
+            StatCard(Modifier.weight(1f), "Active", activeCount.toString(), Icons.Rounded.FlashOn, Blue)
+            StatCard(Modifier.weight(1f), "Success", successCount.toString(), Icons.Rounded.CheckCircle, Green)
+            StatCard(Modifier.weight(1f), "Failed", failedCount.toString(), Icons.Rounded.Error, Red)
         }
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(8.dp))
 
         Column(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
-                .ghGlassCard(14.dp)
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .ghGlassCard(12.dp)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Rounded.AutoAwesome, null, tint = Blue, modifier = Modifier.size(16.dp))
-                    Text("Workflow control", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Rounded.AutoAwesome, null, tint = Blue, modifier = Modifier.size(18.dp))
+                    Text(
+                        "WORKFLOW CONTROL",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextSecondary,
+                        letterSpacing = 0.8.sp
+                    )
                 }
-                IconButton(onClick = onRefresh) {
+                IconButton(onClick = onRefresh, modifier = Modifier.size(28.dp)) {
                     if (refreshing) CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
                     else Icon(Icons.Rounded.Refresh, null, tint = Blue, modifier = Modifier.size(18.dp))
                 }
             }
 
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (workflows.isEmpty()) {
-                    ActionsFilterChip(Strings.ghNoWorkflows, false) {}
-                } else {
-                    workflows.forEach { workflow ->
-                        val selected = workflow.id == selectedWorkflowId
-                        ActionsFilterChip(
-                            workflow.name.ifBlank { workflow.path.substringAfterLast('/') },
-                            selected
-                        ) { onSelectWorkflow(workflow.id) }
+            InputGroup("Workflow") {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (workflows.isEmpty()) {
+                        ActionsFilterChip(Strings.ghNoWorkflows, false) {}
+                    } else {
+                        workflows.forEach { workflow ->
+                            val selected = workflow.id == selectedWorkflowId
+                            ActionsFilterChip(
+                                workflow.name.ifBlank { workflow.path.substringAfterLast('/') },
+                                selected
+                            ) { onSelectWorkflow(workflow.id) }
+                        }
                     }
                 }
             }
 
+            InputGroup("Branch / ref") {
+                OutlinedTextField(
+                    value = selectedBranch,
+                    onValueChange = onBranchChange,
+                    placeholder = { Text("main", fontSize = 13.sp, color = TextTertiary) },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                if (branches.isNotEmpty()) {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        branches.take(20).forEach { branch ->
+                            ActionsFilterChip(branch, branch == selectedBranch) { onBranchChange(branch) }
+                        }
+                    }
+                }
+            }
+
+            val hasInputs = dispatchSchema?.inputs?.isNotEmpty() == true
+            if (hasInputs) {
+                InputGroup("Inputs") {
+                    DynamicDispatchInputs(
+                        schema = dispatchSchema,
+                        values = dispatchInputValues,
+                        missingRequiredInputs = missingRequiredInputs,
+                        onValueChange = onDispatchInputChange
+                    )
+                }
+            } else {
+                DynamicDispatchInputs(
+                    schema = dispatchSchema,
+                    values = dispatchInputValues,
+                    missingRequiredInputs = missingRequiredInputs,
+                    onValueChange = onDispatchInputChange
+                )
+            }
+
             workflows.firstOrNull { it.id == selectedWorkflowId }?.let { selectedWorkflow ->
+                Spacer(Modifier.height(2.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.10f))
+                )
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    MiniActionsBadge(selectedWorkflow.state.ifBlank { "unknown" }, if (selectedWorkflow.state == "active") Color(0xFF34C759) else TextSecondary)
-                    Text(selectedWorkflow.path, fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    MiniActionsBadge(selectedWorkflow.state.ifBlank { "unknown" }, if (selectedWorkflow.state == "active") Green else TextSecondary)
+                    Text(
+                        selectedWorkflow.path,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = TextTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
                     TextButton(onClick = { onToggleWorkflowState(selectedWorkflow) }) {
-                        Text(if (selectedWorkflow.state == "active") "Disable" else "Enable", color = if (selectedWorkflow.state == "active") Color(0xFFFF3B30) else Blue, fontSize = 12.sp)
-                    }
-                }
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    buildKindBadges("${selectedWorkflow.name} ${selectedWorkflow.path}").forEach { (label, color) ->
-                        MiniActionsBadge(label, color)
-                    }
-                }
-            }
-
-            OutlinedTextField(
-                value = selectedBranch,
-                onValueChange = onBranchChange,
-                label = { Text("Branch / ref") },
-                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            if (branches.isNotEmpty()) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    branches.take(20).forEach { branch ->
-                        ActionsFilterChip(branch, branch == selectedBranch) { onBranchChange(branch) }
+                        Text(
+                            if (selectedWorkflow.state == "active") "Disable" else "Enable",
+                            color = if (selectedWorkflow.state == "active") Red else Blue,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }
-
-            DynamicDispatchInputs(
-                schema = dispatchSchema,
-                values = dispatchInputValues,
-                missingRequiredInputs = missingRequiredInputs,
-                onValueChange = onDispatchInputChange
-            )
 
             Row(
                 Modifier.fillMaxWidth(),
@@ -764,9 +837,9 @@ private fun ActionsOverviewHeader(
                     if (dispatching) {
                         CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
                     } else {
-                        Icon(Icons.Rounded.PlayArrow, null, tint = Blue)
-                        Spacer(Modifier.width(6.dp))
-                        Text(Strings.ghRunWorkflow, color = Blue)
+                        Icon(Icons.Rounded.PlayArrow, null, tint = Blue, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(Strings.ghRunWorkflow, color = Blue, fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -775,7 +848,7 @@ private fun ActionsOverviewHeader(
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MiniActionsBadge("Latest ${displayRunStatus(run)}", runStatusColor(run))
                     if (run.branch.isNotBlank()) MiniActionsBadge(run.branch, Blue)
-                    if (run.event.isNotBlank()) MiniActionsBadge(run.event, Color(0xFFBF5AF2))
+                    if (run.event.isNotBlank()) MiniActionsBadge(run.event, Purple)
                     val elapsed = calcRunDuration(run, nowMs)
                     if (elapsed.isNotBlank()) MiniActionsBadge(elapsed, TextSecondary)
                 }
@@ -787,20 +860,60 @@ private fun ActionsOverviewHeader(
 }
 
 @Composable
-private fun StatCard(label: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color) {
+private fun SectionLabel(text: String) {
+    Text(
+        text.uppercase(),
+        fontSize = 10.sp,
+        color = TextSecondary,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.8.sp
+    )
+}
+
+@Composable
+private fun InputGroup(label: String, content: @Composable () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SectionLabel(label)
+        content()
+    }
+}
+
+@Composable
+private fun StatCard(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color
+) {
     val colors = MaterialTheme.colorScheme
     Column(
-        Modifier
-            .width(96.dp)
-            .ghGlassCard(14.dp)
-            .padding(horizontal = 10.dp, vertical = 9.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        modifier
+            .ghGlassCard(12.dp)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = color, modifier = Modifier.size(16.dp))
-            Text(label, fontSize = 11.sp, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Text(value, fontSize = 20.sp, color = colors.onSurface, fontWeight = FontWeight.Light, fontFamily = FontFamily.Monospace)
+        Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
+        Text(
+            value,
+            fontSize = 22.sp,
+            color = colors.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = FontFamily.Monospace,
+            maxLines = 1
+        )
+        Text(
+            label.uppercase(),
+            fontSize = 10.sp,
+            color = colors.onSurfaceVariant,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.6.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -907,7 +1020,7 @@ private fun ActionsCachesPanel(repo: GHRepo) {
             usage?.let {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     StatCard("Caches", it.activeCachesCount.toString(), Icons.Rounded.Timeline, Blue)
-                    StatCard("Size", formatArtifactSize(it.activeCachesSizeInBytes), Icons.Rounded.Article, Color(0xFF34C759))
+                    StatCard("Size", formatArtifactSize(it.activeCachesSizeInBytes), Icons.Rounded.Article, Green)
                 }
             }
         }
@@ -918,7 +1031,7 @@ private fun ActionsCachesPanel(repo: GHRepo) {
                 subtitle = "${formatArtifactSize(cache.sizeInBytes)} • ${cache.ref}",
                 meta = listOf("Created ${cache.createdAt.take(10)}", "Last used ${cache.lastAccessedAt.take(10)}", cache.version.take(12)),
                 actionLabel = if (deleting == cache.id) "Deleting" else "Delete",
-                actionTint = Color(0xFFFF3B30),
+                actionTint = Red,
                 onAction = {
                     deleting = cache.id
                     scope.launch {
@@ -977,7 +1090,7 @@ private fun ActionsVariablesPanel(repo: GHRepo) {
                 subtitle = variable.value,
                 meta = listOf("Updated ${variable.updatedAt.take(10)}"),
                 actionLabel = "Delete",
-                actionTint = Color(0xFFFF3B30),
+                actionTint = Red,
                 onAction = {
                     scope.launch {
                         val ok = GitHubManager.deleteRepoActionsVariable(context, repo.owner, repo.name, variable.name)
@@ -1052,7 +1165,7 @@ private fun ActionsSecretsPanel(repo: GHRepo) {
                 subtitle = "Secret value is never returned by GitHub",
                 meta = listOf("Updated ${secret.updatedAt.take(10)}"),
                 actionLabel = "Delete",
-                actionTint = Color(0xFFFF3B30),
+                actionTint = Red,
                 onAction = {
                     scope.launch {
                         val ok = GitHubManager.deleteRepoActionsSecret(context, repo.owner, repo.name, secret.name)
@@ -1093,7 +1206,7 @@ private fun ActionsRunnersPanel(repo: GHRepo) {
                             Toast.makeText(context, if (token != null) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                         }
                     }
-                    Chip(Icons.Rounded.Delete, "Remove token", Color(0xFFFF9500)) {
+                    Chip(Icons.Rounded.Delete, "Remove token", Orange) {
                         scope.launch {
                             val token = GitHubManager.createRepoRunnerRemoveToken(context, repo.owner, repo.name)
                             runnerToken = token?.let { "remove: ${it.token}\nexpires: ${it.expiresAt}" }.orEmpty()
@@ -1113,7 +1226,7 @@ private fun ActionsRunnersPanel(repo: GHRepo) {
                 subtitle = "${runner.os} • ${runner.status}${if (runner.busy) " • busy" else ""}",
                 meta = runner.labels,
                 actionLabel = "Delete",
-                actionTint = Color(0xFFFF3B30),
+                actionTint = Red,
                 onAction = {
                     scope.launch {
                         val ok = GitHubManager.deleteRepoSelfHostedRunner(context, repo.owner, repo.name, runner.id)
@@ -1195,7 +1308,7 @@ private fun ArtifactRow(artifact: GHArtifact, busy: Boolean, onDownload: () -> U
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 artifactKindBadges(artifact).forEach { (label, color) -> MiniActionsBadge(label, color) }
                 MiniActionsBadge(formatArtifactSize(artifact.sizeInBytes), TextSecondary)
-                if (artifact.expired) MiniActionsBadge("expired", Color(0xFFFF3B30))
+                if (artifact.expired) MiniActionsBadge("expired", Red)
                 if (artifact.workflowRunId > 0) MiniActionsBadge("#${artifact.workflowRunId}", Blue)
                 if (artifact.workflowRunBranch.isNotBlank()) MiniActionsBadge(artifact.workflowRunBranch, Blue)
                 if (artifact.workflowRunSha.length >= 7) MiniActionsBadge(artifact.workflowRunSha.take(7), TextSecondary)
@@ -1206,7 +1319,7 @@ private fun ArtifactRow(artifact: GHArtifact, busy: Boolean, onDownload: () -> U
         if (busy) CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
         else {
             IconButton(onClick = onDownload, enabled = !artifact.expired) { Icon(Icons.Rounded.Article, null, tint = if (artifact.expired) TextTertiary else Blue) }
-            IconButton(onClick = onDelete) { Icon(Icons.Rounded.Delete, null, tint = Color(0xFFFF3B30)) }
+            IconButton(onClick = onDelete) { Icon(Icons.Rounded.Delete, null, tint = Red) }
         }
     }
 }
@@ -1236,8 +1349,8 @@ private fun ArtifactRunRow(
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     artifactKindBadges(artifact).forEach { (label, color) -> MiniActionsBadge(label, color) }
                     MiniActionsBadge(formatArtifactSize(artifact.sizeInBytes), TextSecondary)
-                    if (artifact.sizeInBytes <= 0L) MiniActionsBadge("suspect", Color(0xFFFF9500))
-                    if (artifact.expired) MiniActionsBadge(Strings.ghExpired, Color(0xFFFF3B30))
+                    if (artifact.sizeInBytes <= 0L) MiniActionsBadge("suspect", Orange)
+                    if (artifact.expired) MiniActionsBadge(Strings.ghExpired, Red)
                     else MiniActionsBadge(artifact.createdAt.take(10), TextTertiary)
                 }
             }
@@ -1247,8 +1360,8 @@ private fun ArtifactRunRow(
                 Icon(Icons.Rounded.ContentCopy, null, tint = TextSecondary)
             }
             IconButton(onClick = onDelete) {
-                if (deleting) CircularProgressIndicator(Modifier.size(16.dp), color = Color(0xFFFF3B30), strokeWidth = 2.dp)
-                else Icon(Icons.Rounded.Delete, null, tint = Color(0xFFFF3B30))
+                if (deleting) CircularProgressIndicator(Modifier.size(16.dp), color = Red, strokeWidth = 2.dp)
+                else Icon(Icons.Rounded.Delete, null, tint = Red)
             }
         }
         if (downloading) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
@@ -1322,7 +1435,7 @@ private fun DynamicDispatchInputs(
             Text(
                 "Required inputs missing: ${missingRequiredInputs.joinToString(", ")}",
                 fontSize = 11.sp,
-                color = Color(0xFFFF9500)
+                color = Orange
             )
         }
         inputs.forEach { input ->
@@ -1343,10 +1456,10 @@ private fun WorkflowDispatchInputField(
 ) {
     val choices = dispatchInputChoices(input)
     val missingRequired = input.required && dispatchInputValue(input, mapOf(input.key to value)).isBlank()
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(input.key, fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.SemiBold)
-            if (input.required) MiniActionsBadge("required", Color(0xFFFF9500))
+            if (input.required) MiniActionsBadge("required", Orange)
             if (input.type.isNotBlank()) MiniActionsBadge(input.type, TextSecondary)
         }
         if (input.description.isNotBlank()) {
@@ -1355,7 +1468,7 @@ private fun WorkflowDispatchInputField(
         if (choices.isNotEmpty()) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 choices.forEach { option ->
                     ActionsFilterChip(option, value == option) { onValueChange(option) }
@@ -1365,14 +1478,14 @@ private fun WorkflowDispatchInputField(
             OutlinedTextField(
                 value = value,
                 onValueChange = onValueChange,
-                label = { Text(input.key) },
+                placeholder = { Text(input.key, fontSize = 12.sp, color = TextTertiary) },
                 textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = input.type.lowercase() != "environment"
             )
         }
         if (missingRequired) {
-            Text("Required value", fontSize = 10.sp, color = Color(0xFFFF9500))
+            Text("Required value", fontSize = 10.sp, color = Orange)
         }
     }
 }
@@ -1430,80 +1543,123 @@ private fun ModernRunCard(
     val statusColor = runStatusColor(run)
     val live = isRunActive(run)
     val elapsed = calcRunDuration(run, nowMs)
+    val colors = MaterialTheme.colorScheme
 
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(bottom = 10.dp)
-            .ghGlassCard(16.dp)
+            .padding(bottom = 8.dp)
+            .ghGlassCard(12.dp)
             .clickable(onClick = onRunClick)
-            .padding(14.dp)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-            if (run.actorAvatar.isNotBlank()) {
-                AsyncImage(
-                    model = run.actorAvatar,
-                    contentDescription = run.actor,
-                    modifier = Modifier.size(36.dp).clip(CircleShape)
-                )
-            } else {
-                Box(
-                    Modifier.size(36.dp).clip(CircleShape).background(statusColor.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(runStatusIcon(run), null, tint = statusColor, modifier = Modifier.size(18.dp))
-                }
-            }
-
-            Column(Modifier.weight(1f)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(run.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (live) MiniActionsBadge("LIVE", statusColor)
-                }
-                if (run.displayTitle.isNotBlank()) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(run.displayTitle, fontSize = 12.sp, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    buildKindBadges("${run.name} ${run.displayTitle}").forEach { (label, color) ->
-                        MiniActionsBadge(label, color)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(contentAlignment = Alignment.Center) {
+                if (run.actorAvatar.isNotBlank()) {
+                    AsyncImage(
+                        model = run.actorAvatar,
+                        contentDescription = run.actor,
+                        modifier = Modifier.size(32.dp).clip(CircleShape)
+                    )
+                } else {
+                    Box(
+                        Modifier.size(32.dp).clip(CircleShape).background(colors.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(runStatusIcon(run), null, tint = statusColor, modifier = Modifier.size(16.dp))
                     }
-                    MiniActionsBadge("#${run.runNumber}", TextSecondary)
-                    if (run.runAttempt > 1) MiniActionsBadge("attempt ${run.runAttempt}", Color(0xFFFF9500))
-                    MiniActionsBadge(run.branch.ifBlank { "unknown" }, Blue)
-                    MiniActionsBadge(run.event.ifBlank { "event" }, Color(0xFFBF5AF2))
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    buildRunSummary(run, elapsed),
-                    fontSize = 12.sp,
-                    color = TextSecondary,
-                    lineHeight = 17.sp
-                )
+                if (live) {
+                    Box(
+                        Modifier
+                            .size(10.dp)
+                            .align(Alignment.BottomEnd)
+                            .clip(CircleShape)
+                            .background(colors.surface)
+                            .padding(1.dp)
+                    ) {
+                        Box(
+                            Modifier.fillMaxSize().clip(CircleShape).background(statusColor)
+                        )
+                    }
+                }
             }
-        }
 
-        Spacer(Modifier.height(10.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    run.name,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (run.displayTitle.isNotBlank()) {
+                    Text(
+                        run.displayTitle,
+                        fontSize = 12.sp,
+                        color = colors.onSurfaceVariant,
+                        lineHeight = 16.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Text(
+                "#${run.runNumber}",
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                color = colors.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
 
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             MiniActionsBadge(displayRunStatus(run), statusColor)
-            if (elapsed.isNotBlank()) MiniActionsBadge(elapsed, if (live) Blue else TextSecondary)
-            if (run.actor.isNotBlank()) MiniActionsBadge(run.actor, TextSecondary)
-            if (run.headSha.length >= 7) MiniActionsBadge(run.headSha.take(7), TextSecondary)
+            if (run.branch.isNotBlank()) MiniActionsBadge(run.branch, Blue)
+            if (run.event.isNotBlank()) MiniActionsBadge(run.event, Purple)
+            if (run.runAttempt > 1) MiniActionsBadge("attempt ${run.runAttempt}", Orange)
         }
 
-        Spacer(Modifier.height(10.dp))
+        val footerParts = buildList {
+            if (run.actor.isNotBlank()) add(run.actor)
+            if (elapsed.isNotBlank()) add(elapsed)
+            if (run.headSha.length >= 7) add(run.headSha.take(7))
+        }
+        if (footerParts.isNotEmpty()) {
+            Text(
+                footerParts.joinToString("  ·  "),
+                fontSize = 11.sp,
+                color = colors.onSurfaceVariant,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(colors.outlineVariant.copy(alpha = 0.10f))
+        )
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (live) {
-                Chip(Icons.Rounded.Cancel, Strings.cancel, Color(0xFFFF3B30)) { onCancel() }
+                Chip(Icons.Rounded.Cancel, Strings.cancel, Red) { onCancel() }
             } else {
                 Chip(Icons.Rounded.Refresh, Strings.ghRerun) { onRerun() }
             }
+            Spacer(Modifier.weight(1f))
             Chip(Icons.Rounded.Article, "Open") { onRunClick() }
         }
     }
@@ -1576,14 +1732,22 @@ private fun runStatusIcon(run: GHWorkflowRun) = when {
 
 @Composable
 private fun MiniActionsBadge(text: String, color: Color) {
+    val colors = MaterialTheme.colorScheme
     Box(
         Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(color.copy(alpha = 0.12f))
-            .border(1.dp, color.copy(alpha = 0.24f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(colors.surfaceVariant)
+            .border(1.dp, colors.outlineVariant.copy(alpha = 0.10f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
-        Text(text, fontSize = 11.sp, color = color, fontWeight = FontWeight.Medium)
+        Text(
+            text,
+            fontSize = 10.sp,
+            color = color,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.2.sp,
+            maxLines = 1
+        )
     }
 }
 
@@ -1786,21 +1950,21 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                     Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                     refreshAll()
                 }
-            }) { Icon(Icons.Rounded.Error, null, tint = Color(0xFFFF9500)) }
+            }) { Icon(Icons.Rounded.Error, null, tint = Orange) }
             IconButton(onClick = {
                 scope.launch {
                     val ok = GitHubManager.cancelWorkflowRun(context, repo.owner, repo.name, runId)
                     Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                     refreshAll()
                 }
-            }) { Icon(Icons.Rounded.Cancel, null, tint = Color(0xFFFF3B30)) }
+            }) { Icon(Icons.Rounded.Cancel, null, tint = Red) }
             IconButton(onClick = {
                 scope.launch {
                     val ok = GitHubManager.forceCancelWorkflowRun(context, repo.owner, repo.name, runId)
                     Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                     refreshAll()
                 }
-            }) { Icon(Icons.Rounded.Warning, null, tint = Color(0xFFFF3B30)) }
+            }) { Icon(Icons.Rounded.Warning, null, tint = Red) }
         }
 
         if (loading) {
@@ -1829,8 +1993,19 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
             }
 
             detailNotice?.let { notice ->
-                Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFFFF9500).copy(alpha = 0.1f)).padding(10.dp)) {
-                    Text(notice, fontSize = 12.sp, color = TextSecondary)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(1.dp, Orange.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Rounded.Info, null, tint = Orange, modifier = Modifier.size(16.dp))
+                    Text(notice, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 16.sp)
                 }
             }
 
@@ -2106,7 +2281,7 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                                     enabled = artifacts.any { !it.expired },
                                     onClick = { showPublishRelease = true }
                                 ) {
-                                    Text("Publish release", color = Color(0xFF34C759), fontSize = 12.sp)
+                                    Text("Publish release", color = Green, fontSize = 12.sp)
                                 }
                             }
                             Spacer(Modifier.height(8.dp))
@@ -2167,7 +2342,7 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
                         }
                         scope.launch { jobListState.animateScrollToItem(targetIndex) }
                     },
-                    containerColor = Color(0xFFFF3B30),
+                    containerColor = Red,
                     contentColor = Color.White,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp).size(48.dp)
                 ) {
@@ -2215,9 +2390,9 @@ private fun WorkflowRunDetailHeader(run: GHWorkflowRun, nowMs: Long) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MiniActionsBadge(displayRunStatus(run), statusColor)
             MiniActionsBadge("#${run.runNumber}", TextSecondary)
-            if (run.runAttempt > 1) MiniActionsBadge("attempt ${run.runAttempt}", Color(0xFFFF9500))
+            if (run.runAttempt > 1) MiniActionsBadge("attempt ${run.runAttempt}", Orange)
             if (run.branch.isNotBlank()) MiniActionsBadge(run.branch, Blue)
-            if (run.event.isNotBlank()) MiniActionsBadge(run.event, Color(0xFFBF5AF2))
+            if (run.event.isNotBlank()) MiniActionsBadge(run.event, Purple)
             if (run.headSha.length >= 7) MiniActionsBadge(run.headSha.take(7), TextSecondary)
             if (run.headRepository.isNotBlank()) MiniActionsBadge(run.headRepository, TextSecondary)
         }
@@ -2237,23 +2412,28 @@ private fun FailureDiagnosisCard(
     onOpenFailedLog: () -> Unit
 ) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFFF3B30).copy(alpha = 0.08f)).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, Red.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.Error, null, tint = Color(0xFFFF3B30), modifier = Modifier.size(18.dp))
+            Icon(Icons.Rounded.Error, null, tint = Red, modifier = Modifier.size(18.dp))
             Column(Modifier.weight(1f)) {
                 Text("Failed build", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                 Text(job.name, fontSize = 12.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             TextButton(onClick = onOpenFailedLog, enabled = !loading) {
-                if (loading) CircularProgressIndicator(Modifier.size(14.dp), color = Color(0xFFFF3B30), strokeWidth = 2.dp)
-                else Text("Open failed log", color = Color(0xFFFF3B30), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                if (loading) CircularProgressIndicator(Modifier.size(14.dp), color = Red, strokeWidth = 2.dp)
+                else Text("Open failed log", color = Red, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
         step?.let {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                MiniActionsBadge("step ${it.number}", Color(0xFFFF3B30))
+                MiniActionsBadge("step ${it.number}", Red)
                 MiniActionsBadge(it.name, TextSecondary)
             }
         }
@@ -2267,11 +2447,11 @@ private fun FailureDiagnosisCard(
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip(Icons.Rounded.ContentCopy, stringResource(R.string.actions_copy_failure_summary), Color(0xFFFF3B30), onCopySummary)
+            Chip(Icons.Rounded.ContentCopy, stringResource(R.string.actions_copy_failure_summary), Red, onCopySummary)
             if (onShareSummary != null) {
-                Chip(Icons.Rounded.Share, stringResource(R.string.actions_share), Color(0xFFFF3B30), onShareSummary)
+                Chip(Icons.Rounded.Share, stringResource(R.string.actions_share), Red, onShareSummary)
             }
-            Chip(Icons.Rounded.Article, "Open failed log", Color(0xFFFF3B30), onOpenFailedLog)
+            Chip(Icons.Rounded.Article, "Open failed log", Red, onOpenFailedLog)
         }
         if (!patternInfo.isNullOrBlank()) {
             Text(patternInfo, fontSize = 10.sp, color = TextTertiary)
@@ -2360,7 +2540,7 @@ private fun PublishArtifactsReleaseDialog(
                 }
             ) {
                 if (publishing) CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
-                else Text("Publish", color = Color(0xFF34C759))
+                else Text("Publish", color = Green)
             }
         },
         dismissButton = {
@@ -2429,8 +2609,8 @@ private fun RunDangerActionsCard(onDeleteLogs: () -> Unit, onDeleteRun: () -> Un
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Run management", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip(Icons.Rounded.Delete, "Delete logs", Color(0xFFFF9500)) { onDeleteLogs() }
-            Chip(Icons.Rounded.Delete, "Delete run", Color(0xFFFF3B30)) { onDeleteRun() }
+            Chip(Icons.Rounded.Delete, "Delete logs", Orange) { onDeleteLogs() }
+            Chip(Icons.Rounded.Delete, "Delete run", Red) { onDeleteRun() }
         }
     }
 }
@@ -2442,7 +2622,7 @@ private fun PendingDeploymentsCard(
 ) {
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.Warning, null, tint = Color(0xFFFF9500), modifier = Modifier.size(18.dp))
+            Icon(Icons.Rounded.Warning, null, tint = Orange, modifier = Modifier.size(18.dp))
             Text("Pending deployments", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
         }
         deployments.forEach { deployment ->
@@ -2453,10 +2633,10 @@ private fun PendingDeploymentsCard(
                     Text(reviewers, fontSize = 11.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (deployment.currentUserCanApprove) {
-                    TextButton(onClick = { onReview(deployment, true) }) { Text("Approve", color = Color(0xFF34C759), fontSize = 12.sp) }
-                    TextButton(onClick = { onReview(deployment, false) }) { Text("Reject", color = Color(0xFFFF3B30), fontSize = 12.sp) }
+                    TextButton(onClick = { onReview(deployment, true) }) { Text("Approve", color = Green, fontSize = 12.sp) }
+                    TextButton(onClick = { onReview(deployment, false) }) { Text("Reject", color = Red, fontSize = 12.sp) }
                 } else {
-                    MiniActionsBadge("waiting", Color(0xFFFF9500))
+                    MiniActionsBadge("waiting", Orange)
                 }
             }
         }
@@ -2473,7 +2653,7 @@ private fun ReviewHistoryCard(reviews: List<GHWorkflowRunReview>) {
         reviews.forEach { review ->
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    MiniActionsBadge(review.state.ifBlank { "reviewed" }, if (review.state == "approved") Color(0xFF34C759) else Color(0xFFFF9500))
+                    MiniActionsBadge(review.state.ifBlank { "reviewed" }, if (review.state == "approved") Green else Orange)
                     Text(review.user.ifBlank { "GitHub" }, fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
                 }
                 if (review.environments.isNotEmpty()) Text(review.environments.joinToString(", "), fontSize = 11.sp, color = TextSecondary)
@@ -2517,7 +2697,7 @@ private fun CheckRunsCard(
                         val location = buildAnnotationLocation(annotation)
                         if (location.isNotBlank()) Text(location, fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         val body = cleanGithubText(annotation.message).ifBlank { cleanGithubText(annotation.title) }
-                        if (body.isNotBlank()) Text(body, fontSize = 11.sp, color = if (annotation.annotationLevel == "failure") Color(0xFFFF3B30) else TextSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        if (body.isNotBlank()) Text(body, fontSize = 11.sp, color = if (annotation.annotationLevel == "failure") Red else TextSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -2739,8 +2919,8 @@ private fun StepStatusPill(status: String, color: Color) {
         letterSpacing = 0.6.sp,
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(color.copy(alpha = 0.12f))
-            .border(1.dp, color.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.10f), RoundedCornerShape(999.dp))
             .padding(horizontal = 7.dp, vertical = 3.dp)
     )
 }
@@ -3120,6 +3300,17 @@ private fun compactLogForDisplay(raw: String): String {
 }
 
 @Composable
+private fun FilterRow(content: @Composable () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) { content() }
+}
+
+@Composable
 private fun ActionsFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
@@ -3224,13 +3415,13 @@ private fun groupedArtifacts(artifacts: List<GHArtifact>): List<ArtifactGroup> =
 private fun artifactKindGroup(artifact: GHArtifact): ArtifactGroup {
     val name = artifact.name.lowercase()
     return when {
-        kernelPatterns.any { it in name } -> ArtifactGroup("Kernel / IMG", Color(0xFF34C759), 0, emptyList())
-        magiskPatterns.any { it in name } -> ArtifactGroup("Magisk / KSU", Color(0xFFFF9500), 1, emptyList())
-        driverPatterns.any { it in name } -> ArtifactGroup("Turnip / Adreno", Color(0xFFBF5AF2), 2, emptyList())
+        kernelPatterns.any { it in name } -> ArtifactGroup("Kernel / IMG", Green, 0, emptyList())
+        magiskPatterns.any { it in name } -> ArtifactGroup("Magisk / KSU", Orange, 1, emptyList())
+        driverPatterns.any { it in name } -> ArtifactGroup("Turnip / Adreno", Purple, 2, emptyList())
         androidPatterns.any { it in name } -> ArtifactGroup("Android app", Blue, 3, emptyList())
-        iosPatterns.any { it in name } -> ArtifactGroup("iOS app", Color(0xFF5AC8FA), 4, emptyList())
+        iosPatterns.any { it in name } -> ArtifactGroup("iOS app", Teal, 4, emptyList())
         windowsPatterns.any { it in name } -> ArtifactGroup("Windows", Color(0xFF0078D4), 5, emptyList())
-        linuxPatterns.any { it in name } -> ArtifactGroup("Linux", Color(0xFF8E8E93), 6, emptyList())
+        linuxPatterns.any { it in name } -> ArtifactGroup("Linux", TextSecondary, 6, emptyList())
         else -> ArtifactGroup("Other", TextSecondary, 99, emptyList())
     }
 }
@@ -3239,25 +3430,25 @@ private fun buildKindBadges(text: String): List<Pair<String, Color>> {
     val name = text.lowercase()
     val labels = mutableListOf<Pair<String, Color>>()
     if (kernelPatterns.any { it in name }) {
-        labels += "Kernel" to Color(0xFF34C759)
+        labels += "Kernel" to Green
     }
     if (magiskPatterns.any { it in name }) {
-        labels += "Magisk" to Color(0xFFFF9500)
+        labels += "Magisk" to Orange
     }
     if (driverPatterns.any { it in name }) {
-        labels += "Driver" to Color(0xFFBF5AF2)
+        labels += "Driver" to Purple
     }
     if (androidPatterns.any { it in name }) {
         labels += "Android" to Blue
     }
     if (iosPatterns.any { it in name }) {
-        labels += "iOS" to Color(0xFF5AC8FA)
+        labels += "iOS" to Teal
     }
     if (windowsPatterns.any { it in name }) {
         labels += "Windows" to Color(0xFF0078D4)
     }
     if (linuxPatterns.any { it in name }) {
-        labels += "Linux" to Color(0xFF8E8E93)
+        labels += "Linux" to TextSecondary
     }
     return labels
 }
