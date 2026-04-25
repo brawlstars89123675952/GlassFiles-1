@@ -47,7 +47,8 @@ fun ProfileScreen(
         loading = false
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+    val colors = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxSize().background(colors.background)) {
         GHTopBar(
             title = username,
             onBack = onBack,
@@ -67,7 +68,7 @@ fun ProfileScreen(
                             if (isFollowing) Icons.Rounded.PersonRemove else Icons.Rounded.PersonAdd,
                             null,
                             Modifier.size(20.dp),
-                            tint = Blue
+                            tint = colors.primary
                         )
                     }
                 }
@@ -76,7 +77,7 @@ fun ProfileScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue)
+                CircularProgressIndicator(color = colors.primary)
             }
             return@Column
         }
@@ -106,33 +107,33 @@ fun ProfileScreen(
                         profile!!.name.ifBlank { profile!!.login },
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = colors.onSurface
                     )
-                    Text("@${profile!!.login}", fontSize = 14.sp, color = TextSecondary)
+                    Text("@${profile!!.login}", fontSize = 14.sp, color = colors.onSurfaceVariant)
                     if (profile!!.bio.isNotBlank()) {
                         Spacer(Modifier.height(8.dp))
-                        Text(profile!!.bio, fontSize = 13.sp, color = TextSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(profile!!.bio, fontSize = 13.sp, color = colors.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     }
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         if (profile!!.company.isNotBlank()) {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Rounded.Business, null, Modifier.size(14.dp), tint = TextTertiary)
-                                Text(profile!!.company, fontSize = 12.sp, color = TextSecondary)
+                                Icon(Icons.Rounded.Business, null, Modifier.size(14.dp), tint = colors.onSurfaceVariant)
+                                Text(profile!!.company, fontSize = 12.sp, color = colors.onSurfaceVariant)
                             }
                         }
                         if (profile!!.location.isNotBlank()) {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Rounded.LocationOn, null, Modifier.size(14.dp), tint = TextTertiary)
-                                Text(profile!!.location, fontSize = 12.sp, color = TextSecondary)
+                                Icon(Icons.Rounded.LocationOn, null, Modifier.size(14.dp), tint = colors.onSurfaceVariant)
+                                Text(profile!!.location, fontSize = 12.sp, color = colors.onSurfaceVariant)
                             }
                         }
                     }
                     if (profile!!.blog.isNotBlank()) {
                         Spacer(Modifier.height(4.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.Link, null, Modifier.size(14.dp), tint = TextTertiary)
-                            Text(profile!!.blog, fontSize = 12.sp, color = Blue)
+                            Icon(Icons.Rounded.Link, null, Modifier.size(14.dp), tint = colors.onSurfaceVariant)
+                            Text(profile!!.blog, fontSize = 12.sp, color = colors.primary)
                         }
                     }
                 }
@@ -142,22 +143,22 @@ fun ProfileScreen(
 
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatCard("Repositories", "${profile!!.publicRepos}", Modifier.weight(1f))
-                    StatCard("Followers", "${profile!!.followers}", Modifier.weight(1f))
-                    StatCard("Following", "${profile!!.following}", Modifier.weight(1f))
+                    StatCard("Repositories", formatGitHubNumber(profile!!.publicRepos), Modifier.weight(1f))
+                    StatCard("Followers", formatGitHubNumber(profile!!.followers), Modifier.weight(1f))
+                    StatCard("Following", formatGitHubNumber(profile!!.following), Modifier.weight(1f))
                 }
             }
 
             item {
                 Spacer(Modifier.height(16.dp))
-                Text("Repositories", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                Text("Repositories", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
                 Spacer(Modifier.height(8.dp))
             }
 
             if (repos.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
-                        Text("No public repositories", color = TextTertiary, fontSize = 14.sp)
+                        Text("No public repositories", color = colors.onSurfaceVariant, fontSize = 14.sp)
                     }
                 }
             } else {
@@ -176,7 +177,7 @@ private fun StatCard(title: String, value: String, modifier: Modifier = Modifier
         modifier = modifier.ghGlassCard(14.dp).padding(horizontal = 12.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(value, fontSize = 28.sp, fontWeight = FontWeight.Light, color = TextPrimary, lineHeight = 30.sp)
-        Text(title.uppercase(), fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Medium, letterSpacing = 0.7.sp, maxLines = 1)
+        Text(value, fontSize = 28.sp, fontWeight = FontWeight.Light, color = MaterialTheme.colorScheme.onSurface, lineHeight = 30.sp)
+        Text(title.uppercase(), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium, letterSpacing = 0.7.sp, maxLines = 1)
     }
 }

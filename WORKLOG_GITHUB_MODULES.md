@@ -1084,3 +1084,83 @@
   - long README lines are truncated before text layout to avoid massive single-line Compose stalls.
   - README content renders incrementally in batches instead of composing every parsed block at once.
 - Root cause identified: heavy markdown parsing/render preparation on the Compose main thread, amplified by huge tables/code/list READMEs from third-party repos.
+
+## 2026-04-25
+
+### GitHub Actions module UI tidy (iteration 1 — Overview header)
+- Цель: пользователь сообщил, что Actions/Workflow runs выглядит как «нейрослоп», нужна симметрия и порядок. Светлая тема. Скоуп строго `GitHubActionsModule.kt`, общие компоненты не трогаем.
+- `ActionsOverviewHeader`:
+  - Stat cards (`Total / Active / Success / Failed`) переведены с фикс-ширины 96dp в горизонтальном скролле на 4 колонки с `Modifier.weight(1f)` — равная сетка на всю ширину экрана.
+  - Шапка карточки `Workflow control` сделана секционным заголовком: uppercase 11sp, `letter-spacing 0.8`, иконка 18dp.
+  - Внутренний паддинг карточки приведён к ритму 12/12dp, вертикальный `spacedBy(10.dp)`.
+- `StatCard`:
+  - Принимает `Modifier` (через именованный параметр в конце для совместимости с легаси-вызовами в `RepositoryArtifactsPanel`).
+  - Иконка 20dp, значение 22sp SemiBold monospace, label uppercase 10sp + letter-spacing.
+- `ActionsTab` notice strip: вместо alpha-подложки `Color(0xFFFF9500).copy(alpha = 0.1f)` — solid `surface` + 1px hairline border `Orange.copy(alpha = 0.35f)` + иконка `Info`.
+- Хардкод-хексы заменены на токены `theme/Color.kt`: `0xFF58A6FF / 0xFF34C759 / 0xFFFF3B30 / 0xFFBF5AF2 / 0xFFFF9500` → `Blue / Green / Red / Purple / Orange`.
+- Проверка: локальный билд по запросу пользователя не запускался.
+
+### Workflow Control: input fields lifted, keyboard fix
+- Жалоба пользователя: при тапе по полям ввода клавиатура закрывает их, добраться до Branch / dispatch inputs нельзя.
+- Внешний `Column` в `ActionsTab` обёрнут в `verticalScroll(rememberScrollState()) + imePadding()` — контент сдвигается над клавиатурой и проскроллится.
+- В `ActionsOverviewHeader` карточка `Workflow control` переразложена так, чтобы все текстовые инпуты были в верхней половине:
+  1. Section `WORKFLOW` — чипсы воркфлоу.
+  2. Section `BRANCH / REF` — `OutlinedTextField` + чипсы веток.
+  3. Section `INPUTS` — `DynamicDispatchInputs` (только если у воркфлоу есть `workflow_dispatch` и непустой schema).
+  4. Hairline-разделитель `outlineVariant.copy(alpha = 0.10f)`.
+  5. Метаданные воркфлоу (state-badge + monospace path + `Disable/Enable`) — съехали ВНИЗ, под инпутами.
+  6. Кнопки `Open Runs` / `Latest #N` / `Run workflow`.
+  7. Latest-run бейджи.
+- Добавлены приватные хелперы `SectionLabel(text)` и `InputGroup(label, content)` — лейбл + контент группируются с `spacedBy(8.dp)`, между группами 10dp.
+- В `WorkflowDispatchInputField` `label = { ... }` заменён на `placeholder` (ключ инпута уже выводится отдельной строкой над полем).
+- Выпилен авто-цветной ряд `buildKindBadges` под выбранным воркфлоу — это была декорация без функциональной нагрузки (фиолетовые/оранжевые лейблы по ключевым словам в имени файла). Сама функция оставлена, она ещё используется для категоризации артефактов.
+
+### MiniActionsBadge + ModernRunCard + History screen + WorkflowRunDetail
+- `MiniActionsBadge` переписан: вместо `color.copy(alpha = 0.12f)` фон + `color.copy(alpha = 0.24f)` бордер используется нейтральный `surfaceVariant` + 1px hairline `outlineVariant.copy(alpha = 0.10f)`. Цвет передаётся только через `color` параметр в текст. Бейдж стал 6dp радиус, 10sp текст с letter-spacing 0.2 — убрана «куча alpha-таблеток».
+- `StepStatusPill` переведён на ту же схему (uniform surface + hairline + colored text).
+- `ModernRunCard` переразмечен:
+  - Аватар 32dp + цветная точка-индикатор LIVE поверх (вместо отдельного бейджа `LIVE`).
+  - Заголовок + display title + `#N` (моноширинный) в одну верхнюю строку.
+  - Один скроллируемый ряд бейджей: статус, ветка, событие, attempt — без раздутия.
+  - Footer одной строкой моноширинно: `actor · elapsed · sha`.
+  - Тонкий разделитель перед action-кнопками.
+  - Кнопки: `Cancel` (или `Rerun`) слева — `Open` справа через `Spacer(weight)` — симметричная раскладка.
+- `ActionsRunsHistoryScreen`:
+  - Поисковая строка переделана на iOS-стиль: иконка `Search` внутри поля, плейсхолдер, кнопка очистки `Cancel` появляется при непустом запросе. Курсор окрашен в `Blue` (accent).
+  - Контейнер поиска: solid `surface` + 1px hairline border (без alpha-подложек).
+  - Три ряда фильтр-чипсов разбиты на четыре по категориям через хелпер `FilterRow`:
+    1. Status (`All / Active / Queued / Success / Failed / Cancelled / Skipped / Mine`).
+    2. Workflows (только если `workflows.isNotEmpty()`).
+    3. Branches (только если `branches.isNotEmpty()`).
+    4. Events (`All events / workflow_dispatch / push / pull_request / schedule`).
+  - Раньше Branches и Events были в одном горизонтальном скролле — приходилось скроллить мимо всех веток, чтобы найти событие.
+- `WorkflowRunDetailScreen`:
+  - `detailNotice` переделан в Row с solid `surface` + `Orange` hairline + `Info` иконкой — однотипно с notice strip из ActionsTab.
+  - `FailureDiagnosisCard` переведён с alpha-подложки `Red.copy(alpha = 0.08f)` на solid `surface` + `Red.copy(alpha = 0.35f)` hairline border.
+- Bulk-replace хардкод-хексов по всему файлу через theme/Color.kt токены:
+  - `Color(0xFFFF3B30)` → `Red`
+  - `Color(0xFFFF9500)` → `Orange`
+  - `Color(0xFF34C759)` → `Green`
+  - `Color(0xFFBF5AF2)` → `Purple`
+  - `Color(0xFF5AC8FA)` → `Teal`
+  - `Color(0xFF8E8E93)` → `TextSecondary`
+  - Оставлен только `Color(0xFF0078D4)` для бренда Windows в `artifactKindGroup` (категориальный идентификатор, не UI-цвет).
+- Импорты обновлены: добавлены `Green / Orange / Purple / Red / Teal` из `com.glassfiles.ui.theme`, иконка `Icons.Rounded.Info`, `Modifier.imePadding`.
+- Коммит: `f9c95d5` — `Tidy GitHub Actions module UI`. Запушен в `origin/main`.
+
+### CI fix: StatCard signature regression
+- Поломка: CI словил `e: ... GitHubActionsModule.kt:1022:21 No value passed for parameter 'color'. Argument type mismatch: actual type is 'String', but 'Modifier' was expected.`
+- Причина: после переписывания `StatCard` сигнатура стала `StatCard(modifier: Modifier = Modifier, label, value, icon, color)` с дефолтным `modifier` в первой позиции. Старые позиционные вызовы в `RepositoryArtifactsPanel` (`StatCard("Caches", it.activeCachesCount.toString(), Icons.Rounded.Timeline, Blue)`) пытались уложить `"Caches"` в `Modifier`, потому что Kotlin не пропускает первый параметр с default-значением при позиционных аргументах.
+- Фикс: `modifier` перенесён в конец сигнатуры (`label, value, icon, color, modifier: Modifier = Modifier`). Новые call-sites в `ActionsOverviewHeader` обновлены на именованный аргумент `modifier = Modifier.weight(1f)`. Старые вызовы в `RepositoryArtifactsPanel` заработали без правок.
+- Коммит: `c1dc96f` — `Fix StatCard signature to keep legacy callers compiling`. Запушен в `origin/main`.
+
+### Скоуп НЕ затронут
+- Общие компоненты приложения (`BrowseScreen`, `FileManager`, AI Chat, Terminal, `AppearanceScreen`, `SettingsScreen`).
+- `Theme.kt` и `theme/Color.kt`.
+- `GitHubManager.kt` (data layer).
+- Остальные GitHub-модули (`GitHubProfileModule.kt`, `GitHubRepoModule.kt`, `GitHubProjectsModule.kt`, и т.д.).
+- В пределах Actions-модуля логика сети/state/dispatch не менялась — правки чисто визуальные/структурные.
+
+### Проверка
+- Локальная Android compile-проверка не запускалась по просьбе пользователя.
+- После пуша CI выявил один регресс (StatCard) — исправлен отдельным коммитом, второй пуш прошёл.

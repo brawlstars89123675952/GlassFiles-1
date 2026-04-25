@@ -35,6 +35,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,12 +63,6 @@ import com.glassfiles.data.github.GHSearchIssueResult
 import com.glassfiles.data.github.GHTopicSearchResult
 import com.glassfiles.data.github.GHUser
 import com.glassfiles.data.github.GitHubManager
-import com.glassfiles.ui.theme.Blue
-import com.glassfiles.ui.theme.SurfaceLight
-import com.glassfiles.ui.theme.SurfaceWhite
-import com.glassfiles.ui.theme.TextPrimary
-import com.glassfiles.ui.theme.TextSecondary
-import com.glassfiles.ui.theme.TextTertiary
 import kotlinx.coroutines.launch
 
 private enum class AdvancedSearchKind(val label: String) {
@@ -152,7 +147,7 @@ internal fun AdvancedSearchScreen(
         AdvancedSearchKind.USERS -> users.size
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         GHTopBar("Advanced Search", onBack = onBack)
         LazyColumn(
             Modifier.fillMaxSize(),
@@ -160,14 +155,14 @@ internal fun AdvancedSearchScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item {
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
                         label = { Text(searchHint(selectedKind)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = TextSecondary) }
+                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     )
                     if (selectedKind == AdvancedSearchKind.LABELS) {
                         OutlinedTextField(
@@ -176,7 +171,7 @@ internal fun AdvancedSearchScreen(
                             label = { Text("Repository owner/name") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
-                            leadingIcon = { Icon(Icons.Rounded.Code, null, Modifier.size(18.dp), tint = TextSecondary) }
+                            leadingIcon = { Icon(Icons.Rounded.Code, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                         )
                     }
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -188,9 +183,12 @@ internal fun AdvancedSearchScreen(
                         }
                     }
                     Button(onClick = { runSearch(1) }, enabled = query.length >= 2 && !searching && (selectedKind != AdvancedSearchKind.LABELS || labelRepository.contains("/")), modifier = Modifier.fillMaxWidth()) {
-                        if (searching) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                        else Icon(Icons.Rounded.Search, null, Modifier.size(18.dp))
-                        Text("Search")
+                        if (searching) {
+                            CircularProgressIndicator(Modifier.size(18.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Rounded.Search, null, Modifier.size(18.dp))
+                            Text("Search")
+                        }
                     }
                 }
             }
@@ -198,7 +196,7 @@ internal fun AdvancedSearchScreen(
             if (searching && resultCount == 0) {
                 item {
                     Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
                     }
                 }
             } else {
@@ -214,10 +212,10 @@ internal fun AdvancedSearchScreen(
                 if (searched && resultCount > 0 && selectedKind !in listOf(AdvancedSearchKind.REPOS, AdvancedSearchKind.USERS)) {
                     item {
                         Box(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).clickable { runSearch(page + 1) }.padding(12.dp),
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).clickable { runSearch(page + 1) }.padding(12.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("Load more", color = Blue, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text("Load more", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
@@ -229,58 +227,58 @@ internal fun AdvancedSearchScreen(
 @Composable
 private fun SearchSummary(kind: AdvancedSearchKind, count: Int, searched: Boolean, searching: Boolean) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(searchKindIcon(kind), null, Modifier.size(18.dp), tint = Blue)
+        Icon(searchKindIcon(kind), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         Column(Modifier.weight(1f)) {
-            Text(kind.label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-            Text(if (!searched) "Ready" else if (searching) "Searching..." else "$count results", fontSize = 11.sp, color = TextTertiary)
+            Text(kind.label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            Text(if (!searched) "Ready" else if (searching) "Searching..." else "${formatGitHubNumber(count)} results", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
 private fun SearchIssueCard(issue: GHSearchIssueResult, onOpen: () -> Unit) {
-    SearchCard(icon = if (issue.isPullRequest) Icons.Rounded.AccountTree else Icons.Rounded.BugReport, tint = if (issue.isPullRequest) Blue else Color(0xFFFF9500)) {
+    SearchCard(icon = if (issue.isPullRequest) Icons.Rounded.AccountTree else Icons.Rounded.BugReport, tint = if (issue.isPullRequest) MaterialTheme.colorScheme.onSurfaceVariant else GitHubWarningAmber()) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(issue.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text("${issue.repository} #${issue.number} - ${issue.state} - ${issue.updatedAt.take(10)}", fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (issue.body.isNotBlank()) Text(issue.body, fontSize = 12.sp, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(issue.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("${issue.repository} #${issue.number} - ${issue.state} - ${issue.updatedAt.take(10)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (issue.body.isNotBlank()) Text(issue.body, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                issue.labels.take(6).forEach { label -> SearchPill(label, Blue) }
-                if (issue.comments > 0) SearchPill("${issue.comments} comments", TextSecondary)
+                issue.labels.take(6).forEach { label -> SearchPill(label, MaterialTheme.colorScheme.primary) }
+                if (issue.comments > 0) SearchPill("${formatGitHubNumber(issue.comments)} comments", MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        IconButton(onClick = onOpen) { Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = Blue) }
+        IconButton(onClick = onOpen) { Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 
 @Composable
 private fun SearchCommitCard(commit: GHSearchCommitResult, onOpen: () -> Unit) {
-    SearchCard(icon = Icons.Rounded.Commit, tint = Blue) {
+    SearchCard(icon = Icons.Rounded.Commit, tint = MaterialTheme.colorScheme.onSurfaceVariant) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(commit.message.lineSequence().firstOrNull().orEmpty().ifBlank { commit.sha.take(7) }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text("${commit.repository} - ${commit.sha.take(7)} - ${commit.date.take(10)}", fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (commit.author.isNotBlank()) Text(commit.author, fontSize = 12.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(commit.message.lineSequence().firstOrNull().orEmpty().ifBlank { commit.sha.take(7) }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("${commit.repository} - ${commit.sha.take(7)} - ${commit.date.take(10)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (commit.author.isNotBlank()) Text(commit.author, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        IconButton(onClick = onOpen) { Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = Blue) }
+        IconButton(onClick = onOpen) { Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 
 @Composable
 private fun TopicSearchCard(topic: GHTopicSearchResult) {
-    SearchCard(icon = Icons.Rounded.Label, tint = Color(0xFF34C759)) {
+    SearchCard(icon = Icons.Rounded.Label, tint = GitHubSuccessGreen) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(topic.displayName.ifBlank { topic.name }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(listOf(topic.name, topic.released).filter { it.isNotBlank() }.joinToString(" - "), fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(topic.displayName.ifBlank { topic.name }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(listOf(topic.name, topic.released).filter { it.isNotBlank() }.joinToString(" - "), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val desc = topic.shortDescription.ifBlank { topic.description }
-            if (desc.isNotBlank()) Text(desc, fontSize = 12.sp, color = TextSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            if (desc.isNotBlank()) Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (topic.featured) SearchPill("Featured", Color(0xFFFF9500))
-                if (topic.curated) SearchPill("Curated", Blue)
-                topic.aliases.take(4).forEach { SearchPill(it, TextSecondary) }
+                if (topic.featured) SearchPill("Featured", GitHubWarningAmber())
+                if (topic.curated) SearchPill("Curated", MaterialTheme.colorScheme.primary)
+                topic.aliases.take(4).forEach { SearchPill(it, MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
     }
@@ -288,12 +286,12 @@ private fun TopicSearchCard(topic: GHTopicSearchResult) {
 
 @Composable
 private fun LabelSearchCard(label: GHLabelSearchResult) {
-    val color = parseLabelColor(label.color)
+    val color = parseLabelColor(label.color) ?: MaterialTheme.colorScheme.onSurfaceVariant
     SearchCard(icon = Icons.Rounded.Label, tint = color) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(label.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(label.repository, fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (label.description.isNotBlank()) Text(label.description, fontSize = 12.sp, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(label.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label.repository, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (label.description.isNotBlank()) Text(label.description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             SearchPill("#${label.color.ifBlank { "label" }}", color)
         }
     }
@@ -302,23 +300,23 @@ private fun LabelSearchCard(label: GHLabelSearchResult) {
 @Composable
 private fun SearchUserCard(user: GHUser, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).clickable(onClick = onClick).padding(12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).clickable(onClick = onClick).padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(user.avatarUrl, user.login, Modifier.size(42.dp).clip(CircleShape))
         Column(Modifier.weight(1f)) {
-            Text(user.name.ifBlank { user.login }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("@${user.login}", fontSize = 12.sp, color = TextTertiary)
+            Text(user.name.ifBlank { user.login }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("@${user.login}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = TextTertiary)
+        Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
 private fun SearchCard(icon: ImageVector, tint: Color, content: @Composable RowScope.() -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -331,14 +329,14 @@ private fun SearchCard(icon: ImageVector, tint: Color, content: @Composable RowS
 private fun SearchKindChip(kind: AdvancedSearchKind, selected: Boolean, onClick: () -> Unit) {
     Row(
         Modifier.clip(RoundedCornerShape(999.dp))
-            .background(if (selected) Blue.copy(alpha = 0.14f) else SurfaceLight)
+            .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        Icon(searchKindIcon(kind), null, Modifier.size(14.dp), tint = if (selected) Blue else TextSecondary)
-        Text(kind.label, fontSize = 12.sp, color = if (selected) Blue else TextPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Icon(searchKindIcon(kind), null, Modifier.size(14.dp), tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(kind.label, fontSize = 12.sp, color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
@@ -351,8 +349,8 @@ private fun SearchPill(label: String, color: Color) {
 
 @Composable
 private fun EmptySearchCard(message: String) {
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(28.dp), contentAlignment = Alignment.Center) {
-        Text(message, fontSize = 14.sp, color = TextTertiary)
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).padding(28.dp), contentAlignment = Alignment.Center) {
+        Text(message, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -378,9 +376,9 @@ private fun android.content.Context.openUrl(url: String) {
     if (url.isNotBlank()) startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 }
 
-private fun parseLabelColor(value: String): Color =
+private fun parseLabelColor(value: String): Color? =
     try {
         Color(("FF" + value.removePrefix("#")).toLong(16))
     } catch (_: Exception) {
-        Blue
+        null
     }

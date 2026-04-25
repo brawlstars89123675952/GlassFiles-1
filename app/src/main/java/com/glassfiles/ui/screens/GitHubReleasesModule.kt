@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.GHAsset
+import com.glassfiles.data.github.GHRepo
 import com.glassfiles.data.github.GHRelease
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.theme.*
@@ -44,6 +45,7 @@ import java.util.*
 fun ReleasesScreen(
     repoOwner: String,
     repoName: String,
+    defaultBranch: String = "main",
     onBack: () -> Unit,
     onReleaseClick: (GHRelease) -> Unit = {}
 ) {
@@ -58,21 +60,21 @@ fun ReleasesScreen(
         loading = false
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         GHTopBar(
             title = "Releases",
             subtitle = repoName,
             onBack = onBack,
             actions = {
                 IconButton(onClick = { showCreate = true }) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue)
+                    Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
                 }
             }
         )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
             return@Column
         }
@@ -88,7 +90,7 @@ fun ReleasesScreen(
 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
             items(releases) { release ->
-                ReleaseCard(release, repoOwner, repoName, releases) { updatedReleases ->
+                ReleaseCard(release, repoOwner, repoName, defaultBranch, releases) { updatedReleases ->
                     releases = updatedReleases
                 }
                 Spacer(Modifier.height(12.dp))
@@ -114,6 +116,7 @@ private fun ReleaseCard(
     release: GHRelease,
     repoOwner: String,
     repoName: String,
+    defaultBranch: String,
     releases: List<GHRelease>,
     onReleasesUpdate: (List<GHRelease>) -> Unit
 ) {
@@ -124,6 +127,22 @@ private fun ReleaseCard(
     var showDelete by remember { mutableStateOf(false) }
     var deletingAsset by remember { mutableStateOf<GHAsset?>(null) }
     var uploadingAsset by remember { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    val releaseRepo = remember(repoOwner, repoName, defaultBranch) {
+        GHRepo(
+            name = repoName,
+            fullName = "$repoOwner/$repoName",
+            description = "",
+            language = "",
+            stars = 0,
+            forks = 0,
+            isPrivate = false,
+            isFork = false,
+            defaultBranch = defaultBranch.ifBlank { "main" },
+            updatedAt = "",
+            owner = repoOwner
+        )
+    }
     val assetPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         if (release.id == 0L) {
@@ -150,41 +169,41 @@ private fun ReleaseCard(
         Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.size(12.dp).clip(CircleShape).background(if (release.prerelease) Color(0xFFFF9500) else Color(0xFF34C759)))
+            Box(Modifier.size(12.dp).clip(CircleShape).background(if (release.prerelease) GitHubWarningAmber() else GitHubSuccessGreen))
             Column(Modifier.weight(1f)) {
-                Text(release.name.ifBlank { release.tag }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                Text(release.tag, fontSize = 12.sp, color = TextSecondary)
+                Text(release.name.ifBlank { release.tag }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
+                Text(release.tag, fontSize = 12.sp, color = colors.onSurfaceVariant)
             }
             if (release.draft) {
-                Text("Draft", fontSize = 10.sp, color = Blue, modifier = Modifier.background(Blue.copy(0.1f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
+                Text("Draft", fontSize = 10.sp, color = colors.onSurfaceVariant, modifier = Modifier.background(colors.surfaceVariant, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
             }
             if (release.prerelease) {
-                Text("Pre", fontSize = 10.sp, color = Color(0xFFFF9500), modifier = Modifier.background(Color(0xFFFF9500).copy(0.1f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
+                Text("Pre", fontSize = 10.sp, color = GitHubWarningAmber(), modifier = Modifier.background(GitHubWarningAmber().copy(0.1f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
             }
             IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(32.dp)) {
                 Icon(
                     if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                     null,
                     Modifier.size(20.dp),
-                    tint = TextSecondary
+                    tint = colors.onSurfaceVariant
                 )
             }
         }
 
         if (release.createdAt.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
-            Text(formatDate(release.createdAt), fontSize = 11.sp, color = TextTertiary)
+            Text(formatDate(release.createdAt), fontSize = 11.sp, color = colors.onSurfaceVariant)
         }
 
         if (release.body.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
-            Text(release.body, fontSize = 13.sp, color = TextSecondary, maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis)
+            GitHubMarkdownDocument(release.body, releaseRepo, maxBlocks = if (expanded) null else 3)
         }
 
         if (expanded) {
             Spacer(Modifier.height(12.dp))
             if (release.assets.isNotEmpty()) {
-                Text("Assets", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text("Assets", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
                 Spacer(Modifier.height(6.dp))
                 release.assets.forEach { asset ->
                     AssetRow(
@@ -219,37 +238,24 @@ private fun ReleaseCard(
                             }
                         }
                     ) {
-                        Icon(Icons.Rounded.Publish, null, Modifier.size(16.dp), tint = Color(0xFF34C759))
+                        Icon(Icons.Rounded.Publish, null, Modifier.size(16.dp), tint = GitHubSuccessGreen)
                         Spacer(Modifier.width(4.dp))
-                        Text("Publish", color = Color(0xFF34C759), fontSize = 12.sp)
+                        Text("Publish", color = GitHubSuccessGreen, fontSize = 12.sp)
                     }
                 }
-                TextButton(
+                ReleaseActionButton(
+                    icon = Icons.Rounded.UploadFile,
+                    label = "Asset",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     enabled = !uploadingAsset && release.id > 0L,
+                    loading = uploadingAsset,
                     onClick = { assetPicker.launch("*/*") }
-                ) {
-                    if (uploadingAsset) CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
-                    else Icon(Icons.Rounded.UploadFile, null, Modifier.size(16.dp), tint = Blue)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Asset", color = Blue, fontSize = 12.sp)
-                }
+                )
                 if (release.htmlUrl.isNotBlank()) {
-                    TextButton(onClick = { openGitHubUrl(context, release.htmlUrl) }) {
-                        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = TextSecondary)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Open", color = TextSecondary, fontSize = 12.sp)
-                    }
+                    ReleaseActionButton(Icons.Rounded.OpenInNew, "Open", MaterialTheme.colorScheme.onSurfaceVariant) { openGitHubUrl(context, release.htmlUrl) }
                 }
-                TextButton(onClick = { showEdit = true }) {
-                    Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = Blue)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Edit", color = Blue, fontSize = 12.sp)
-                }
-                TextButton(onClick = { showDelete = true }) {
-                    Icon(Icons.Rounded.Delete, null, Modifier.size(16.dp), tint = Color(0xFFFF3B30))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Delete", color = Color(0xFFFF3B30), fontSize = 12.sp)
-                }
+                ReleaseActionButton(Icons.Rounded.Edit, "Edit", MaterialTheme.colorScheme.onSurfaceVariant) { showEdit = true }
+                ReleaseActionButton(Icons.Rounded.Delete, "Delete", MaterialTheme.colorScheme.error) { showDelete = true }
             }
         }
     }
@@ -287,7 +293,7 @@ private fun ReleaseCard(
                         }
                     }
                 ) {
-                    Text("Delete", color = Color(0xFFFF3B30))
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -317,7 +323,7 @@ private fun ReleaseCard(
                         }
                     }
                 ) {
-                    Text("Delete", color = Color(0xFFFF3B30))
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -329,27 +335,45 @@ private fun ReleaseCard(
 
 @Composable
 private fun AssetRow(asset: GHAsset, onDownload: () -> Unit, onDelete: (() -> Unit)?) {
+    val colors = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-            .background(SurfaceLight).padding(horizontal = 12.dp, vertical = 8.dp),
+            .background(colors.surfaceVariant).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(releaseAssetIcon(asset.name), null, Modifier.size(16.dp), tint = releaseAssetColor(asset.name))
+        Icon(releaseAssetIcon(asset.name), null, Modifier.size(24.dp), tint = colors.primary.copy(alpha = 0.72f))
         Column(Modifier.weight(1f)) {
-            Text(asset.name, fontSize = 12.sp, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(releaseAssetKind(asset.name), fontSize = 10.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(asset.name, fontSize = 12.sp, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(releaseAssetKind(asset.name), fontSize = 10.sp, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(formatBytes(asset.size), fontSize = 11.sp, color = TextTertiary)
-        Text("${asset.downloadCount}↓", fontSize = 11.sp, color = Blue)
+        Text(formatBytes(asset.size), fontSize = 11.sp, color = colors.onSurfaceVariant)
+        Text("${formatGitHubNumber(asset.downloadCount)}↓", fontSize = 11.sp, color = colors.onSurfaceVariant)
         IconButton(onClick = onDownload, modifier = Modifier.size(30.dp)) {
-            Icon(Icons.Rounded.Download, null, Modifier.size(16.dp), tint = Blue)
+            Icon(Icons.Rounded.Download, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
         }
         if (onDelete != null) {
             IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
-                Icon(Icons.Rounded.Delete, null, Modifier.size(16.dp), tint = Color(0xFFFF3B30))
+                Icon(Icons.Rounded.Delete, null, Modifier.size(16.dp), tint = colors.error)
             }
         }
+    }
+}
+
+@Composable
+private fun ReleaseActionButton(
+    icon: ImageVector,
+    label: String,
+    tint: Color,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    onClick: () -> Unit
+) {
+    TextButton(enabled = enabled, onClick = onClick) {
+        if (loading) CircularProgressIndicator(Modifier.size(16.dp), color = tint, strokeWidth = 2.dp)
+        else Icon(icon, null, Modifier.size(16.dp), tint = tint)
+        Spacer(Modifier.width(4.dp))
+        Text(label, color = tint, fontSize = 12.sp)
     }
 }
 
@@ -392,8 +416,8 @@ private fun CreateReleaseDialog(
                             }
                         }
                     ) {
-                        if (generating) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
-                        else Text("Generate changelog", color = Blue, fontSize = 12.sp)
+                        if (generating) CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+                        else Text("Generate changelog", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -561,43 +585,3 @@ private fun Context.queryDisplayName(uri: Uri): String {
 
 private fun String.sanitizeReleaseAssetName(): String =
     replace(Regex("""[\\/:*?"<>|]+"""), "-").trim().ifBlank { "release-asset.bin" }
-
-private fun releaseAssetKind(name: String): String {
-    val lower = name.lowercase(Locale.US)
-    return when {
-        lower.endsWith(".apk") -> "Android APK"
-        lower.endsWith(".aab") -> "Android App Bundle"
-        lower.endsWith(".img") || lower.endsWith(".boot") || lower.endsWith(".dtbo") || lower.endsWith(".vendor_boot") -> "Kernel image"
-        lower.endsWith(".ko") || lower.contains("module") || lower.contains("magisk") -> "Kernel / Magisk module"
-        lower.contains("turnip") || lower.contains("adreno") -> "Turnip / Adreno driver"
-        lower.endsWith(".exe") || lower.endsWith(".msi") -> "Windows build"
-        lower.endsWith(".ipa") -> "iOS app"
-        lower.endsWith(".deb") || lower.endsWith(".rpm") || lower.endsWith(".appimage") -> "Linux package"
-        lower.endsWith(".zip") || lower.endsWith(".tar.gz") || lower.endsWith(".tgz") || lower.endsWith(".7z") -> "Archive"
-        lower.endsWith(".sha256") || lower.endsWith(".sig") || lower.endsWith(".asc") -> "Checksum / signature"
-        else -> "Release asset"
-    }
-}
-
-private fun releaseAssetIcon(name: String): ImageVector {
-    val lower = name.lowercase(Locale.US)
-    return when {
-        lower.endsWith(".apk") || lower.endsWith(".aab") -> Icons.Rounded.Android
-        lower.endsWith(".img") || lower.endsWith(".boot") || lower.endsWith(".dtbo") || lower.endsWith(".vendor_boot") -> Icons.Rounded.Memory
-        lower.endsWith(".zip") || lower.endsWith(".tar.gz") || lower.endsWith(".tgz") || lower.endsWith(".7z") -> Icons.Rounded.FolderZip
-        lower.endsWith(".exe") || lower.endsWith(".msi") || lower.endsWith(".deb") || lower.endsWith(".rpm") || lower.endsWith(".ipa") -> Icons.Rounded.Apps
-        lower.endsWith(".sha256") || lower.endsWith(".sig") || lower.endsWith(".asc") -> Icons.Rounded.Verified
-        else -> Icons.Rounded.Attachment
-    }
-}
-
-private fun releaseAssetColor(name: String): Color {
-    val lower = name.lowercase(Locale.US)
-    return when {
-        lower.endsWith(".apk") || lower.endsWith(".aab") -> Color(0xFF34C759)
-        lower.endsWith(".img") || lower.endsWith(".boot") || lower.endsWith(".dtbo") || lower.endsWith(".vendor_boot") -> Color(0xFFFF9500)
-        lower.contains("turnip") || lower.contains("adreno") -> Color(0xFFAF52DE)
-        lower.endsWith(".sha256") || lower.endsWith(".sig") || lower.endsWith(".asc") -> Blue
-        else -> TextSecondary
-    }
-}

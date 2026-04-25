@@ -41,21 +41,22 @@ import java.io.File
 internal fun LoginScreen(onBack: () -> Unit, onMinimize: () -> Unit, onClose: (() -> Unit)? = null, onLogin: (String) -> Unit) {
     var token by remember { mutableStateOf("") }; var testing by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }
     val context = LocalContext.current; val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+    val colors = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxSize().background(colors.background)) {
         GHTopBar("GitHub", onBack = onBack, onMinimize = onMinimize, onClose = onClose)
         Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Box(Modifier.size(80.dp).clip(CircleShape).background(TextPrimary), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Code, null, Modifier.size(40.dp), tint = SurfaceLight) }
-            Spacer(Modifier.height(24.dp)); Text("GitHub", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Spacer(Modifier.height(8.dp)); Text(Strings.ghLoginDesc, fontSize = 14.sp, color = TextSecondary, modifier = Modifier.padding(horizontal = 16.dp), textAlign = TextAlign.Center)
+            Box(Modifier.size(80.dp).clip(CircleShape).background(colors.onSurface), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Code, null, Modifier.size(40.dp), tint = colors.surface) }
+            Spacer(Modifier.height(24.dp)); Text("GitHub", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
+            Spacer(Modifier.height(8.dp)); Text(Strings.ghLoginDesc, fontSize = 14.sp, color = colors.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp), textAlign = TextAlign.Center)
             Spacer(Modifier.height(24.dp))
             OutlinedTextField(token, { token = it; error = "" }, label = { Text("Personal Access Token") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), isError = error.isNotBlank())
-            if (error.isNotBlank()) Text(error, color = Color(0xFFFF3B30), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-            Spacer(Modifier.height(8.dp)); Text(Strings.ghTokenHint, fontSize = 11.sp, color = TextTertiary, modifier = Modifier.fillMaxWidth())
+            if (error.isNotBlank()) Text(error, color = GitHubErrorRed, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            Spacer(Modifier.height(8.dp)); Text(Strings.ghTokenHint, fontSize = 11.sp, color = colors.onSurfaceVariant, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(20.dp))
             Button(onClick = { if (token.isBlank()) { error = "Token required"; return@Button }; testing = true; error = ""
                 scope.launch { GitHubManager.saveToken(context, token); val u = GitHubManager.getUser(context); if (u != null) onLogin(token) else { error = "Invalid token"; GitHubManager.logout(context) }; testing = false }
-            }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = TextPrimary), enabled = !testing) {
-                if (testing) CircularProgressIndicator(Modifier.size(20.dp), color = SurfaceLight, strokeWidth = 2.dp) else Text(Strings.ghSignIn, color = SurfaceLight, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = colors.primary), enabled = !testing) {
+                if (testing) CircularProgressIndicator(Modifier.size(20.dp), color = colors.onPrimary, strokeWidth = 2.dp) else Text(Strings.ghSignIn, color = colors.onPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -81,28 +82,29 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
     if (showOrgs) { OrgsScreen(onBack = { showOrgs = false }, onRepoClick = { showOrgs = false; onRepoClick(it) }); return }
     if (showPackages && user != null) { PackagesScreen(userLogin = user.login, onBack = { showPackages = false }); return }
     if (showAdvancedSearch) { AdvancedSearchScreen(onBack = { showAdvancedSearch = false }, onRepoClick = onRepoClick, onProfile = onProfile); return }
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+    val colors = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxSize().background(colors.background)) {
         GHTopBar("GitHub", onBack = onBack, onMinimize = onMinimize, onClose = onClose) {
-            IconButton(onClick = onNotifications) { Icon(Icons.Rounded.Notifications, null, Modifier.size(20.dp), tint = Blue) }
-            IconButton(onClick = onGists) { Icon(Icons.Rounded.Description, null, Modifier.size(20.dp), tint = Blue) }
-            IconButton(onClick = { showCreate = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue) }
-            IconButton(onClick = onSettings) { Icon(Icons.Rounded.Settings, null, Modifier.size(20.dp), tint = TextSecondary) }
+            IconButton(onClick = onNotifications) { Icon(Icons.Rounded.Notifications, null, Modifier.size(20.dp), tint = colors.primary) }
+            IconButton(onClick = onGists) { Icon(Icons.Rounded.Description, null, Modifier.size(20.dp), tint = colors.primary) }
+            IconButton(onClick = { showCreate = true }) { Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = colors.primary) }
+            IconButton(onClick = onSettings) { Icon(Icons.Rounded.Settings, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant) }
         }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             if (user != null) {
-                item { Box(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(16.dp)).background(SurfaceWhite).padding(16.dp)) {
+                item { Box(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(16.dp)).background(colors.surface).padding(16.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(user.avatarUrl, user.login, Modifier.size(56.dp).clip(CircleShape))
-                        Column(Modifier.weight(1f)) { Text(user.name.ifBlank { user.login }, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary); Text("@${user.login}", fontSize = 13.sp, color = TextSecondary); if (user.bio.isNotBlank()) Text(user.bio, fontSize = 12.sp, color = TextTertiary, maxLines = 2) }
+                        Column(Modifier.weight(1f)) { Text(user.name.ifBlank { user.login }, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.onSurface); Text("@${user.login}", fontSize = 13.sp, color = colors.onSurfaceVariant); if (user.bio.isNotBlank()) Text(user.bio, fontSize = 12.sp, color = colors.onSurfaceVariant, maxLines = 2) }
                     }
                 } }
                 item { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatBox(Strings.ghRepos, "${user.publicRepos + user.privateRepos}", Modifier.weight(1f)); StatBox(Strings.ghFollowers, "${user.followers}", Modifier.weight(1f)); StatBox(Strings.ghFollowing, "${user.following}", Modifier.weight(1f))
+                    StatBox(Strings.ghRepos, formatGitHubNumber(user.publicRepos + user.privateRepos), Modifier.weight(1f)); StatBox(Strings.ghFollowers, formatGitHubNumber(user.followers), Modifier.weight(1f)); StatBox(Strings.ghFollowing, formatGitHubNumber(user.following), Modifier.weight(1f))
                 } }
             }
             // Quick actions row
             item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     QuickChip(Icons.Rounded.Star, Strings.ghStarredRepos) { showStarred = true }
                     QuickChip(Icons.Rounded.Business, Strings.ghOrganizations) { showOrgs = true }
                     QuickChip(Icons.Rounded.Search, "Search") { showAdvancedSearch = true }
@@ -111,17 +113,17 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
                 }
             }
             item { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    if (query.isEmpty()) Text(if (searchPublic) Strings.ghSearchPublic else Strings.ghSearchRepos, color = TextTertiary, fontSize = 14.sp)
-                    BasicTextField(query, { query = it }, textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp), singleLine = true, modifier = Modifier.fillMaxWidth())
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(colors.surface).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    if (query.isEmpty()) Text(if (searchPublic) Strings.ghSearchPublic else Strings.ghSearchRepos, color = colors.onSurfaceVariant, fontSize = 14.sp)
+                    BasicTextField(query, { query = it }, textStyle = androidx.compose.ui.text.TextStyle(color = colors.onSurface, fontSize = 14.sp), singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
-                Box(Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(if (searchPublic) Blue.copy(0.15f) else SurfaceWhite).clickable { searchPublic = !searchPublic; query = "" }, contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Public, null, Modifier.size(18.dp), tint = if (searchPublic) Blue else TextSecondary)
+                Box(Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(if (searchPublic) colors.primary.copy(0.15f) else colors.surface).clickable { searchPublic = !searchPublic; query = "" }, contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Public, null, Modifier.size(18.dp), tint = if (searchPublic) colors.primary else colors.onSurfaceVariant)
                 }
             } }
-            if (loading) { item { Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) } } }
+            if (loading) { item { Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) } } }
             else { items(filtered) { repo -> RepoCard(repo) { onRepoClick(repo) } }
-                if (!searchPublic && query.isBlank() && reposHasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).clickable { scope.launch { reposPage++; val r = GitHubManager.getRepos(context, reposPage); if (r.size < 30) reposHasMore = false; repos = repos + r } }.padding(12.dp), contentAlignment = Alignment.Center) { Text("Load more", color = Blue, fontSize = 14.sp, fontWeight = FontWeight.Medium) } }
+                if (!searchPublic && query.isBlank() && reposHasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).clickable { scope.launch { reposPage++; val r = GitHubManager.getRepos(context, reposPage); if (r.size < 30) reposHasMore = false; repos = repos + r } }.padding(12.dp), contentAlignment = Alignment.Center) { Text("Load more", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp, fontWeight = FontWeight.Medium) } }
             }
         }
     }
@@ -129,11 +131,11 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
 }
 
 @Composable private fun QuickChip(icon: ImageVector, label: String, onClick: () -> Unit) {
-    Row(Modifier.clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).border(0.5.dp, SeparatorColor, RoundedCornerShape(10.dp))
-        .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Icon(icon, null, Modifier.size(16.dp), tint = Blue)
-        Text(label, fontSize = 13.sp, color = TextPrimary)
+    Row(Modifier.height(40.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).border(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+        .clickable(onClick = onClick).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
