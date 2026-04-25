@@ -98,7 +98,7 @@ internal fun StarredScreen(onBack: () -> Unit, onRepoClick: (GHRepo) -> Unit) {
         GHTopBar(Strings.ghStarredRepos, onBack = onBack)
         if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
         else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-            items(repos) { repo -> RepoCard(repo) { onRepoClick(repo) } }
+            items(repos) { repo -> RepoCard(repo, onClick = { onRepoClick(repo) }) }
         }
     }
 }
@@ -127,7 +127,7 @@ internal fun OrgsScreen(onBack: () -> Unit, onRepoClick: (GHRepo) -> Unit) {
             GHTopBar(selectedOrg!!.login, onBack = { selectedOrg = null; orgRepos = emptyList() })
             if (loadingRepos) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
             else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
-                items(orgRepos) { repo -> RepoCard(repo) { onRepoClick(repo) } }
+                items(orgRepos) { repo -> RepoCard(repo, onClick = { onRepoClick(repo) }) }
             }
         }
         return

@@ -201,7 +201,7 @@ internal fun AdvancedSearchScreen(
                 }
             } else {
                 when (selectedKind) {
-                    AdvancedSearchKind.REPOS -> items(repos) { repo -> RepoCard(repo) { onRepoClick(repo) } }
+                    AdvancedSearchKind.REPOS -> items(repos) { repo -> RepoCard(repo, onClick = { onRepoClick(repo) }) }
                     AdvancedSearchKind.ISSUES -> items(issues) { issue -> SearchIssueCard(issue) { context.openUrl(issue.htmlUrl) } }
                     AdvancedSearchKind.COMMITS -> items(commits) { commit -> SearchCommitCard(commit) { context.openUrl(commit.htmlUrl) } }
                     AdvancedSearchKind.TOPICS -> items(topics) { topic -> TopicSearchCard(topic) }

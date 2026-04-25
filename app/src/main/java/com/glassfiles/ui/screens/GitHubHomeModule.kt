@@ -122,7 +122,7 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
                 }
             } }
             if (loading) { item { Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) } } }
-            else { items(filtered) { repo -> RepoCard(repo) { onRepoClick(repo) } }
+            else { items(filtered) { repo -> RepoCard(repo, onClick = { onRepoClick(repo) }) }
                 if (!searchPublic && query.isBlank() && reposHasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).clickable { scope.launch { reposPage++; val r = GitHubManager.getRepos(context, reposPage); if (r.size < 30) reposHasMore = false; repos = repos + r } }.padding(12.dp), contentAlignment = Alignment.Center) { Text("Load more", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp, fontWeight = FontWeight.Medium) } }
             }
         }

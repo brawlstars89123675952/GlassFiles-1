@@ -163,7 +163,7 @@ fun ProfileScreen(
                 }
             } else {
                 items(repos.size) { index ->
-                    RepoCard(repos[index]) { onRepoClick(repos[index]) }
+                    RepoCard(repos[index], onClick = { onRepoClick(repos[index]) })
                     if (index < repos.lastIndex) Spacer(Modifier.height(8.dp))
                 }
             }
