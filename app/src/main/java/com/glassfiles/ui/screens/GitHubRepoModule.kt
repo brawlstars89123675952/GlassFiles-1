@@ -36,7 +36,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.ImageLoader
 import coil.compose.AsyncImage
+import coil.decode.SvgDecoder
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.glassfiles.data.Strings
@@ -53,6 +55,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import okhttp3.OkHttpClient
 import org.json.JSONObject
 
 // Compact mode — propagates through all sub-screens automatically
@@ -68,6 +71,7 @@ private const val README_MAX_CODE_LINES = 1_000
 private const val README_MAX_TABLE_ROWS = 50
 private const val README_MAX_LINE_CHARS = 4_000
 private const val README_DEFAULT_IMAGE_ASPECT_RATIO = 16f / 9f
+private const val README_IMAGE_USER_AGENT = "GlassFiles-Android/1.0"
 
 // Regression test repos (must not freeze):
 // - d2phap/imageglass (large with HTML and images)
@@ -137,24 +141,24 @@ internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -
                     val fetched = withTimeout(README_FETCH_TIMEOUT_MS) {
                         fetchReadmeForRender(context, repo.owner, repo.name)
                     }
-                    val markdownBytes = fetched.toByteArray().size
+                    val markdownBytes = fetched.markdown.toByteArray().size
                     Log.d(README_RENDER_TAG, "fetch complete, size=$markdownBytes bytes ${repo.owner}/${repo.name}")
-                    if (fetched.isBlank()) {
+                    if (fetched.markdown.isBlank()) {
                         readme = ""
                         readmeBlocks = emptyList()
                         return@readmeLoad
                     }
                     if (markdownBytes > README_MAX_RENDER_BYTES) {
-                        readme = fetched
+                        readme = fetched.markdown
                         readmeBlocks = emptyList()
                         readmeError = "README is too large to render safely (${ghFmtSize(markdownBytes.toLong())})."
                         Log.w(README_RENDER_TAG, "parse skipped large README ${repo.owner}/${repo.name} bytes=$markdownBytes")
                         return@readmeLoad
                     }
                     Log.d(README_RENDER_TAG, "parse start ${repo.owner}/${repo.name}")
-                    val parsed = withContext(Dispatchers.Default) { parseReadmeBlocks(fetched, repo) }
+                    val parsed = withContext(Dispatchers.Default) { parseReadmeBlocks(fetched.markdown, repo, fetched.path) }
                     Log.d(README_RENDER_TAG, "parse complete, blocks=${parsed.size} ${repo.owner}/${repo.name}")
-                    readme = fetched
+                    readme = fetched.markdown
                     readmeBlocks = parsed
                 }
             }
@@ -955,7 +959,9 @@ internal fun ReleasesTab(releases: List<GHRelease>, repo: GHRepo) { val context 
     } } }
 }
 
-private suspend fun fetchReadmeForRender(context: Context, owner: String, repo: String): String = withContext(Dispatchers.IO) {
+private data class ReadmeFetchResult(val markdown: String, val path: String)
+
+private suspend fun fetchReadmeForRender(context: Context, owner: String, repo: String): ReadmeFetchResult = withContext(Dispatchers.IO) {
     val encodedOwner = owner.encodeGithubPathPart()
     val encodedRepo = repo.encodeGithubPathPart()
     val url = "https://api.github.com/repos/$encodedOwner/$encodedRepo/readme"
@@ -975,11 +981,17 @@ private suspend fun fetchReadmeForRender(context: Context, owner: String, repo: 
         val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
         if (code !in 200..299) {
             Log.w(README_RENDER_TAG, "fetch HTTP $code $owner/$repo body=${body.take(160)}")
-            return@withContext ""
+            return@withContext ReadmeFetchResult("", "")
         }
-        val content = JSONObject(body).optString("content", "")
-        if (content.isBlank()) ""
-        else String(android.util.Base64.decode(content.replace("\n", ""), android.util.Base64.DEFAULT))
+        val json = JSONObject(body)
+        val content = json.optString("content", "")
+        val path = json.optString("path", "")
+        val markdown = if (content.isBlank()) {
+            ""
+        } else {
+            String(android.util.Base64.decode(content.replace("\n", ""), android.util.Base64.DEFAULT))
+        }
+        ReadmeFetchResult(markdown, path)
     } finally {
         connection.disconnect()
     }
@@ -990,6 +1002,7 @@ private fun String.encodeGithubPathPart(): String =
 
 @Composable
 private fun ReadmeTab(readme: String?, blocks: List<ReadmeRenderBlock>?, error: String?, languages: Map<String, Long>, contributors: List<GHContributor>, repo: GHRepo, onRetry: () -> Unit) {
+    val readmeImageLoader = rememberReadmeImageLoader(LocalContext.current)
     val total = languages.values.sum().toFloat().coerceAtLeast(1f)
     var rawView by remember(readme) { mutableStateOf(false) }
     var visibleCount by remember(readme) { mutableIntStateOf(250) }
@@ -1034,20 +1047,19 @@ private fun ReadmeTab(readme: String?, blocks: List<ReadmeRenderBlock>?, error: 
             }
             else -> {
                 item(key = "readme_doc_top_${repo.owner}_${repo.name}") {
-                    Box(Modifier.fillMaxWidth().readmeDocumentSurface(top = true, bottom = shownBlocks.isEmpty()).padding(top = 14.dp))
+                    Spacer(Modifier.height(6.dp))
                 }
                 items(shownBlocks, key = { it.stableId }) { block ->
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .readmeDocumentSurface()
-                            .padding(horizontal = 14.dp, vertical = 4.dp)
+                            .padding(horizontal = 2.dp, vertical = 4.dp)
                     ) {
-                        ReadmeBlockView(block)
+                        ReadmeBlockView(block, readmeImageLoader)
                     }
                 }
                 item(key = "readme_doc_bottom_${repo.owner}_${repo.name}_${shownBlocks.size}") {
-                    Box(Modifier.fillMaxWidth().readmeDocumentSurface(top = false, bottom = true).padding(bottom = 14.dp))
+                    Spacer(Modifier.height(10.dp))
                 }
                 if (visibleCount < safeBlocks.size) {
                     item {
@@ -1062,19 +1074,7 @@ private fun ReadmeTab(readme: String?, blocks: List<ReadmeRenderBlock>?, error: 
 }
 
 @Composable
-private fun Modifier.readmeDocumentSurface(top: Boolean = false, bottom: Boolean = false): Modifier {
-    val shape = when {
-        top && bottom -> RoundedCornerShape(14.dp)
-        top -> RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
-        bottom -> RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp)
-        else -> RoundedCornerShape(0.dp)
-    }
-    return this
-        .background(MaterialTheme.colorScheme.surface, shape)
-}
-
-@Composable
-private fun ReadmeBlockView(block: ReadmeRenderBlock) {
+private fun ReadmeBlockView(block: ReadmeRenderBlock, imageLoader: ImageLoader) {
     when (block) {
         is ReadmeRenderBlock.Heading -> {
             val size = when (block.level) {
@@ -1098,7 +1098,7 @@ private fun ReadmeBlockView(block: ReadmeRenderBlock) {
             ReadmeText(block.text, modifier = Modifier.weight(1f))
         }
         is ReadmeRenderBlock.Rule -> Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(0.8.dp).background(SeparatorColor))
-        is ReadmeRenderBlock.Image -> ReadmeImage(block)
+        is ReadmeRenderBlock.Image -> ReadmeImage(block, imageLoader)
         is ReadmeRenderBlock.Code -> ReadmeCodeBlock(block)
         is ReadmeRenderBlock.Table -> ReadmeTable(block.rows)
         is ReadmeRenderBlock.Link -> ReadmeLinkCard(block.text, block.url)
@@ -1168,7 +1168,28 @@ private fun ReadmeBullet(text: String, ordered: Boolean = false, checked: Boolea
 }
 
 @Composable
-private fun ReadmeImage(block: ReadmeRenderBlock.Image) {
+private fun rememberReadmeImageLoader(context: Context): ImageLoader {
+    val appContext = context.applicationContext
+    return remember(appContext) {
+        ImageLoader.Builder(appContext)
+            .okHttpClient(
+                OkHttpClient.Builder()
+                    .addInterceptor { chain ->
+                        chain.proceed(
+                            chain.request().newBuilder()
+                                .header("User-Agent", README_IMAGE_USER_AGENT)
+                                .build()
+                        )
+                    }
+                    .build()
+            )
+            .components { add(SvgDecoder.Factory()) }
+            .build()
+    }
+}
+
+@Composable
+private fun ReadmeImage(block: ReadmeRenderBlock.Image, imageLoader: ImageLoader) {
     val context = LocalContext.current
     val placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
     var failed by remember(block.url) { mutableStateOf(false) }
@@ -1187,17 +1208,7 @@ private fun ReadmeImage(block: ReadmeRenderBlock.Image) {
         if (animatedGif) {
             ReadmeLinkCard(block.alt.ifBlank { "Animated image skipped" }, block.url)
         } else if (failed) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(block.aspectRatio.coerceIn(0.5f, 3f))
-                    .heightIn(min = 200.dp, max = 360.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(block.alt.ifBlank { "Image unavailable" }, fontSize = 12.sp, color = TextTertiary)
-            }
+            ReadmeImageUnavailable(block.alt)
         } else {
             AsyncImage(
                 model = ImageRequest.Builder(context)
@@ -1208,6 +1219,7 @@ private fun ReadmeImage(block: ReadmeRenderBlock.Image) {
                     .crossfade(false)
                     .build(),
                 contentDescription = block.alt,
+                imageLoader = imageLoader,
                 placeholder = placeholder,
                 error = placeholder,
                 modifier = Modifier
@@ -1223,6 +1235,24 @@ private fun ReadmeImage(block: ReadmeRenderBlock.Image) {
                 }
             )
         }
+    }
+}
+
+@Composable
+private fun ReadmeImageUnavailable(alt: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(Icons.Rounded.BrokenImage, null, Modifier.size(16.dp), tint = TextTertiary)
+        Text(
+            alt.ifBlank { "image unavailable" },
+            fontSize = 12.sp,
+            color = TextTertiary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -1371,7 +1401,7 @@ private sealed class ReadmeRenderBlock {
     data class Link(val text: String, val url: String, override val stableId: String = "") : ReadmeRenderBlock()
 }
 
-private suspend fun parseReadmeBlocks(markdown: String, repo: GHRepo): List<ReadmeRenderBlock> {
+private suspend fun parseReadmeBlocks(markdown: String, repo: GHRepo, readmePath: String = ""): List<ReadmeRenderBlock> {
     val blocks = mutableListOf<ReadmeRenderBlock>()
     val lines = markdown.replace("\r\n", "\n").lines()
     var i = 0
@@ -1396,12 +1426,12 @@ private suspend fun parseReadmeBlocks(markdown: String, repo: GHRepo): List<Read
                 if (i < lines.size) i++
                 blocks += ReadmeRenderBlock.Code(language, code.joinToString("\n"))
             }
-            readmeMarkdownImages(line, repo).isNotEmpty() -> {
-                blocks += readmeMarkdownImages(line, repo)
+            readmeMarkdownImages(line, repo, readmePath).isNotEmpty() -> {
+                blocks += readmeMarkdownImages(line, repo, readmePath)
                 i++
             }
-            readmeHtmlImages(line, repo).isNotEmpty() -> {
-                blocks += readmeHtmlImages(line, repo)
+            readmeHtmlImages(line, repo, readmePath).isNotEmpty() -> {
+                blocks += readmeHtmlImages(line, repo, readmePath)
                 i++
             }
             line.equals("</a>", ignoreCase = true) || line.startsWith("<br", ignoreCase = true) -> i++
@@ -1451,7 +1481,7 @@ private suspend fun parseReadmeBlocks(markdown: String, repo: GHRepo): List<Read
             }
             readmeStandaloneMarkdownLink(line) != null -> {
                 val link = readmeStandaloneMarkdownLink(line)!!
-                blocks += ReadmeRenderBlock.Link(link.first, readmeResolveUrl(link.second, repo))
+                blocks += ReadmeRenderBlock.Link(link.first, readmeResolveUrl(link.second, repo, readmePath))
                 i++
             }
             else -> {
@@ -1461,7 +1491,7 @@ private suspend fun parseReadmeBlocks(markdown: String, repo: GHRepo): List<Read
                     val current = lines[i].trim()
                     if (current.isBlank() || current.startsWith("#") || current.startsWith("```") || current.startsWith("~~~") ||
                         current.startsWith("- ") || current.startsWith("* ") || current.startsWith(">") || current.startsWith("|") ||
-                        readmeMarkdownImages(current, repo).isNotEmpty() || readmeHtmlImages(current, repo).isNotEmpty()
+                        readmeMarkdownImages(current, repo, readmePath).isNotEmpty() || readmeHtmlImages(current, repo, readmePath).isNotEmpty()
                     ) break
                     paragraph += stripReadmeHtml(current)
                     i++
@@ -1519,21 +1549,21 @@ private fun ReadmeRenderBlock.readmeKeyContent(): String = when (this) {
     is ReadmeRenderBlock.Link -> "$text|$url"
 }
 
-private fun readmeMarkdownImages(line: String, repo: GHRepo): List<ReadmeRenderBlock.Image> {
+private fun readmeMarkdownImages(line: String, repo: GHRepo, readmePath: String): List<ReadmeRenderBlock.Image> {
     val regex = Regex("!\\[([^]]*)]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)")
     return regex.findAll(line).mapNotNull { match ->
         val raw = match.groupValues.getOrNull(2).orEmpty()
-        if (raw.isBlank()) null else ReadmeRenderBlock.Image(readmeResolveUrl(raw, repo), match.groupValues.getOrNull(1).orEmpty())
+        if (raw.isBlank()) null else ReadmeRenderBlock.Image(readmeResolveUrl(raw, repo, readmePath), match.groupValues.getOrNull(1).orEmpty())
     }.toList()
 }
 
-private fun readmeHtmlImages(line: String, repo: GHRepo): List<ReadmeRenderBlock.Image> {
+private fun readmeHtmlImages(line: String, repo: GHRepo, readmePath: String): List<ReadmeRenderBlock.Image> {
     val regex = Regex("<img\\b[^>]*src=[\"']([^\"']+)[\"'][^>]*>", RegexOption.IGNORE_CASE)
     return regex.findAll(line).mapNotNull { match ->
         val raw = match.groupValues.getOrNull(1).orEmpty()
         val tag = match.value
         if (raw.isBlank()) null else ReadmeRenderBlock.Image(
-            url = readmeResolveUrl(raw, repo),
+            url = readmeResolveUrl(raw, repo, readmePath),
             alt = readmeHtmlAttr(tag, "alt"),
             aspectRatio = readmeHtmlImageAspectRatio(tag)
         )
@@ -1594,13 +1624,43 @@ private fun readmeSafeText(text: String): String =
         if (line.length <= README_MAX_LINE_CHARS) line else line.take(README_MAX_LINE_CHARS) + "…"
     }
 
-private fun readmeResolveUrl(raw: String, repo: GHRepo): String {
-    val url = raw.trim()
+private fun readmeResolveUrl(raw: String, repo: GHRepo, readmePath: String = ""): String {
+    val url = readmeCleanImageUrl(raw)
     if (url.startsWith("http://") || url.startsWith("https://")) return url
     if (url.startsWith("//")) return "https:$url"
     if (url.startsWith("#")) return url
-    if (url.startsWith("/")) return "https://raw.githubusercontent.com/${repo.owner}/${repo.name}/${repo.defaultBranch}$url"
-    return "https://raw.githubusercontent.com/${repo.owner}/${repo.name}/${repo.defaultBranch}/$url"
+    val (path, suffix) = readmeSplitPathSuffix(url)
+    val baseDir = readmePath.substringBeforeLast('/', missingDelimiterValue = "")
+    val joinedPath = if (path.startsWith("/")) {
+        path.trimStart('/')
+    } else {
+        listOf(baseDir, path.removePrefix("./")).filter { it.isNotBlank() }.joinToString("/")
+    }
+    val normalizedPath = readmeNormalizePath(joinedPath)
+    return "https://raw.githubusercontent.com/${repo.owner}/${repo.name}/${repo.defaultBranch.ifBlank { "main" }}/$normalizedPath$suffix"
+}
+
+private fun readmeCleanImageUrl(raw: String): String =
+    raw.trim()
+        .removeSurrounding("<", ">")
+        .replace("&amp;", "&")
+        .replace("&#38;", "&")
+
+private fun readmeSplitPathSuffix(url: String): Pair<String, String> {
+    val suffixStart = listOf(url.indexOf('?'), url.indexOf('#')).filter { it >= 0 }.minOrNull() ?: return url to ""
+    return url.take(suffixStart) to url.drop(suffixStart)
+}
+
+private fun readmeNormalizePath(path: String): String {
+    val segments = mutableListOf<String>()
+    path.split('/').forEach { segment ->
+        when (segment) {
+            "", "." -> Unit
+            ".." -> if (segments.isNotEmpty()) segments.removeAt(segments.lastIndex)
+            else -> segments += segment
+        }
+    }
+    return segments.joinToString("/")
 }
 
 private fun readmeBrowserUrl(repo: GHRepo): String =
