@@ -18,8 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -41,26 +39,30 @@ import java.io.File
 
 @Composable internal fun StatBox(label: String, value: String, modifier: Modifier) { Column(modifier.clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary); Text(label, fontSize = 11.sp, color = TextSecondary) } }
 
-internal fun Modifier.ghGlassCard(radius: androidx.compose.ui.unit.Dp = 16.dp): Modifier =
-    this.shadow(8.dp, RoundedCornerShape(radius), spotColor = Blue.copy(alpha = 0.10f))
-        .clip(RoundedCornerShape(radius))
-        .background(Brush.verticalGradient(listOf(SurfaceWhite.copy(alpha = 0.72f), Color(0xFF161616).copy(alpha = 0.72f))))
-        .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(radius))
+@Composable
+internal fun Modifier.ghGlassCard(radius: androidx.compose.ui.unit.Dp = 16.dp): Modifier {
+    val shape = RoundedCornerShape(radius)
+    return this
+        .clip(shape)
+        .background(MaterialTheme.colorScheme.surface)
+        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+}
 
 @Composable
 internal fun RepoCard(repo: GHRepo, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).ghGlassCard().clickable(onClick = onClick).padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-        Box(Modifier.size(38.dp).background((if (repo.isPrivate) Color(0xFFFF9F0A) else Blue).copy(0.12f), RoundedCornerShape(11.dp)), contentAlignment = Alignment.Center) {
-            Icon(if (repo.isPrivate) Icons.Rounded.Lock else Icons.Rounded.FolderOpen, null, Modifier.size(21.dp), tint = if (repo.isPrivate) Color(0xFFFF9F0A) else Blue)
+        Box(Modifier.size(38.dp).background(colors.primary.copy(0.10f), RoundedCornerShape(11.dp)), contentAlignment = Alignment.Center) {
+            Icon(if (repo.isPrivate) Icons.Rounded.Lock else Icons.Rounded.FolderOpen, null, Modifier.size(21.dp), tint = colors.primary)
         }
         Column(Modifier.weight(1f)) {
-            Text(repo.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (repo.description.isNotBlank()) Text(repo.description, fontSize = 12.sp, color = TextSecondary, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
+            Text(repo.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (repo.description.isNotBlank()) Text(repo.description, fontSize = 12.sp, color = colors.onSurfaceVariant, lineHeight = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (repo.language.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).clip(CircleShape).background(langColor(repo.language))); Text(repo.language, fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.Medium) }
-                if (repo.stars > 0) Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Star, null, Modifier.size(13.dp), tint = Color(0xFFFFCC00)); Text("${repo.stars}", fontSize = 11.sp, color = TextSecondary, fontFamily = FontFamily.Monospace) }
-                if (repo.forks > 0) Text("\u2491 ${repo.forks}", fontSize = 11.sp, color = TextSecondary, fontFamily = FontFamily.Monospace)
-                if (repo.isFork) Text("fork", fontSize = 10.sp, color = TextTertiary)
+                if (repo.language.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(8.dp).clip(CircleShape).background(langColor(repo.language))); Text(repo.language, fontSize = 11.sp, color = colors.onSurfaceVariant, fontWeight = FontWeight.Medium) }
+                if (repo.stars > 0) Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Star, null, Modifier.size(13.dp), tint = colors.onSurfaceVariant); Text("${repo.stars}", fontSize = 11.sp, color = colors.onSurfaceVariant, fontFamily = FontFamily.Monospace) }
+                if (repo.forks > 0) Text("\u2491 ${repo.forks}", fontSize = 11.sp, color = colors.onSurfaceVariant, fontFamily = FontFamily.Monospace)
+                if (repo.isFork) Text("fork", fontSize = 10.sp, color = colors.onSurfaceVariant)
             }
         }
     }

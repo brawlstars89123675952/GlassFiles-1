@@ -787,6 +787,7 @@ private fun ActionsOverviewHeader(
 
 @Composable
 private fun StatCard(label: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color) {
+    val colors = MaterialTheme.colorScheme
     Column(
         Modifier
             .width(96.dp)
@@ -796,9 +797,9 @@ private fun StatCard(label: String, value: String, icon: androidx.compose.ui.gra
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = color, modifier = Modifier.size(16.dp))
-            Text(label, fontSize = 11.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, fontSize = 11.sp, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(value, fontSize = 20.sp, color = TextPrimary, fontWeight = FontWeight.Light, fontFamily = FontFamily.Monospace)
+        Text(value, fontSize = 20.sp, color = colors.onSurface, fontWeight = FontWeight.Light, fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -1549,15 +1550,16 @@ private fun buildRunSummary(run: GHWorkflowRun, elapsed: String): String {
     return parts.joinToString(" • ")
 }
 
+@Composable
 private fun runStatusColor(run: GHWorkflowRun): Color = when {
-    run.status in setOf("queued", "pending", "waiting", "requested") -> Color(0xFFFF9500)
-    run.status == "in_progress" -> Blue
-    run.conclusion == "success" -> Color(0xFF34C759)
-    run.conclusion == "failure" -> Color(0xFFFF3B30)
-    run.conclusion == "cancelled" -> Color(0xFF8E8E93)
-    run.conclusion == "skipped" || run.conclusion == "neutral" -> Color(0xFF8E8E93)
-    run.conclusion == "timed_out" -> Color(0xFFFF9500)
-    else -> TextTertiary
+    run.status == "in_progress" -> MaterialTheme.colorScheme.primary
+    run.conclusion == "success" -> MaterialTheme.colorScheme.primary
+    run.conclusion == "failure" -> MaterialTheme.colorScheme.error
+    run.status in setOf("queued", "pending", "waiting", "requested") -> MaterialTheme.colorScheme.onSurfaceVariant
+    run.conclusion == "cancelled" -> MaterialTheme.colorScheme.onSurfaceVariant
+    run.conclusion == "skipped" || run.conclusion == "neutral" -> MaterialTheme.colorScheme.onSurfaceVariant
+    run.conclusion == "timed_out" -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 private fun runStatusIcon(run: GHWorkflowRun) = when {
@@ -1577,6 +1579,7 @@ private fun MiniActionsBadge(text: String, color: Color) {
         Modifier
             .clip(RoundedCornerShape(8.dp))
             .background(color.copy(alpha = 0.12f))
+            .border(1.dp, color.copy(alpha = 0.24f), RoundedCornerShape(8.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
         Text(text, fontSize = 11.sp, color = color, fontWeight = FontWeight.Medium)
@@ -2583,8 +2586,8 @@ private fun WorkflowJobCard(
         Box(
             Modifier.width(3.dp).fillMaxHeight().background(
                 when (status) {
-                    "failed", "failure", "timed_out", "action_required" -> Color(0xFFFF3B30)
-                    "running", "in_progress" -> Blue
+                    "failed", "failure", "timed_out", "action_required" -> MaterialTheme.colorScheme.error
+                    "running", "in_progress" -> MaterialTheme.colorScheme.primary
                     else -> Color.Transparent
                 }
             )
@@ -2592,8 +2595,8 @@ private fun WorkflowJobCard(
         Column(Modifier.weight(1f).padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(jobStatusIcon(status), null, Modifier.size(18.dp), tint = jColor)
-                Text(job.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(jobElapsed, fontSize = 10.sp, color = if (isJobActive(job)) Blue else TextTertiary, fontFamily = FontFamily.Monospace, letterSpacing = 0.4.sp)
+                Text(job.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(jobElapsed, fontSize = 10.sp, color = if (isJobActive(job)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace, letterSpacing = 0.4.sp)
             }
 
             Spacer(Modifier.height(8.dp))
@@ -2614,7 +2617,7 @@ private fun WorkflowJobCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         StepStatusMark(stepStatus, sColor)
-                        Text(step.name, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Text(step.name, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         StepStatusPill(stepStatus, sColor)
                     }
                     if (expandedStepKey == stepKey) {
@@ -2626,10 +2629,10 @@ private fun WorkflowJobCard(
                         val shownStepLog = compactLogForDisplay(stepLog ?: liveMessage)
                         Box(
                             Modifier.fillMaxWidth().padding(start = 28.dp, top = 4.dp, bottom = 8.dp)
-                                .clip(RoundedCornerShape(9.dp)).background(Color(0xFF0D1117)).padding(8.dp)
+                                .clip(RoundedCornerShape(9.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp)
                         ) {
                             if (jobLogs[job.id] == null || loadingJobId == job.id) {
-                                CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
+                                CircularProgressIndicator(Modifier.size(16.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
                             } else {
                                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
                                     item {
@@ -2637,7 +2640,7 @@ private fun WorkflowJobCard(
                                             shownStepLog,
                                             fontSize = 9.sp,
                                             fontFamily = FontFamily.Monospace,
-                                            color = Color(0xFFC9D1D9),
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             lineHeight = 13.sp
                                         )
                                     }
@@ -2684,7 +2687,7 @@ private fun WorkflowJobCard(
                     }
                 }
                 if (loadingJobId == job.id) {
-                    CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.size(16.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
                 }
             }
 
@@ -2692,7 +2695,7 @@ private fun WorkflowJobCard(
                 Spacer(Modifier.height(8.dp))
                 Box(
                     Modifier.fillMaxWidth().heightIn(max = 420.dp).clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF0D1117)).padding(10.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp)
                 ) {
                     LazyColumn(Modifier.fillMaxWidth()) {
                         item {
@@ -2701,7 +2704,7 @@ private fun WorkflowJobCard(
                                     compactLogForDisplay(jobLogs[job.id]!!),
                                     fontSize = 9.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    color = Color(0xFFC9D1D9),
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     lineHeight = 13.sp
                                 )
                             }
@@ -2808,12 +2811,13 @@ private fun jobStatusIcon(status: String) = when (status) {
     else -> Icons.Rounded.Warning
 }
 
+@Composable
 private fun jobStatusColor(status: String): Color = when (status) {
-    "running", "in_progress" -> Blue
-    "success" -> Color(0xFF34C759)
-    "failed", "failure", "timed_out", "action_required" -> Color(0xFFFF3B30)
-    "cancelled", "skipped" -> Color(0xFF8E8E93)
-    else -> Color(0xFFFF9500)
+    "running", "in_progress" -> MaterialTheme.colorScheme.primary
+    "success" -> MaterialTheme.colorScheme.primary
+    "failed", "failure", "timed_out", "action_required" -> MaterialTheme.colorScheme.error
+    "cancelled", "skipped" -> MaterialTheme.colorScheme.onSurfaceVariant
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 private fun matrixGroupDuration(jobs: List<GHJob>, nowMs: Long): String {
@@ -2828,12 +2832,13 @@ private fun matrixGroupDuration(jobs: List<GHJob>, nowMs: Long): String {
 private fun cleanGithubText(value: String): String =
     value.trim().takeUnless { it.equals("null", ignoreCase = true) }.orEmpty()
 
+@Composable
 private fun checkStatusColor(checkRun: GHCheckRun): Color = when (displayCheckStatus(checkRun)) {
-    "success" -> Color(0xFF34C759)
-    "failure", "timed_out", "action_required" -> Color(0xFFFF3B30)
-    "running", "in_progress" -> Blue
-    "queued" -> Color(0xFFFF9500)
-    else -> TextSecondary
+    "success" -> MaterialTheme.colorScheme.primary
+    "failure", "timed_out", "action_required" -> MaterialTheme.colorScheme.error
+    "running", "in_progress" -> MaterialTheme.colorScheme.primary
+    "queued" -> MaterialTheme.colorScheme.onSurfaceVariant
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 private fun ensureJobLogsLoaded(
@@ -3115,13 +3120,15 @@ private fun compactLogForDisplay(raw: String): String {
 
 @Composable
 private fun ActionsFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
     Box(
         Modifier.clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Blue.copy(alpha = 0.14f) else SurfaceWhite)
+            .background(if (selected) colors.primary.copy(alpha = 0.12f) else colors.surface)
+            .border(1.dp, if (selected) colors.primary.copy(alpha = 0.28f) else colors.outlineVariant, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
-        Text(label, fontSize = 12.sp, color = if (selected) Blue else TextSecondary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(label, fontSize = 12.sp, color = if (selected) colors.primary else colors.onSurfaceVariant, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
@@ -3172,16 +3179,17 @@ private fun displayStepStatus(step: GHStep): String {
     }
 }
 
+@Composable
 private fun stepStatusColor(step: GHStep): Color {
     return when (displayStepStatus(step)) {
-        "success" -> Color(0xFF34C759)
-        "failed" -> Color(0xFFFF3B30)
-        "cancelled" -> Color(0xFF8E8E93)
-        "skipped", "neutral" -> Color(0xFF8E8E93)
-        "running" -> Blue
-        "queued", "pending", "waiting", "requested" -> Color(0xFFFF9500)
-        "completed" -> Color(0xFF8E8E93)
-        else -> Color(0xFFFF9500)
+        "success" -> MaterialTheme.colorScheme.primary
+        "failed" -> MaterialTheme.colorScheme.error
+        "cancelled" -> MaterialTheme.colorScheme.onSurfaceVariant
+        "skipped", "neutral" -> MaterialTheme.colorScheme.onSurfaceVariant
+        "running" -> MaterialTheme.colorScheme.primary
+        "queued", "pending", "waiting", "requested" -> MaterialTheme.colorScheme.onSurfaceVariant
+        "completed" -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 }
 

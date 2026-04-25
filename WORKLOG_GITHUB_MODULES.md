@@ -1056,3 +1056,11 @@
 - Проверка:
   - выполнен `git diff --check`
   - локальную Android compile-проверку не запускал по просьбе пользователя
+
+### GitHub visual regression cleanup
+- Reverted the problematic card depth treatment from the GitHub visual polish pass.
+- `Modifier.ghGlassCard()` no longer uses a linear gradient, hardcoded dark fallback color, or custom accent shadow.
+- GitHub glass cards now use theme-aware solid `MaterialTheme.colorScheme.surface` with `outlineVariant` hairline border.
+- Active repo tabs, branch chip, commit author/hash accents, and touched Actions status accents were moved away from `Blue`/hardcoded tints to `MaterialTheme.colorScheme.primary`, `error`, and `onSurfaceVariant`.
+- Log preview surfaces touched by the polish pass now use `surfaceVariant` / `onSurface` instead of hardcoded dark-only colors.
+- Reason: the previous gradient/shadow implementation created muddy grey card stains in Light theme and allowed user accent hue changes to leak orange into GitHub active states.

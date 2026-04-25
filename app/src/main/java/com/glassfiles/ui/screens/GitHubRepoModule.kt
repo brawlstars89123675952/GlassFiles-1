@@ -47,6 +47,7 @@ internal enum class RepoTab { FILES, COMMITS, ISSUES, PULLS, RELEASES, ACTIONS, 
 @Composable
 internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -> Unit = {}, onClose: (() -> Unit)? = null) {
     val context = LocalContext.current; val scope = rememberCoroutineScope()
+    val colors = MaterialTheme.colorScheme
     var selectedTab by remember { mutableStateOf(RepoTab.FILES) }; var contents by remember { mutableStateOf<List<GHContent>>(emptyList()) }
     var currentPath by remember { mutableStateOf("") }; var commits by remember { mutableStateOf<List<GHCommit>>(emptyList()) }
     var issues by remember { mutableStateOf<List<GHIssue>>(emptyList()) }; var pulls by remember { mutableStateOf<List<GHPullRequest>>(emptyList()) }
@@ -203,7 +204,7 @@ internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -
                 }) { Icon(Icons.Rounded.Download, null, Modifier.size(20.dp), tint = Blue) }
                 IconButton(onClick = {
                     editingFile = safeOpenedFile
-                }) { Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = Blue) }
+                }) { Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = colors.primary) }
             }
             Row(Modifier.fillMaxWidth().background(Color(0xFF161B22)).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("${cachedLines.size} lines", fontSize = 11.sp, color = Color(0xFF8B949E))
@@ -254,18 +255,18 @@ internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -
         GHTopBar(repo.name, subtitle = if (currentPath.isNotBlank()) currentPath else repo.owner, onBack = { if (currentPath.isNotBlank() && selectedTab == RepoTab.FILES) currentPath = currentPath.substringBeforeLast("/", "") else onBack() }, onMinimize = onMinimize, onClose = onClose) {
             val ic = if (LocalGHCompact.current) 16.dp else 20.dp
             IconButton(onClick = { scope.launch { if (isStarred) GitHubManager.unstarRepo(context, repo.owner, repo.name) else GitHubManager.starRepo(context, repo.owner, repo.name); isStarred = !isStarred } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isStarred) Icons.Rounded.Star else Icons.Rounded.StarBorder, null, Modifier.size(ic), tint = Color(0xFFFFCC00)) }
-            IconButton(onClick = { scope.launch { if (isWatching) GitHubManager.unwatchRepo(context, repo.owner, repo.name) else GitHubManager.watchRepo(context, repo.owner, repo.name); isWatching = !isWatching } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isWatching) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, Modifier.size(ic), tint = if (isWatching) Blue else TextSecondary) }
+            IconButton(onClick = { scope.launch { if (isWatching) GitHubManager.unwatchRepo(context, repo.owner, repo.name) else GitHubManager.watchRepo(context, repo.owner, repo.name); isWatching = !isWatching } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isWatching) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, Modifier.size(ic), tint = if (isWatching) colors.primary else colors.onSurfaceVariant) }
             IconButton(onClick = { showRepoSettings = true }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.Settings, null, Modifier.size(ic), tint = TextSecondary) }
-            IconButton(onClick = { showCompare = true }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.CompareArrows, null, Modifier.size(ic), tint = Blue) }
-            IconButton(onClick = { scope.launch { val ok = GitHubManager.forkRepo(context, repo.owner, repo.name); Toast.makeText(context, if (ok) Strings.ghForked else Strings.error, Toast.LENGTH_SHORT).show() } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.CallSplit, null, Modifier.size(ic), tint = Blue) }
-            IconButton(onClick = { cloneProgress = "Starting..."; scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git"); val ok = GitHubManager.cloneRepo(context, repo.owner, repo.name, dest) { cloneProgress = it }; Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show(); cloneProgress = null } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.Download, null, Modifier.size(ic), tint = Blue) }
+            IconButton(onClick = { showCompare = true }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.CompareArrows, null, Modifier.size(ic), tint = colors.primary) }
+            IconButton(onClick = { scope.launch { val ok = GitHubManager.forkRepo(context, repo.owner, repo.name); Toast.makeText(context, if (ok) Strings.ghForked else Strings.error, Toast.LENGTH_SHORT).show() } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.CallSplit, null, Modifier.size(ic), tint = colors.primary) }
+            IconButton(onClick = { cloneProgress = "Starting..."; scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git"); val ok = GitHubManager.cloneRepo(context, repo.owner, repo.name, dest) { cloneProgress = it }; Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show(); cloneProgress = null } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.Download, null, Modifier.size(ic), tint = colors.primary) }
         }
-        if (cloneProgress != null) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(Blue.copy(0.1f)).padding(horizontal = 12.dp, vertical = 8.dp)) { Text(cloneProgress!!, fontSize = 13.sp, color = Blue, fontWeight = FontWeight.Medium) }
+        if (cloneProgress != null) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(colors.primary.copy(0.10f)).padding(horizontal = 12.dp, vertical = 8.dp)) { Text(cloneProgress!!, fontSize = 13.sp, color = colors.primary, fontWeight = FontWeight.Medium) }
         // Branch + actions
         val cmp = LocalGHCompact.current
         Row(Modifier.fillMaxWidth().background(SurfaceWhite).padding(horizontal = if (cmp) 6.dp else 12.dp, vertical = if (cmp) 3.dp else 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (cmp) 4.dp else 6.dp)) {
-            Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Blue.copy(0.08f)).clickable { showBranchPicker = true }.padding(horizontal = if (cmp) 6.dp else 10.dp, vertical = if (cmp) 3.dp else 6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(Icons.Rounded.AccountTree, null, Modifier.size(if (cmp) 12.dp else 14.dp), tint = Blue); Text(selectedBranch, fontSize = if (cmp) 10.sp else 12.sp, color = Blue, fontWeight = FontWeight.Medium); Icon(Icons.Rounded.ArrowDropDown, null, Modifier.size(if (cmp) 12.dp else 14.dp), tint = Blue) }
+            Box(Modifier.clip(RoundedCornerShape(6.dp)).background(colors.primary.copy(0.08f)).clickable { showBranchPicker = true }.padding(horizontal = if (cmp) 6.dp else 10.dp, vertical = if (cmp) 3.dp else 6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(Icons.Rounded.AccountTree, null, Modifier.size(if (cmp) 12.dp else 14.dp), tint = colors.primary); Text(selectedBranch, fontSize = if (cmp) 10.sp else 12.sp, color = colors.primary, fontWeight = FontWeight.Medium); Icon(Icons.Rounded.ArrowDropDown, null, Modifier.size(if (cmp) 12.dp else 14.dp), tint = colors.primary) }
             }
             Spacer(Modifier.weight(1f))
             when (selectedTab) { RepoTab.FILES -> { SmallAction(Icons.Rounded.NoteAdd, Strings.ghCreateFile) { showCreateFile = true }; SmallAction(Icons.Rounded.Upload, Strings.ghUpload) { showUpload = true } }; RepoTab.ISSUES -> SmallAction(Icons.Rounded.Add, Strings.ghNewIssue) { showCreateIssue = true }; RepoTab.PULLS -> SmallAction(Icons.Rounded.Add, Strings.ghNewPR) { showCreatePR = true }; RepoTab.ACTIONS -> SmallAction(Icons.Rounded.PlayArrow, Strings.ghRunWorkflow) { showDispatch = true }; RepoTab.BUILDS -> SmallAction(Icons.Rounded.Build, "Builder") { selectedTab = RepoTab.BUILDS }; else -> {} }
@@ -273,7 +274,7 @@ internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -
         // Tabs
         Row(Modifier.fillMaxWidth().background(SurfaceWhite).horizontalScroll(rememberScrollState()).padding(horizontal = if (cmp) 6.dp else 12.dp, vertical = if (cmp) 3.dp else 6.dp), horizontalArrangement = Arrangement.spacedBy(if (cmp) 4.dp else 6.dp)) {
             RepoTab.entries.forEach { tab -> val sel = selectedTab == tab; val label = when (tab) { RepoTab.FILES -> Strings.ghGistFiles; RepoTab.COMMITS -> Strings.ghCommits; RepoTab.ISSUES -> "Issues"; RepoTab.PULLS -> Strings.ghPulls; RepoTab.RELEASES -> Strings.ghReleases; RepoTab.ACTIONS -> Strings.ghActions; RepoTab.BUILDS -> "Сборки"; RepoTab.PROJECTS -> "Projects"; RepoTab.README -> Strings.ghReadme; RepoTab.CODE_SEARCH -> Strings.ghSearchCode }
-                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (sel) Blue.copy(0.12f) else Color.Transparent).border(1.dp, if (sel) Blue.copy(0.3f) else SeparatorColor, RoundedCornerShape(6.dp)).clickable { selectedTab = tab; repoQuery = "" }.padding(horizontal = if (cmp) 6.dp else 10.dp, vertical = if (cmp) 3.dp else 6.dp)) { Text(label, fontSize = if (cmp) 10.sp else 12.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal, color = if (sel) Blue else TextSecondary) }
+                Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (sel) colors.primary.copy(0.12f) else Color.Transparent).border(1.dp, if (sel) colors.primary.copy(0.30f) else colors.outlineVariant, RoundedCornerShape(6.dp)).clickable { selectedTab = tab; repoQuery = "" }.padding(horizontal = if (cmp) 6.dp else 10.dp, vertical = if (cmp) 3.dp else 6.dp)) { Text(label, fontSize = if (cmp) 10.sp else 12.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal, color = if (sel) colors.primary else colors.onSurfaceVariant) }
             }
         }
         if (selectedTab in listOf(RepoTab.FILES, RepoTab.COMMITS, RepoTab.ISSUES, RepoTab.PULLS)) {
@@ -376,7 +377,7 @@ internal fun FilesTab(contents: List<GHContent>, onDirClick: (GHContent) -> Unit
     } } }
 }
 
-@Composable internal fun Chip(icon: ImageVector, label: String, tint: Color = Blue, onClick: () -> Unit) { Row(Modifier.clip(RoundedCornerShape(6.dp)).background(tint.copy(0.08f)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(icon, null, Modifier.size(12.dp), tint = tint); Text(label, fontSize = 10.sp, color = tint, fontWeight = FontWeight.Medium) } }
+@Composable internal fun Chip(icon: ImageVector, label: String, tint: Color? = null, onClick: () -> Unit) { val chipTint = tint ?: MaterialTheme.colorScheme.primary; Row(Modifier.clip(RoundedCornerShape(6.dp)).background(chipTint.copy(0.08f)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(icon, null, Modifier.size(12.dp), tint = chipTint); Text(label, fontSize = 10.sp, color = chipTint, fontWeight = FontWeight.Medium) } }
 
 private fun fileIcon(name: String): ImageVector = when (name.substringAfterLast(".", "").lowercase()) {
     "kt", "java", "js", "ts", "tsx", "jsx", "py", "rb", "go", "rs", "swift", "c", "cpp", "h", "html", "css", "json", "xml", "yml", "yaml" -> Icons.Rounded.Code
@@ -386,25 +387,27 @@ private fun fileIcon(name: String): ImageVector = when (name.substringAfterLast(
     else -> Icons.Rounded.InsertDriveFile
 }
 
+@Composable
 private fun fileTint(name: String): Color = when (name.substringAfterLast(".", "").lowercase()) {
     "kt" -> Color(0xFFA97BFF)
     "java" -> Color(0xFFB07219)
     "js", "jsx" -> Color(0xFFF1E05A)
     "ts", "tsx" -> Color(0xFF3178C6)
-    "md", "markdown" -> Blue
-    "png", "jpg", "jpeg", "gif", "webp", "svg" -> Color(0xFF34C759)
+    "md", "markdown" -> MaterialTheme.colorScheme.primary
+    "png", "jpg", "jpeg", "gif", "webp", "svg" -> MaterialTheme.colorScheme.primary
     else -> TextSecondary
 }
 
 @Composable
 internal fun CommitsTab(commits: List<GHCommit>, hasMore: Boolean, onLoadMore: () -> Unit, onClick: (GHCommit) -> Unit) { LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) { items(commits) { c ->
+    val colors = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp).ghGlassCard(14.dp).clickable { onClick(c) }.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
         if (c.avatarUrl.isNotBlank()) AsyncImage(c.avatarUrl, c.author, Modifier.size(34.dp).clip(CircleShape))
-        else Box(Modifier.size(34.dp).clip(CircleShape).background(Blue.copy(0.12f)), contentAlignment = Alignment.Center) { Text(c.sha.take(2).uppercase(), fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = Blue, letterSpacing = 0.6.sp) }
+        else Box(Modifier.size(34.dp).clip(CircleShape).background(colors.primary.copy(0.12f)), contentAlignment = Alignment.Center) { Text(c.sha.take(2).uppercase(), fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = colors.primary, letterSpacing = 0.6.sp) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(c.message.lines().firstOrNull().orEmpty(), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                Text(c.author.ifBlank { "unknown" }, fontSize = 11.sp, color = Blue, fontWeight = FontWeight.Medium)
+                Text(c.author.ifBlank { "unknown" }, fontSize = 11.sp, color = colors.primary, fontWeight = FontWeight.Medium)
                 Text(c.sha.take(7), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = TextTertiary, letterSpacing = 0.5.sp)
                 Text(c.date.take(10), fontSize = 11.sp, color = TextTertiary)
             }
@@ -415,7 +418,8 @@ internal fun CommitsTab(commits: List<GHCommit>, hasMore: Boolean, onLoadMore: (
 
 @Composable
 internal fun IssuesTab(issues: List<GHIssue>, hasMore: Boolean, onLoadMore: () -> Unit, onClick: (GHIssue) -> Unit) { LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) { items(issues) { issue ->
-    val stateColor = if (issue.state == "open") Color(0xFF34C759) else Color(0xFF8E8E93)
+    val colors = MaterialTheme.colorScheme
+    val stateColor = if (issue.state == "open") colors.primary else colors.onSurfaceVariant
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp).height(IntrinsicSize.Min).ghGlassCard(14.dp).clickable { onClick(issue) }) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(stateColor))
         Row(Modifier.weight(1f).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
@@ -426,7 +430,7 @@ internal fun IssuesTab(issues: List<GHIssue>, hasMore: Boolean, onLoadMore: () -
                 Text(issue.title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 2, lineHeight = 18.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("#${issue.number}", fontSize = 11.sp, color = TextTertiary, fontFamily = FontFamily.Monospace)
-                    Text(issue.author, fontSize = 11.sp, color = Blue, fontWeight = FontWeight.Medium)
+                    Text(issue.author, fontSize = 11.sp, color = colors.primary, fontWeight = FontWeight.Medium)
                     Text(if (issue.isPR) "PR" else issue.state.uppercase(), fontSize = 10.sp, color = stateColor, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
                     if (issue.comments > 0) Text("${issue.comments} comments", fontSize = 11.sp, color = TextTertiary)
                 }
@@ -451,10 +455,10 @@ internal fun PullsTab(
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
         items(pulls) { pr ->
+            val colors = MaterialTheme.colorScheme
             val prColor = when {
-                pr.merged -> Color(0xFF8957E5)
-                pr.state == "open" -> Color(0xFF34C759)
-                else -> Color(0xFF8E8E93)
+                pr.state == "open" || pr.merged -> colors.primary
+                else -> colors.onSurfaceVariant
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 7.dp).height(IntrinsicSize.Min).ghGlassCard(14.dp).clickable { onOpenDetail(pr) }) {
                 Box(Modifier.width(3.dp).fillMaxHeight().background(prColor))
@@ -467,7 +471,7 @@ internal fun PullsTab(
                             Text(pr.title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, lineHeight = 18.sp, maxLines = 2)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
                                 Text("#${pr.number}", fontSize = 11.sp, color = TextTertiary, fontFamily = FontFamily.Monospace)
-                                Text("${pr.head} → ${pr.base}", fontSize = 11.sp, color = Blue, fontFamily = FontFamily.Monospace)
+                                Text("${pr.head} → ${pr.base}", fontSize = 11.sp, color = colors.primary, fontFamily = FontFamily.Monospace)
                                 Text(pr.author, fontSize = 11.sp, color = TextSecondary)
                                 Text(if (pr.merged) "MERGED" else pr.state.uppercase(), fontSize = 10.sp, color = prColor, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
                                 if (pr.draft) Text("DRAFT", fontSize = 10.sp, color = TextTertiary, letterSpacing = 0.6.sp)
@@ -487,12 +491,12 @@ internal fun PullsTab(
                     }
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 38.dp).horizontalScroll(rememberScrollState())) {
-                        Chip(Icons.Rounded.Visibility, "Details", Blue) { onOpenDetail(pr) }
+                        Chip(Icons.Rounded.Visibility, "Details") { onOpenDetail(pr) }
                         Chip(Icons.Rounded.Article, "Files") { onFilesClick(pr.number) }
                         Chip(Icons.Rounded.RateReview, "Review") { reviewTarget = pr }
                         Chip(Icons.Rounded.FactCheck, "Checks") { checkRunTarget = pr }
                         if (pr.state == "open" && !pr.merged && !pr.draft) {
-                            Chip(Icons.Rounded.CallMerge, Strings.ghMerge, Color(0xFF34C759)) {
+                            Chip(Icons.Rounded.CallMerge, Strings.ghMerge, colors.primary) {
                                 scope.launch {
                                     val ok = GitHubManager.mergePullRequest(context, repo.owner, repo.name, pr.number)
                                     Toast.makeText(context, if (ok) Strings.ghMerged else Strings.error, Toast.LENGTH_SHORT).show()
