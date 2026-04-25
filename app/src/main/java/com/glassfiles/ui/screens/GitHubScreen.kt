@@ -68,13 +68,22 @@ fun GitHubScreen(onBack: () -> Unit, onMinimize: () -> Unit = {}, onClose: (() -
 internal fun GHTopBar(title: String, subtitle: String? = null, onBack: () -> Unit, onMinimize: (() -> Unit)? = null, onClose: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
     val compact = LocalGHCompact.current
     val colors = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxWidth().background(colors.surface)) {
-        Row(Modifier.fillMaxWidth().padding(
-            top = if (compact) 4.dp else 48.dp,
-            start = if (compact) 8.dp else 16.dp,
-            end = if (compact) 8.dp else 16.dp,
-            bottom = if (compact) 4.dp else 14.dp
-        ), verticalAlignment = Alignment.CenterVertically) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(colors.surface)
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    top = if (compact) 4.dp else 48.dp,
+                    start = if (compact) 8.dp else 16.dp,
+                    end = if (compact) 8.dp else 16.dp,
+                    bottom = if (compact) 4.dp else 14.dp
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             IconButton(onClick = onBack, modifier = Modifier.size(if (compact) 32.dp else 48.dp)) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(if (compact) 16.dp else 22.dp), tint = Blue)
             }
@@ -86,6 +95,6 @@ internal fun GHTopBar(title: String, subtitle: String? = null, onBack: () -> Uni
             if (onClose != null && !compact) IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = Color(0xFFFF3B30)) }
             actions()
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.10f)))
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(colors.outlineVariant.copy(alpha = 0.08f)))
     }
 }

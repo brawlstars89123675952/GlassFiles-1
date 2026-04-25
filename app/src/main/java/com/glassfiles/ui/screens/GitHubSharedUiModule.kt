@@ -42,10 +42,10 @@ import java.io.File
 @Composable
 internal fun Modifier.ghGlassCard(radius: androidx.compose.ui.unit.Dp = 16.dp): Modifier {
     val shape = RoundedCornerShape(radius)
+    val colors = MaterialTheme.colorScheme
     return this
-        .clip(shape)
-        .background(MaterialTheme.colorScheme.surface)
-        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+        .background(color = colors.surface, shape = shape)
+        .border(1.dp, colors.outlineVariant.copy(alpha = 0.08f), shape)
 }
 
 @Composable
