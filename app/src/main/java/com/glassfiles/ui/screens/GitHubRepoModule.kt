@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.*
@@ -65,6 +67,7 @@ private const val README_IMAGE_TIMEOUT_MS = 5_000L
 private const val README_MAX_CODE_LINES = 1_000
 private const val README_MAX_TABLE_ROWS = 50
 private const val README_MAX_LINE_CHARS = 4_000
+private const val README_DEFAULT_IMAGE_ASPECT_RATIO = 16f / 9f
 
 // Regression test repos (must not freeze):
 // - d2phap/imageglass (large with HTML and images)
@@ -1030,11 +1033,21 @@ private fun ReadmeTab(readme: String?, blocks: List<ReadmeRenderBlock>?, error: 
                 ReadmeErrorCard("README has no renderable markdown blocks.", readme.orEmpty(), repo, onViewRaw = { rawView = true })
             }
             else -> {
-                items(shownBlocks) { block ->
-                    Box(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(14.dp)) {
+                item(key = "readme_doc_top_${repo.owner}_${repo.name}") {
+                    Box(Modifier.fillMaxWidth().readmeDocumentSurface(top = true, bottom = shownBlocks.isEmpty()).padding(top = 14.dp))
+                }
+                items(shownBlocks, key = { it.stableId }) { block ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .readmeDocumentSurface()
+                            .padding(horizontal = 14.dp, vertical = 4.dp)
+                    ) {
                         ReadmeBlockView(block)
                     }
-                    Spacer(Modifier.height(8.dp))
+                }
+                item(key = "readme_doc_bottom_${repo.owner}_${repo.name}_${shownBlocks.size}") {
+                    Box(Modifier.fillMaxWidth().readmeDocumentSurface(top = false, bottom = true).padding(bottom = 14.dp))
                 }
                 if (visibleCount < safeBlocks.size) {
                     item {
@@ -1046,6 +1059,18 @@ private fun ReadmeTab(readme: String?, blocks: List<ReadmeRenderBlock>?, error: 
             }
         }
     }
+}
+
+@Composable
+private fun Modifier.readmeDocumentSurface(top: Boolean = false, bottom: Boolean = false): Modifier {
+    val shape = when {
+        top && bottom -> RoundedCornerShape(14.dp)
+        top -> RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)
+        bottom -> RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp)
+        else -> RoundedCornerShape(0.dp)
+    }
+    return this
+        .background(MaterialTheme.colorScheme.surface, shape)
 }
 
 @Composable
@@ -1145,6 +1170,7 @@ private fun ReadmeBullet(text: String, ordered: Boolean = false, checked: Boolea
 @Composable
 private fun ReadmeImage(block: ReadmeRenderBlock.Image) {
     val context = LocalContext.current
+    val placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
     var failed by remember(block.url) { mutableStateOf(false) }
     var loaded by remember(block.url) { mutableStateOf(false) }
     val animatedGif = remember(block.url) { block.url.substringBefore('?').endsWith(".gif", ignoreCase = true) }
@@ -1161,16 +1187,35 @@ private fun ReadmeImage(block: ReadmeRenderBlock.Image) {
         if (animatedGif) {
             ReadmeLinkCard(block.alt.ifBlank { "Animated image skipped" }, block.url)
         } else if (failed) {
-            Text(block.alt.ifBlank { "Image unavailable" }, fontSize = 12.sp, color = TextTertiary)
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(block.aspectRatio.coerceIn(0.5f, 3f))
+                    .heightIn(min = 200.dp, max = 360.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(block.alt.ifBlank { "Image unavailable" }, fontSize = 12.sp, color = TextTertiary)
+            }
         } else {
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(block.url)
                     .size(2048, 2048)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .diskCachePolicy(CachePolicy.ENABLED)
                     .crossfade(false)
                     .build(),
                 contentDescription = block.alt,
-                modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp).clip(RoundedCornerShape(10.dp)).background(SurfaceLight),
+                placeholder = placeholder,
+                error = placeholder,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(block.aspectRatio.coerceIn(0.5f, 3f))
+                    .heightIn(min = 200.dp, max = 360.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 onSuccess = { loaded = true },
                 onError = {
                     loaded = true
@@ -1314,15 +1359,16 @@ private fun readmeCleanInline(text: String): AnnotatedString =
     readmeInlineAnnotated(text.trim().trim('#').trim())
 
 private sealed class ReadmeRenderBlock {
-    data class Heading(val level: Int, val text: String) : ReadmeRenderBlock()
-    data class Paragraph(val text: String) : ReadmeRenderBlock()
-    data class Bullet(val text: String, val ordered: Boolean, val checked: Boolean? = null) : ReadmeRenderBlock()
-    data class Quote(val text: String) : ReadmeRenderBlock()
-    object Rule : ReadmeRenderBlock()
-    data class Image(val url: String, val alt: String) : ReadmeRenderBlock()
-    data class Code(val language: String, val code: String) : ReadmeRenderBlock()
-    data class Table(val rows: List<List<String>>) : ReadmeRenderBlock()
-    data class Link(val text: String, val url: String) : ReadmeRenderBlock()
+    abstract val stableId: String
+    data class Heading(val level: Int, val text: String, override val stableId: String = "") : ReadmeRenderBlock()
+    data class Paragraph(val text: String, override val stableId: String = "") : ReadmeRenderBlock()
+    data class Bullet(val text: String, val ordered: Boolean, val checked: Boolean? = null, override val stableId: String = "") : ReadmeRenderBlock()
+    data class Quote(val text: String, override val stableId: String = "") : ReadmeRenderBlock()
+    data class Rule(override val stableId: String = "") : ReadmeRenderBlock()
+    data class Image(val url: String, val alt: String, val aspectRatio: Float = README_DEFAULT_IMAGE_ASPECT_RATIO, override val stableId: String = "") : ReadmeRenderBlock()
+    data class Code(val language: String, val code: String, override val stableId: String = "") : ReadmeRenderBlock()
+    data class Table(val rows: List<List<String>>, override val stableId: String = "") : ReadmeRenderBlock()
+    data class Link(val text: String, val url: String, override val stableId: String = "") : ReadmeRenderBlock()
 }
 
 private suspend fun parseReadmeBlocks(markdown: String, repo: GHRepo): List<ReadmeRenderBlock> {
@@ -1374,7 +1420,7 @@ private suspend fun parseReadmeBlocks(markdown: String, repo: GHRepo): List<Read
                 i++
             }
             line == "---" || line == "***" || line == "___" -> {
-                blocks += ReadmeRenderBlock.Rule
+                blocks += ReadmeRenderBlock.Rule()
                 i++
             }
             readmeLooksLikeTable(lines, i) -> {
@@ -1429,7 +1475,48 @@ private suspend fun parseReadmeBlocks(markdown: String, repo: GHRepo): List<Read
             }
         }
     }
-    return blocks
+    return blocks.withStableReadmeIds()
+}
+
+private fun List<ReadmeRenderBlock>.withStableReadmeIds(): List<ReadmeRenderBlock> =
+    mapIndexed { index, block ->
+        val type = block.readmeBlockType()
+        val stableId = "${index}_${type}_${block.readmeKeyContent().hashCode()}"
+        when (block) {
+            is ReadmeRenderBlock.Heading -> block.copy(stableId = stableId)
+            is ReadmeRenderBlock.Paragraph -> block.copy(stableId = stableId)
+            is ReadmeRenderBlock.Bullet -> block.copy(stableId = stableId)
+            is ReadmeRenderBlock.Quote -> block.copy(stableId = stableId)
+            is ReadmeRenderBlock.Rule -> block.copy(stableId = stableId)
+            is ReadmeRenderBlock.Image -> block.copy(stableId = stableId)
+            is ReadmeRenderBlock.Code -> block.copy(stableId = stableId)
+            is ReadmeRenderBlock.Table -> block.copy(stableId = stableId)
+            is ReadmeRenderBlock.Link -> block.copy(stableId = stableId)
+        }
+    }
+
+private fun ReadmeRenderBlock.readmeBlockType(): String = when (this) {
+    is ReadmeRenderBlock.Heading -> "heading"
+    is ReadmeRenderBlock.Paragraph -> "paragraph"
+    is ReadmeRenderBlock.Bullet -> "bullet"
+    is ReadmeRenderBlock.Quote -> "quote"
+    is ReadmeRenderBlock.Rule -> "rule"
+    is ReadmeRenderBlock.Image -> "image"
+    is ReadmeRenderBlock.Code -> "code"
+    is ReadmeRenderBlock.Table -> "table"
+    is ReadmeRenderBlock.Link -> "link"
+}
+
+private fun ReadmeRenderBlock.readmeKeyContent(): String = when (this) {
+    is ReadmeRenderBlock.Heading -> "$level|$text"
+    is ReadmeRenderBlock.Paragraph -> text
+    is ReadmeRenderBlock.Bullet -> "$ordered|$checked|$text"
+    is ReadmeRenderBlock.Quote -> text
+    is ReadmeRenderBlock.Rule -> "rule"
+    is ReadmeRenderBlock.Image -> "$url|$alt|$aspectRatio"
+    is ReadmeRenderBlock.Code -> "$language|$code"
+    is ReadmeRenderBlock.Table -> rows.joinToString("|") { it.joinToString("\u001F") }
+    is ReadmeRenderBlock.Link -> "$text|$url"
 }
 
 private fun readmeMarkdownImages(line: String, repo: GHRepo): List<ReadmeRenderBlock.Image> {
@@ -1444,8 +1531,23 @@ private fun readmeHtmlImages(line: String, repo: GHRepo): List<ReadmeRenderBlock
     val regex = Regex("<img\\b[^>]*src=[\"']([^\"']+)[\"'][^>]*>", RegexOption.IGNORE_CASE)
     return regex.findAll(line).mapNotNull { match ->
         val raw = match.groupValues.getOrNull(1).orEmpty()
-        if (raw.isBlank()) null else ReadmeRenderBlock.Image(readmeResolveUrl(raw, repo), readmeHtmlAttr(line, "alt"))
+        val tag = match.value
+        if (raw.isBlank()) null else ReadmeRenderBlock.Image(
+            url = readmeResolveUrl(raw, repo),
+            alt = readmeHtmlAttr(tag, "alt"),
+            aspectRatio = readmeHtmlImageAspectRatio(tag)
+        )
     }.toList()
+}
+
+private fun readmeHtmlImageAspectRatio(tag: String): Float {
+    val width = readmeHtmlAttr(tag, "width").filter { it.isDigit() }.toFloatOrNull()
+    val height = readmeHtmlAttr(tag, "height").filter { it.isDigit() }.toFloatOrNull()
+    return if (width != null && height != null && width > 0f && height > 0f) {
+        width / height
+    } else {
+        README_DEFAULT_IMAGE_ASPECT_RATIO
+    }
 }
 
 private fun readmeHtmlLink(line: String): Pair<String, String>? {
