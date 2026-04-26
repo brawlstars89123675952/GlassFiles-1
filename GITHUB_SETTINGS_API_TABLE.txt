@@ -1,0 +1,4 @@
+GitHub Settings API — integration table for GlassFiles
+
+Section | Status | Priority | Summary
+--------------------------------------------------------------------------------------------------------------

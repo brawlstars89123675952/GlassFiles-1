@@ -2369,18 +2369,26 @@ internal fun WorkflowRunDetailScreen(repo: GHRepo, runId: Long, onBack: () -> Un
             if (selectedSection == RunDetailSection.JOBS && failedJobItemIndexes.isNotEmpty()) {
                 FloatingActionButton(
                     onClick = {
-                        try {
-                            val currentJobIndex = (jobListState.firstVisibleItemIndex - jobItemsStartIndex).coerceAtLeast(-1)
-                            val targetJobIndex = failedJobItemIndexes.firstOrNull { it > currentJobIndex } ?: failedJobItemIndexes.firstOrNull()
-                            if (targetJobIndex == null) return@FloatingActionButton
-                            (groupedJobItems.getOrNull(targetJobIndex) as? JobListItem.GroupHeader)?.let { header ->
-                                if (!header.expanded) expandedMatrixGroups[header.group.name] = true
+                        scope.launch {
+                            try {
+                                val currentJobIndex = (jobListState.firstVisibleItemIndex - jobItemsStartIndex).coerceAtLeast(-1)
+                                val targetJobIndex = failedJobItemIndexes.firstOrNull { it > currentJobIndex } ?: failedJobItemIndexes.firstOrNull()
+                                if (targetJobIndex == null) return@launch
+
+                                (groupedJobItems.getOrNull(targetJobIndex) as? JobListItem.GroupHeader)?.let { header ->
+                                    if (!header.expanded) expandedMatrixGroups[header.group.name] = true
+                                }
+
+                                val targetListIndex = (jobItemsStartIndex + targetJobIndex).coerceAtLeast(0)
+                                val totalItems = jobListState.layoutInfo.totalItemsCount
+                                if (totalItems <= 0) return@launch
+
+                                val safeIndex = targetListIndex.coerceIn(0, totalItems - 1)
+                                jobListState.animateScrollToItem(safeIndex)
+                            } catch (t: Throwable) {
+                                Log.e(ACTIONS_JOB_LOG_TAG, "failed job FAB scroll failed", t)
+                                Toast.makeText(context, "Cannot jump to failed job", Toast.LENGTH_SHORT).show()
                             }
-                            val targetListIndex = (jobItemsStartIndex + targetJobIndex).coerceAtLeast(0)
-                            scope.launch { jobListState.animateScrollToItem(targetListIndex) }
-                        } catch (t: Throwable) {
-                            Log.e(ACTIONS_JOB_LOG_TAG, "failed job FAB scroll failed", t)
-                            Toast.makeText(context, "Cannot jump to failed job", Toast.LENGTH_SHORT).show()
                         }
                     },
                     containerColor = Red,
@@ -2808,8 +2816,15 @@ private fun WorkflowJobCard(
     val jobElapsed = calcJobDuration(job, nowMs)
     val logMeta = jobLogMeta[job.id]
 
-    LaunchedEffect(job.id, job.status) {
-        ensureJobLogsLoaded(scope, context, repo, job, jobLogs, jobStepLogs, jobLogMeta, force = false, setLoading = setLoadingJobId)
+    // Lazy load: only when user expands the job or a step.
+    // Auto-loading all jobs at once causes OOM on large Android builds
+    // (multiple 10-50MB logs in parallel).
+    LaunchedEffect(expandedJobId, expandedStepKey, job.id) {
+        val isJobExpanded = expandedJobId == job.id
+        val isStepExpanded = expandedStepKey?.startsWith("${job.id}:") == true
+        if (isJobExpanded || isStepExpanded) {
+            ensureJobLogsLoaded(scope, context, repo, job, jobLogs, jobStepLogs, jobLogMeta, force = false, setLoading = setLoadingJobId)
+        }
     }
 
     Row(Modifier.fillMaxWidth().padding(bottom = 10.dp).height(IntrinsicSize.Min).ghGlassCard(14.dp)) {
@@ -2863,7 +2878,9 @@ private fun WorkflowJobCard(
                             "running" -> "Waiting for live log..."
                             else -> "No log output for this step."
                         }
-                        val shownStepLog = compactLogForDisplay(stepLog ?: logMeta?.warning ?: liveMessage)
+                        val shownStepLog = remember(stepLog, logMeta?.warning, liveMessage) {
+                            compactLogForDisplay(stepLog ?: logMeta?.warning ?: liveMessage)
+                        }
                         Box(
                             Modifier.fillMaxWidth().padding(start = 28.dp, top = 4.dp, bottom = 8.dp)
                                 .clip(RoundedCornerShape(9.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp)
