@@ -52,6 +52,7 @@ import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -100,6 +101,7 @@ import com.glassfiles.data.github.GHRepo
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.data.github.canWrite
 import com.glassfiles.ui.components.AiPickerChip
+import com.glassfiles.ui.screens.ai.ExpensiveActionWarningDialog
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -189,6 +191,21 @@ fun AiAgentScreen(
     // each time the user opens a different private repo.
     var privateRepoDismissed by remember { mutableStateOf<String?>(null) }
     val activeApiKey = selectedModel?.let { AiKeyStore.getKey(context, it.providerId) }.orEmpty()
+
+    // Cost-policy UI state. The selected mode is persisted in
+    // AiCostModeStore; we keep a snapshot in compose state so the
+    // selector chips re-paint immediately on tap.
+    var costMode by remember {
+        mutableStateOf(com.glassfiles.data.ai.cost.AiCostModeStore.getMode(context))
+    }
+    // Pending warning slot. Set by submit() when the cost-policy
+    // detects a heavy task; cleared after the user picks Cancel /
+    // Continue / Continue+remember. While non-null, the dialog blocks
+    // the run.
+    var pendingWarning by remember {
+        mutableStateOf<com.glassfiles.ui.screens.ai.ExpensiveActionWarning?>(null)
+    }
+    var pendingWarningInput by remember { mutableStateOf<Pair<String, String?>?>(null) }
 
     // ID of the session whose repo / branch / model we still want to
     // re-apply once the async repo + model lists finish loading. Cleared
@@ -433,10 +450,13 @@ fun AiAgentScreen(
         approvals.clear()
     }
 
-    fun submit(userText: String, imageBase64: String?) {
-        val text = userText.trim()
-        val image = imageBase64?.takeIf { selectedModel?.let { m -> AiCapability.VISION in m.capabilities } == true }
-        if (text.isEmpty() && image == null) return
+    /**
+     * Internal: actually start the agent loop. Assumes input has been
+     * sanitised and (if applicable) the warning dialog has been
+     * resolved by the user. Always called from `submit` directly or
+     * from the warning dialog's "Continue" button.
+     */
+    fun runTaskInternal(text: String, image: String?) {
         val repo = selectedRepo ?: return
         val branch = selectedBranch ?: return
         val model = selectedModel ?: return
@@ -520,6 +540,71 @@ fun AiAgentScreen(
                 runJob = null
             }
         }
+    }
+
+    /**
+     * Public submit. Sanitises input, then either runs the task
+     * directly or stages a warning dialog (private repo / MaxQuality /
+     * very large seed conversation).
+     *
+     * The "remember this for {repo, provider}" flag is persisted in
+     * AiCostModeStore — if the user has previously dismissed for this
+     * pair the warning is skipped silently.
+     */
+    fun submit(userText: String, imageBase64: String?) {
+        val text = userText.trim()
+        val image = imageBase64?.takeIf { selectedModel?.let { m -> AiCapability.VISION in m.capabilities } == true }
+        if (text.isEmpty() && image == null) return
+        val repo = selectedRepo ?: return
+        val branch = selectedBranch ?: return
+        val model = selectedModel ?: return
+        // Approximate context size = current transcript char count +
+        // pending user text. This is what gets shipped to the provider
+        // on the very next call, so it's the most honest number we
+        // can show to the user without a real token-counter.
+        val approxContext = text.length + transcript.sumOf { entry ->
+            when (entry) {
+                is AgentEntry.User -> entry.text.length
+                is AgentEntry.Assistant -> entry.text.length
+                is AgentEntry.ToolCall -> entry.call.argsJson.length
+                is AgentEntry.ToolResult -> entry.result.output.length
+            }
+        }
+        val limits = com.glassfiles.data.ai.cost.AiCostPolicy.limitsFor(costMode)
+        val remembered = com.glassfiles.data.ai.cost.AiCostModeStore.isRemembered(
+            context, repo.fullName, model.providerId.name,
+        )
+        val warningReason: com.glassfiles.ui.screens.ai.ExpensiveActionReason? = when {
+            // Private repo + no remembered exception → always warn.
+            // The flag is per (repo, provider) so a "remember" for the
+            // current provider doesn't leak to a different one.
+            repo.isPrivate && !remembered ->
+                com.glassfiles.ui.screens.ai.ExpensiveActionReason.PrivateRepo
+            // MaxQuality is opt-in expensive — surface that.
+            costMode == com.glassfiles.data.ai.cost.AiCostMode.MaxQuality && !remembered ->
+                com.glassfiles.ui.screens.ai.ExpensiveActionReason.MaxQualityMode
+            // Heuristic: existing context is past half the cost-mode
+            // budget. After the model's reply the next turn would cross
+            // the cap, so warn now while it's still reversible.
+            approxContext > (limits.maxTotalContextChars / 2) && !remembered ->
+                com.glassfiles.ui.screens.ai.ExpensiveActionReason.LargeContext
+            else -> null
+        }
+        if (warningReason != null) {
+            pendingWarning = com.glassfiles.ui.screens.ai.ExpensiveActionWarning(
+                repoFullName = repo.fullName,
+                branch = branch,
+                providerLabel = model.providerId.displayName,
+                modelLabel = model.displayName,
+                approxFiles = transcript.count { it is AgentEntry.ToolResult },
+                approxContextChars = approxContext,
+                isPrivate = repo.isPrivate,
+                reason = warningReason,
+            )
+            pendingWarningInput = text to image
+            return
+        }
+        runTaskInternal(text, image)
     }
 
     // ─── UI ───────────────────────────────────────────────────────────────
@@ -631,6 +716,49 @@ fun AiAgentScreen(
                 enabled = !running && models.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+
+        // Cost-mode selector. Three FilterChip-style buttons that map
+        // to AiCostMode. Selection is persisted immediately so a
+        // subsequent task pulls the new mode from AiCostModeStore.
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                Text(Strings.aiCostMode, fontSize = 13.sp, color = colors.onSurface)
+                Text(
+                    when (costMode) {
+                        com.glassfiles.data.ai.cost.AiCostMode.Eco -> Strings.aiCostModeEcoHint
+                        com.glassfiles.data.ai.cost.AiCostMode.Balanced -> Strings.aiCostModeBalancedHint
+                        com.glassfiles.data.ai.cost.AiCostMode.MaxQuality -> Strings.aiCostModeMaxHint
+                    },
+                    fontSize = 10.sp,
+                    color = colors.onSurfaceVariant,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(
+                    com.glassfiles.data.ai.cost.AiCostMode.Eco to Strings.aiCostModeEco,
+                    com.glassfiles.data.ai.cost.AiCostMode.Balanced to Strings.aiCostModeBalanced,
+                    com.glassfiles.data.ai.cost.AiCostMode.MaxQuality to Strings.aiCostModeMax,
+                ).forEach { (mode, label) ->
+                    val selected = mode == costMode
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            if (!running) {
+                                costMode = mode
+                                com.glassfiles.data.ai.cost.AiCostModeStore.setMode(context, mode)
+                            }
+                        },
+                        label = { Text(label, fontSize = 11.sp) },
+                        enabled = !running,
+                    )
+                }
+            }
         }
 
         // Auto-approve switch
@@ -898,6 +1026,41 @@ fun AiAgentScreen(
                     startNewSession()
                 },
                 onDismiss = { showHistory = false },
+            )
+        }
+        // Cost-policy warning gate. Mounted at the top of the screen
+        // so it survives swipes / lifecycle changes the bottom-sheet
+        // would otherwise dismiss. Only one can be active at a time.
+        val warning = pendingWarning
+        val pendingInput = pendingWarningInput
+        if (warning != null && pendingInput != null) {
+            // "Remember" is offered for every reason — even on private
+            // repos. The user is explicitly opting in to skip the
+            // warning for that (repo, provider) pair; trust them.
+            ExpensiveActionWarningDialog(
+                warning = warning,
+                allowRemember = true,
+                onCancel = {
+                    pendingWarning = null
+                    pendingWarningInput = null
+                },
+                onContinueOnce = {
+                    pendingWarning = null
+                    pendingWarningInput = null
+                    runTaskInternal(pendingInput.first, pendingInput.second)
+                },
+                onContinueAndRemember = {
+                    selectedRepo?.let { r ->
+                        selectedModel?.let { m ->
+                            com.glassfiles.data.ai.cost.AiCostModeStore.setRemembered(
+                                context, r.fullName, m.providerId.name, true,
+                            )
+                        }
+                    }
+                    pendingWarning = null
+                    pendingWarningInput = null
+                    runTaskInternal(pendingInput.first, pendingInput.second)
+                },
             )
         }
     }
