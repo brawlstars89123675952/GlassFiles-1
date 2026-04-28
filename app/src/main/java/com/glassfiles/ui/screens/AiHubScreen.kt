@@ -101,7 +101,7 @@ private fun AiHubRow(item: AiHubItem) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(colors.surfaceVariant)
+            .background(colors.surfaceVariant.copy(alpha = 0.5f))
             .clickable(enabled = !item.soon) { item.onClick() }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

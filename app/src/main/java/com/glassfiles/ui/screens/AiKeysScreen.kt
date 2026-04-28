@@ -137,7 +137,7 @@ private fun ProviderKeyCard(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(colors.surfaceVariant)
+            .background(colors.surfaceVariant.copy(alpha = 0.5f))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {

@@ -241,7 +241,7 @@ private fun ModelRow(model: AiModel) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(colors.surfaceVariant)
+            .background(colors.surfaceVariant.copy(alpha = 0.5f))
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
