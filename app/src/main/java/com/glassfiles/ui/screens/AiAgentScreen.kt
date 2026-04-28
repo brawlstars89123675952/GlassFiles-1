@@ -54,7 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.SolidColor
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -62,7 +62,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
 import com.glassfiles.data.ai.AiKeyStore
-import com.glassfiles.data.ai.AiSettingsStore
 import com.glassfiles.data.ai.ModelRegistry
 import com.glassfiles.data.ai.agent.AgentTools
 import com.glassfiles.data.ai.agent.AiToolCall
@@ -135,7 +134,7 @@ fun AiAgentScreen(onBack: () -> Unit) {
             if (key.isBlank()) continue
             try {
                 val list = ModelRegistry.getModels(context, p, key, force = false)
-                    .filter { AiCapability.CHAT in it.capabilities && !it.deprecated }
+                    .filter { AiCapability.TEXT in it.capabilities && !it.deprecated }
                 models.addAll(list)
             } catch (_: Exception) { /* swallow per-provider failures */ }
         }

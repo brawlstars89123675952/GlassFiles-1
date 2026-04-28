@@ -269,7 +269,6 @@ fun GlassFilesApp(
                         onModels = { navigateTo(AppScreen.AI_MODELS) },
                         onKeys = { navigateTo(AppScreen.AI_KEYS) },
                         onSettings = { navigateTo(AppScreen.AI_SETTINGS) },
-                        onAgent = { navigateTo(AppScreen.AI_AGENT) },
                     )
                 }
                 AppScreen.AI_SETTINGS -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
