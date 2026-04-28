@@ -37,12 +37,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AddPhotoAlternate
+import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -79,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
 import com.glassfiles.data.ai.AiKeyStore
+import com.glassfiles.data.ai.AiChatSessionStore
 import com.glassfiles.data.ai.ChatHistoryStore
 import com.glassfiles.data.ai.ModelRegistry
 import com.glassfiles.data.ai.SystemPrompts
@@ -96,8 +100,12 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private const val HISTORY_MODE = "coding"
+private const val SESSION_MODE = AiChatSessionStore.MODE_CODING
 
 /**
  * Coding-focused chat. Distinct from [AiChatScreen]:
@@ -105,7 +113,10 @@ private const val HISTORY_MODE = "coding"
  *  - The assistant runs with [SystemPrompts.CODING] regardless of provider.
  *  - The transcript renders code fences as monospace cards with syntax
  *    highlighting and a "Copy" action.
- *  - Conversation persists across navigation via [ChatHistoryStore].
+ *  - Conversations are organised into named sessions (see
+ *    [AiChatSessionStore]). Older single-conversation transcripts left
+ *    over from [ChatHistoryStore] are migrated to a session on first
+ *    launch.
  *  - User can attach a screenshot when reporting a bug.
  *  - Right-aligned user bubbles, left-aligned assistant bubbles.
  *  - Input bar rises with the keyboard via `Modifier.imePadding()`.
@@ -113,30 +124,338 @@ private const val HISTORY_MODE = "coding"
 @Composable
 fun AiCodingScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    var sessions by remember {
+        mutableStateOf(loadSessionsWithMigration(context))
+    }
+    var activeSessionId by remember { mutableStateOf<String?>(null) }
+
+    fun refresh() {
+        sessions = AiChatSessionStore.list(context, SESSION_MODE)
+    }
+
+    val active = activeSessionId?.let { id -> sessions.firstOrNull { it.id == id } }
+    if (active != null) {
+        CodingChatView(
+            initialSession = active,
+            onBack = {
+                activeSessionId = null
+                refresh()
+            },
+        )
+        return
+    }
+
+    CodingSessionsList(
+        sessions = sessions,
+        onOpen = { activeSessionId = it.id },
+        onNew = {
+            val now = System.currentTimeMillis()
+            val newSession = AiChatSessionStore.Session(
+                id = "coding_${now}",
+                mode = SESSION_MODE,
+                title = AiChatSessionStore.deriveTitle(emptyList()),
+                providerId = "",
+                modelId = "",
+                messages = emptyList(),
+                createdAt = now,
+                updatedAt = now,
+            )
+            AiChatSessionStore.upsert(context, newSession)
+            refresh()
+            activeSessionId = newSession.id
+        },
+        onDelete = { s ->
+            AiChatSessionStore.delete(context, SESSION_MODE, s.id)
+            refresh()
+        },
+        onDeleteAll = {
+            AiChatSessionStore.clear(context, SESSION_MODE)
+            refresh()
+        },
+        onBack = onBack,
+    )
+}
+
+/**
+ * If sessions are empty but the legacy single-conversation store has
+ * messages from before the multi-session refactor, migrate those into a
+ * new "Imported" session. Idempotent.
+ */
+private fun loadSessionsWithMigration(
+    context: android.content.Context,
+): List<AiChatSessionStore.Session> {
+    val existing = AiChatSessionStore.list(context, SESSION_MODE)
+    if (existing.isNotEmpty()) return existing
+    val legacy = ChatHistoryStore.load(context, HISTORY_MODE)
+    if (legacy.isEmpty()) return emptyList()
+    val now = System.currentTimeMillis()
+    val migrated = AiChatSessionStore.Session(
+        id = "coding_imported_${now}",
+        mode = SESSION_MODE,
+        title = AiChatSessionStore.deriveTitle(
+            legacy.map {
+                AiChatSessionStore.Message(
+                    role = it.role,
+                    content = it.content,
+                    imageBase64 = it.imageBase64,
+                    isError = it.isError,
+                )
+            },
+        ),
+        providerId = "",
+        modelId = "",
+        messages = legacy.map {
+            AiChatSessionStore.Message(
+                role = it.role,
+                content = it.content,
+                imageBase64 = it.imageBase64,
+                isError = it.isError,
+            )
+        },
+        createdAt = now,
+        updatedAt = now,
+    )
+    AiChatSessionStore.upsert(context, migrated)
+    ChatHistoryStore.clear(context, HISTORY_MODE)
+    return AiChatSessionStore.list(context, SESSION_MODE)
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sessions list
+// ─────────────────────────────────────────────────────────────────────────
+@Composable
+private fun CodingSessionsList(
+    sessions: List<AiChatSessionStore.Session>,
+    onOpen: (AiChatSessionStore.Session) -> Unit,
+    onNew: () -> Unit,
+    onDelete: (AiChatSessionStore.Session) -> Unit,
+    onDeleteAll: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val sdf = remember { SimpleDateFormat("dd.MM.yy HH:mm", Locale.getDefault()) }
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(query, sessions) {
+        if (query.isBlank()) sessions
+        else sessions.filter { s ->
+            s.title.contains(query, ignoreCase = true) ||
+                s.messages.any { it.content.contains(query, ignoreCase = true) }
+        }
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(colors.surface)
+            .statusBarsPadding(),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    null,
+                    Modifier.size(20.dp),
+                    tint = colors.onSurface,
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    Strings.aiCoding.uppercase(),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    color = colors.onSurface,
+                    fontFamily = FontFamily.Monospace,
+                )
+                Text(
+                    "${sessions.size} sessions",
+                    fontSize = 10.sp,
+                    color = colors.onSurfaceVariant,
+                )
+            }
+            if (sessions.isNotEmpty()) {
+                IconButton(onClick = onDeleteAll) {
+                    Icon(
+                        Icons.Rounded.DeleteSweep,
+                        null,
+                        Modifier.size(20.dp),
+                        tint = colors.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.12f)))
+
+        if (sessions.size > 2) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(colors.surfaceVariant.copy(alpha = 0.5f))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.Search,
+                    null,
+                    Modifier.size(16.dp),
+                    tint = colors.onSurfaceVariant,
+                )
+                Spacer(Modifier.size(8.dp))
+                Box(Modifier.weight(1f)) {
+                    if (query.isEmpty()) {
+                        Text(
+                            "Search…",
+                            color = colors.onSurfaceVariant,
+                            fontSize = 13.sp,
+                        )
+                    }
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        textStyle = LocalTextStyle.current.copy(
+                            color = colors.onSurface,
+                            fontSize = 13.sp,
+                        ),
+                        cursorBrush = SolidColor(colors.primary),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+
+        if (filtered.isEmpty()) {
+            Box(
+                Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (sessions.isEmpty()) "No chats yet" else "Nothing found",
+                    color = colors.onSurfaceVariant,
+                    fontSize = 13.sp,
+                )
+            }
+        } else {
+            LazyColumn(
+                Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(filtered, key = { it.id }) { s ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.surfaceVariant.copy(alpha = 0.5f))
+                            .clickable { onOpen(s) }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            Icons.Rounded.Chat,
+                            null,
+                            Modifier.size(20.dp),
+                            tint = colors.onSurfaceVariant,
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                s.title,
+                                color = colors.onSurface,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                            )
+                            Spacer(Modifier.size(2.dp))
+                            Text(
+                                "${sdf.format(Date(s.updatedAt))} · ${s.messages.size} msgs",
+                                color = colors.onSurfaceVariant,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                            )
+                        }
+                        IconButton(
+                            onClick = { onDelete(s) },
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                Icons.Rounded.Close,
+                                null,
+                                Modifier.size(16.dp),
+                                tint = colors.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.12f)))
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(colors.primary)
+                .clickable { onNew() }
+                .padding(vertical = 14.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Rounded.Add,
+                null,
+                Modifier.size(20.dp),
+                tint = colors.onPrimary,
+            )
+            Spacer(Modifier.size(8.dp))
+            Text(
+                "New chat",
+                color = colors.onPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CodingChatView(
+    initialSession: AiChatSessionStore.Session,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
+    val sessionId = initialSession.id
+    val sessionCreatedAt = initialSession.createdAt
 
     val configured by remember { derivedStateOf { AiKeyStore.configuredProviders(context) } }
-    var provider by remember(configured) { mutableStateOf(loadSavedProvider(context, configured)) }
+    var provider by remember(configured) {
+        mutableStateOf(
+            initialSession.providerId.takeIf { it.isNotBlank() }
+                ?.let { runCatching { AiProviderId.valueOf(it) }.getOrNull() }
+                ?.takeIf { it in configured }
+                ?: loadSavedProvider(context, configured),
+        )
+    }
     val codingModels = remember { mutableStateListOf<AiModel>() }
-    var modelId by remember { mutableStateOf("") }
+    var modelId by remember { mutableStateOf(initialSession.modelId) }
     var loadingModels by remember { mutableStateOf(false) }
     var modelLoadError by remember { mutableStateOf<String?>(null) }
 
-    val transcript = remember { mutableStateListOf<CodingMessage>() }
-    var draft by remember { mutableStateOf(TextFieldValue("")) }
-    var pendingImage by remember { mutableStateOf<String?>(null) }
-    var streaming by remember { mutableStateOf(false) }
-    var streamJob by remember { mutableStateOf<Job?>(null) }
-
-    val listState = rememberLazyListState()
-
-    // Hydrate transcript from persistent storage on first composition.
-    LaunchedEffect(Unit) {
-        val saved = ChatHistoryStore.load(context, HISTORY_MODE)
-        if (saved.isNotEmpty()) {
-            transcript.addAll(
-                saved.map {
+    val transcript = remember {
+        mutableStateListOf<CodingMessage>().apply {
+            addAll(
+                initialSession.messages.map {
                     CodingMessage(
                         role = it.role,
                         content = it.content,
@@ -147,6 +466,12 @@ fun AiCodingScreen(onBack: () -> Unit) {
             )
         }
     }
+    var draft by remember { mutableStateOf(TextFieldValue("")) }
+    var pendingImage by remember { mutableStateOf<String?>(null) }
+    var streaming by remember { mutableStateOf(false) }
+    var streamJob by remember { mutableStateOf<Job?>(null) }
+
+    val listState = rememberLazyListState()
 
     // Refresh model list when provider changes.
     LaunchedEffect(provider) {
@@ -189,17 +514,26 @@ fun AiCodingScreen(onBack: () -> Unit) {
     }
 
     fun persist() {
-        ChatHistoryStore.save(
+        val msgs = transcript.map {
+            AiChatSessionStore.Message(
+                role = it.role,
+                content = it.content,
+                imageBase64 = it.imageBase64,
+                isError = it.isError,
+            )
+        }
+        AiChatSessionStore.upsert(
             context = context,
-            mode = HISTORY_MODE,
-            entries = transcript.map {
-                ChatHistoryStore.Entry(
-                    role = it.role,
-                    content = it.content,
-                    imageBase64 = it.imageBase64,
-                    isError = it.isError,
-                )
-            },
+            session = AiChatSessionStore.Session(
+                id = sessionId,
+                mode = SESSION_MODE,
+                title = AiChatSessionStore.deriveTitle(msgs),
+                providerId = provider?.name.orEmpty(),
+                modelId = modelId,
+                messages = msgs,
+                createdAt = sessionCreatedAt,
+                updatedAt = System.currentTimeMillis(),
+            ),
         )
     }
 
@@ -316,7 +650,8 @@ fun AiCodingScreen(onBack: () -> Unit) {
 
     fun clearAll() {
         transcript.clear()
-        ChatHistoryStore.clear(context, HISTORY_MODE)
+        AiChatSessionStore.delete(context, SESSION_MODE, sessionId)
+        onBack()
     }
 
     Column(
