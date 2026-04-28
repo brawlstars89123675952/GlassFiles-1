@@ -243,6 +243,19 @@ fun AiImageGenScreen(onBack: () -> Unit) {
                 genError = e.message ?: e.javaClass.simpleName
             } finally {
                 generating = false
+                runCatching {
+                    com.glassfiles.data.ai.usage.AiUsageStore.append(
+                        context,
+                        com.glassfiles.data.ai.usage.AiUsageRecord(
+                            providerId = model.providerId.name,
+                            modelId = model.id,
+                            mode = com.glassfiles.data.ai.usage.AiUsageMode.IMAGE,
+                            estimatedInputChars = text.length,
+                            estimatedOutputChars = 0,
+                            estimated = true,
+                        ),
+                    )
+                }
             }
         }
     }
