@@ -45,7 +45,11 @@ import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -93,6 +97,7 @@ import com.glassfiles.data.ai.models.AiProviderId
 import com.glassfiles.data.ai.providers.AiProviders
 import com.glassfiles.data.github.GHRepo
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.data.github.canWrite
 import com.glassfiles.ui.components.AiPickerChip
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -167,6 +172,10 @@ fun AiAgentScreen(
     var running by remember { mutableStateOf(false) }
     var runJob by remember { mutableStateOf<Job?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Per-session "I've seen the warning" flag for private repos. Re-shown
+    // each time the user opens a different private repo.
+    var privateRepoDismissed by remember { mutableStateOf<String?>(null) }
+    val activeApiKey = selectedModel?.let { AiKeyStore.getKey(context, it.providerId) }.orEmpty()
 
     // ID of the session whose repo / branch / model we still want to
     // re-apply once the async repo + model lists finish loading. Cleared
@@ -433,12 +442,22 @@ fun AiAgentScreen(
         runJob = scope.launch {
             val executor = GitHubToolExecutor(repoOwner(repo), repoName(repo), branch)
             val provider = AiProviders.get(model.providerId)
+            // Filter destructive tools out of the schema sent to the model
+            // when the active repo is read-only — without it, the model
+            // would happily emit `write_file` / `commit` calls that just
+            // 403 in the executor and waste a turn.
+            val tools = if (repo.canWrite()) {
+                AgentTools.ALL
+            } else {
+                AgentTools.ALL.filter { it.readOnly }
+            }
             try {
                 runAgentLoop(
                     seedMessages = transcript.toAiMessages(),
                     provider = provider,
                     modelId = model.id,
                     apiKey = key,
+                    tools = tools,
                     executor = executor,
                     transcript = transcript,
                     approvals = approvals,
@@ -585,6 +604,49 @@ fun AiAgentScreen(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // Banners — only render when the corresponding condition
+                // is live. Each is its own `item` so they can collapse/
+                // appear independently without disturbing scroll position.
+                val repo = selectedRepo
+                if (repo != null && repo.isPrivate && privateRepoDismissed != repo.fullName) {
+                    item("banner-private") {
+                        AgentBanner(
+                            icon = Icons.Rounded.Lock,
+                            tint = colors.tertiary,
+                            text = Strings.aiAgentPrivateRepoWarning,
+                            actionLabel = Strings.aiAgentPrivateRepoDismiss,
+                            onAction = { privateRepoDismissed = repo.fullName },
+                        )
+                    }
+                }
+                if (repo != null && !repo.canWrite()) {
+                    item("banner-readonly") {
+                        AgentBanner(
+                            icon = Icons.Rounded.Warning,
+                            tint = colors.error,
+                            text = Strings.aiAgentReadOnlyWarning,
+                        )
+                    }
+                }
+                if (selectedModel != null && activeApiKey.isBlank()) {
+                    item("banner-no-key") {
+                        AgentBanner(
+                            icon = Icons.Rounded.Warning,
+                            tint = colors.error,
+                            title = Strings.aiAgentNoApiKeyTitle,
+                            text = Strings.aiAgentNoApiKeySubtitle,
+                        )
+                    }
+                }
+                if (selectedRepo == null || selectedBranch.isNullOrBlank()) {
+                    item("banner-pick-repo") {
+                        AgentBanner(
+                            icon = Icons.Rounded.Build,
+                            tint = colors.onSurfaceVariant,
+                            text = Strings.aiAgentPickRepoHint,
+                        )
+                    }
+                }
                 if (entries.isEmpty()) {
                     item {
                         Text(
@@ -601,6 +663,7 @@ fun AiAgentScreen(
                             entry = entry,
                             activeRepoFullName = selectedRepo?.fullName,
                             activeBranch = selectedBranch,
+                            activeDefaultBranch = selectedRepo?.defaultBranch,
                         )
                     }
                 }
@@ -647,7 +710,8 @@ fun AiAgentScreen(
         // a `TextFieldValue` so cursor + selection survive recomposition.
         val canSend = !running &&
             (input.text.isNotBlank() || pendingImage != null) &&
-            selectedRepo != null && selectedBranch != null && selectedModel != null
+            selectedRepo != null && selectedBranch != null && selectedModel != null &&
+            activeApiKey.isNotBlank()
         Row(
             Modifier
                 .fillMaxWidth()
@@ -727,6 +791,56 @@ fun AiAgentScreen(
                     startNewSession()
                 },
                 onDismiss = { showHistory = false },
+            )
+        }
+    }
+}
+
+/**
+ * Compact informational banner rendered inside the transcript LazyColumn
+ * to surface session-wide warnings (private repo, read-only, missing
+ * key, etc). Optional [actionLabel]/[onAction] turns the banner into a
+ * one-tap dismiss / navigate affordance.
+ */
+@Composable
+private fun AgentBanner(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: androidx.compose.ui.graphics.Color,
+    text: String,
+    title: String? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.surfaceVariant.copy(alpha = 0.55f))
+            .border(1.dp, colors.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, Modifier.size(18.dp), tint = tint)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            if (!title.isNullOrBlank()) {
+                Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
+                Spacer(Modifier.height(2.dp))
+            }
+            Text(text, fontSize = 12.sp, color = colors.onSurfaceVariant)
+        }
+        if (!actionLabel.isNullOrBlank() && onAction != null) {
+            Spacer(Modifier.width(8.dp))
+            Text(
+                actionLabel,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.primary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { onAction() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }
     }
@@ -939,6 +1053,7 @@ private fun TranscriptEntry(
     entry: AgentEntry,
     activeRepoFullName: String?,
     activeBranch: String?,
+    activeDefaultBranch: String?,
 ) {
     val colors = MaterialTheme.colorScheme
     when (entry) {
@@ -979,6 +1094,7 @@ private fun TranscriptEntry(
             isPending = false,
             activeRepoFullName = activeRepoFullName,
             activeBranch = activeBranch,
+            activeDefaultBranch = activeDefaultBranch,
             onApprove = {},
             onReject = {},
         )
@@ -989,6 +1105,7 @@ private fun TranscriptEntry(
                 isPending = true,
                 activeRepoFullName = activeRepoFullName,
                 activeBranch = activeBranch,
+                activeDefaultBranch = activeDefaultBranch,
                 onApprove = { entry.pending.deferred.complete(true) },
                 onReject = { entry.pending.deferred.complete(false) },
             )
@@ -1002,11 +1119,20 @@ private fun ToolCallCard(
     isPending: Boolean,
     activeRepoFullName: String?,
     activeBranch: String?,
+    activeDefaultBranch: String?,
     onApprove: () -> Unit,
     onReject: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val showDiff = isPending && entry.call.name in DIFF_PREVIEW_TOOLS
+    val showOpenPrPreview = isPending && entry.call.name == AgentTools.OPEN_PR.name
+    val targetsProtectedBranch = remember(entry.call.argsJson, activeBranch, activeDefaultBranch) {
+        targetsProtectedBranch(entry.call, activeBranch, activeDefaultBranch)
+    }
+    // When a destructive call lands on the default branch we make the
+    // user explicitly tick a confirmation — Approve stays disabled until
+    // they do. Read-only browsing or pending = false bypasses the gate.
+    var protectedConfirmed by remember(entry.call.argsJson) { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxWidth()
@@ -1050,15 +1176,28 @@ private fun ToolCallCard(
                 activeBranch = activeBranch,
             )
         }
+        if (showOpenPrPreview) {
+            Spacer(Modifier.height(10.dp))
+            OpenPrPreview(call = entry.call, defaultBase = activeDefaultBranch)
+        }
+        if (isPending && targetsProtectedBranch) {
+            Spacer(Modifier.height(10.dp))
+            ProtectedBranchWarning(
+                branch = activeDefaultBranch.orEmpty(),
+                checked = protectedConfirmed,
+                onCheckedChange = { protectedConfirmed = it },
+            )
+        }
         if (isPending) {
             Spacer(Modifier.height(10.dp))
+            val approveEnabled = !targetsProtectedBranch || protectedConfirmed
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionButton(
                     label = Strings.aiAgentApprove,
                     icon = Icons.Rounded.Check,
-                    bg = colors.primary,
-                    fg = colors.onPrimary,
-                    onClick = onApprove,
+                    bg = if (approveEnabled) colors.primary else colors.surfaceVariant,
+                    fg = if (approveEnabled) colors.onPrimary else colors.onSurfaceVariant,
+                    onClick = if (approveEnabled) onApprove else ({}),
                 )
                 ActionButton(
                     label = Strings.aiAgentReject,
@@ -1068,6 +1207,129 @@ private fun ToolCallCard(
                     onClick = onReject,
                 )
             }
+        }
+    }
+}
+
+/**
+ * True if [call] is a destructive tool call that will land on the
+ * repo's default branch (typically `main`/`master`). The user must
+ * explicitly confirm such calls — most projects expect changes to flow
+ * through a feature branch + PR.
+ */
+private fun targetsProtectedBranch(
+    call: AiToolCall,
+    activeBranch: String?,
+    defaultBranch: String?,
+): Boolean {
+    val def = defaultBranch?.takeIf { it.isNotBlank() } ?: return false
+    val args = runCatching { org.json.JSONObject(call.argsJson) }.getOrNull()
+    val target = when (call.name) {
+        AgentTools.WRITE_FILE.name,
+        AgentTools.EDIT_FILE.name,
+        AgentTools.COMMIT.name -> activeBranch
+        AgentTools.OPEN_PR.name -> args?.optString("base").orEmpty().ifBlank { def }
+        AgentTools.CREATE_BRANCH.name -> null
+        else -> null
+    } ?: return false
+    return target == def
+}
+
+@Composable
+private fun ProtectedBranchWarning(
+    branch: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.errorContainer.copy(alpha = 0.55f))
+            .border(1.dp, colors.error.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Warning, null, Modifier.size(16.dp), tint = colors.error)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                Strings.aiAgentProtectedBranchTitle,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.onErrorContainer,
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            Strings.aiAgentProtectedBranchSubtitle.replace("{branch}", branch),
+            fontSize = 11.sp,
+            color = colors.onErrorContainer,
+        )
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = colors.error,
+                    uncheckedColor = colors.onErrorContainer.copy(alpha = 0.5f),
+                ),
+            )
+            Text(
+                Strings.aiAgentProtectedBranchConfirm,
+                fontSize = 12.sp,
+                color = colors.onErrorContainer,
+            )
+        }
+    }
+}
+
+@Composable
+private fun OpenPrPreview(call: AiToolCall, defaultBase: String?) {
+    val colors = MaterialTheme.colorScheme
+    val args = runCatching { org.json.JSONObject(call.argsJson) }.getOrNull()
+    val title = args?.optString("title").orEmpty()
+    val body = args?.optString("body").orEmpty()
+    val head = args?.optString("head").orEmpty()
+    val base = args?.optString("base").orEmpty().ifBlank { defaultBase.orEmpty() }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.surface)
+            .border(1.dp, colors.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Text(
+            Strings.aiAgentOpenPrPreview.uppercase(),
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.6.sp,
+            color = colors.onSurfaceVariant,
+            fontFamily = FontFamily.Monospace,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            title.ifBlank { "(no title)" },
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.onSurface,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            "$head  →  $base",
+            fontSize = 12.sp,
+            color = colors.onSurfaceVariant,
+            fontFamily = FontFamily.Monospace,
+        )
+        if (body.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                body.take(800) + if (body.length > 800) "…" else "",
+                fontSize = 12.sp,
+                color = colors.onSurface,
+            )
         }
     }
 }
@@ -1336,6 +1598,7 @@ private suspend fun runAgentLoop(
     provider: com.glassfiles.data.ai.providers.AiProvider,
     modelId: String,
     apiKey: String,
+    tools: List<com.glassfiles.data.ai.agent.AiTool>,
     executor: GitHubToolExecutor,
     transcript: androidx.compose.runtime.snapshots.SnapshotStateList<AgentEntry>,
     approvals: androidx.compose.runtime.snapshots.SnapshotStateList<PendingApproval>,
@@ -1344,6 +1607,12 @@ private suspend fun runAgentLoop(
 ) {
     var messages = seedMessages
     repeat(MAX_ITERATIONS) {
+        // Compact older turns when the rolling transcript grows past the
+        // soft limit — without this the next provider call eventually
+        // 4xx's on the model's context window. We keep the most recent
+        // turns intact and replace the older prefix with a single
+        // summary message, generated by a one-shot non-tool call.
+        messages = compactIfNeeded(provider, modelId, apiKey, context, messages)
         // Insert a streaming Assistant placeholder so text deltas land in
         // the UI as they arrive. The placeholder has a stable id, so
         // LazyList keeps its position in the list across replacements.
@@ -1356,7 +1625,7 @@ private suspend fun runAgentLoop(
                 context = context,
                 modelId = modelId,
                 messages = messages,
-                tools = AgentTools.ALL,
+                tools = tools,
                 apiKey = apiKey,
                 onTextDelta = { delta ->
                     if (streamingIndex in transcript.indices) {
@@ -1427,6 +1696,64 @@ private suspend fun runAgentLoop(
 
 private const val MAX_ITERATIONS = 8
 private const val AGENT_SESSION_MODE = "agent"
+
+/** Hard char-length budget for the rolling tool-use transcript. ~80 000
+ * chars ≈ 20–25 k tokens, well under the smallest tool-use windows of
+ * the providers we ship. */
+private const val CONTEXT_COMPACT_CHARS = 80_000
+
+/** Number of *most-recent* messages we always keep verbatim. Older
+ * messages can be folded into a summary. 6 ≈ 3 user/assistant turns. */
+private const val CONTEXT_KEEP_TAIL = 6
+
+/**
+ * If [messages] exceeds [CONTEXT_COMPACT_CHARS] in total payload size,
+ * collapses everything before the last [CONTEXT_KEEP_TAIL] entries into
+ * one summary assistant message generated by a one-shot non-tool [chat]
+ * call. Falls through unchanged otherwise. Failures (no api key,
+ * network) leave [messages] as-is — agent loop can still try the next
+ * turn and hit a real provider error if it overflows.
+ */
+private suspend fun compactIfNeeded(
+    provider: com.glassfiles.data.ai.providers.AiProvider,
+    modelId: String,
+    apiKey: String,
+    context: android.content.Context,
+    messages: List<AiMessage>,
+): List<AiMessage> {
+    val totalChars = messages.sumOf { it.content.length }
+    if (totalChars <= CONTEXT_COMPACT_CHARS) return messages
+    if (messages.size <= CONTEXT_KEEP_TAIL + 1) return messages
+    val tail = messages.takeLast(CONTEXT_KEEP_TAIL)
+    val head = messages.dropLast(CONTEXT_KEEP_TAIL)
+    val summaryRequest = buildString {
+        appendLine("Summarise the following AI-agent turns into a compact briefing for a continuing conversation.")
+        appendLine("Preserve every file path mentioned, branch name, decision taken, and pending TODO.")
+        appendLine("Drop greetings, restated requirements, and tool-call boilerplate.")
+        appendLine("Aim for under 1500 characters.")
+        appendLine()
+        head.forEach { m ->
+            appendLine("--- ${m.role}${m.toolName?.let { " [tool=$it]" } ?: ""}")
+            appendLine(m.content.take(4000))
+        }
+    }
+    val summary = runCatching {
+        buildString {
+            provider.chat(
+                context = context,
+                modelId = modelId,
+                messages = listOf(AiMessage(role = "user", content = summaryRequest)),
+                apiKey = apiKey,
+                onChunk = { append(it) },
+            )
+        }
+    }.getOrNull()?.takeIf { it.isNotBlank() } ?: return messages
+    val compacted = AiMessage(
+        role = "assistant",
+        content = "[Earlier turns summarised:]\n$summary",
+    )
+    return listOf(compacted) + tail
+}
 
 // ─── Helpers / data ───────────────────────────────────────────────────────
 

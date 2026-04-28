@@ -22,6 +22,18 @@ class GitHubToolExecutor(
     private val repo: String,
     private val branch: String,
 ) {
+    /**
+     * In-memory cache of file contents for the current session. Keyed by
+     * cleaned path; values mirror the latest known content on [branch].
+     * Populated by [readFile] and invalidated by [editFile] / [writeFile]
+     * after a successful upload (so subsequent tool calls see the new
+     * version without a round-trip).
+     *
+     * Models often re-read the same file multiple times within a single
+     * loop ("read it, plan, then check before edit"). Caching collapses
+     * those repeated reads into one network call.
+     */
+    private val fileCache = mutableMapOf<String, String>()
 
     suspend fun execute(context: Context, call: AiToolCall): AiToolResult {
         val args = runCatching { JSONObject(call.argsJson) }.getOrElse { JSONObject() }
@@ -36,6 +48,17 @@ class GitHubToolExecutor(
                     args.getInt("end_line"),
                 )
                 AgentTools.SEARCH_REPO.name -> searchRepo(context, args.getString("query"))
+                AgentTools.LIST_BRANCHES.name -> listBranches(context)
+                AgentTools.COMPARE_REFS.name -> compareRefs(
+                    context,
+                    args.getString("base"),
+                    args.getString("head"),
+                )
+                AgentTools.LIST_PULLS.name -> listPulls(context, args.optString("state", "open"))
+                AgentTools.READ_PR.name -> readPr(context, args.getInt("number"))
+                AgentTools.LIST_ISSUES.name -> listIssues(context, args.optString("state", "open"))
+                AgentTools.READ_ISSUE.name -> readIssue(context, args.getInt("number"))
+                AgentTools.READ_WORKFLOW_RUN.name -> readWorkflowRun(context, args.getLong("run_id"))
                 AgentTools.EDIT_FILE.name -> editFile(
                     context,
                     args.getString("path"),
@@ -95,8 +118,23 @@ class GitHubToolExecutor(
     }
 
     private suspend fun readFile(context: Context, path: String): String {
-        val text = GitHubManager.getFileContent(context, owner, repo, path.trim().trim('/'), branch)
+        val cleaned = path.trim().trim('/')
+        val text = fetchFileContent(context, cleaned)
         return if (text.isBlank()) "(empty file)" else text
+    }
+
+    /**
+     * Returns the contents of [cleanedPath] on the active branch — from
+     * the in-session [fileCache] when present, otherwise via a
+     * [GitHubManager.getFileContent] round-trip whose result is then
+     * memoised. Empty/missing files are NOT cached so that newly
+     * created files become visible to later tool calls.
+     */
+    private suspend fun fetchFileContent(context: Context, cleanedPath: String): String {
+        fileCache[cleanedPath]?.let { return it }
+        val text = GitHubManager.getFileContent(context, owner, repo, cleanedPath, branch)
+        if (text.isNotBlank()) fileCache[cleanedPath] = text
+        return text
     }
 
     private suspend fun readFileRange(
@@ -108,7 +146,7 @@ class GitHubToolExecutor(
         if (startLine < 1) throw IllegalArgumentException("start_line must be >= 1, got $startLine")
         if (endLine < startLine) throw IllegalArgumentException("end_line ($endLine) must be >= start_line ($startLine)")
         val cleaned = path.trim().trim('/')
-        val text = GitHubManager.getFileContent(context, owner, repo, cleaned, branch)
+        val text = fetchFileContent(context, cleaned)
         if (text.isBlank()) return "(empty file)"
         val lines = text.split('\n')
         val total = lines.size
@@ -131,6 +169,162 @@ class GitHubToolExecutor(
         return results.joinToString("\n") { "${it.path}  (sha=${it.sha.take(7)})" }
     }
 
+    private suspend fun listBranches(context: Context): String {
+        val branches = GitHubManager.getBranches(context, owner, repo)
+        if (branches.isEmpty()) return "(no branches)"
+        return branches.joinToString("\n") { name ->
+            if (name == branch) "* $name (active)" else "  $name"
+        }
+    }
+
+    private suspend fun compareRefs(context: Context, base: String, head: String): String {
+        val result = GitHubManager.compareCommits(context, owner, repo, base, head)
+            ?: throw RuntimeException("compare_refs: GitHub returned no comparison for $base...$head.")
+        return buildString {
+            append("status=${result.status}, ahead_by=${result.aheadBy}, behind_by=${result.behindBy}, total_commits=${result.totalCommits}")
+            if (result.commits.isNotEmpty()) {
+                appendLine().appendLine().appendLine("Commits (${result.commits.size}):")
+                result.commits.take(20).forEach { c ->
+                    val firstLine = c.message.lineSequence().firstOrNull().orEmpty()
+                    appendLine("  ${c.sha.take(7)}  $firstLine")
+                }
+                if (result.commits.size > 20) appendLine("  …${result.commits.size - 20} more")
+            }
+            if (result.files.isNotEmpty()) {
+                appendLine().appendLine("Files (${result.files.size}):")
+                result.files.take(40).forEach { f ->
+                    appendLine("  [${f.status}] +${f.additions}/-${f.deletions}  ${f.filename}")
+                }
+                if (result.files.size > 40) appendLine("  …${result.files.size - 40} more")
+                // Inline a few patches so the model can reason about the
+                // actual change without another tool round-trip.
+                val patches = result.files.mapNotNull { f ->
+                    f.patch.takeIf { it.isNotBlank() }?.let { f.filename to it }
+                }
+                if (patches.isNotEmpty()) {
+                    appendLine().appendLine("Patches (first ${minOf(3, patches.size)} files):")
+                    patches.take(3).forEach { (name, patch) ->
+                        appendLine("--- $name")
+                        appendLine(patch.take(1500))
+                        if (patch.length > 1500) appendLine("[…patch truncated]")
+                    }
+                }
+            }
+        }.trimEnd()
+    }
+
+    private suspend fun listPulls(context: Context, state: String): String {
+        val effective = state.ifBlank { "open" }.lowercase()
+        val pulls = GitHubManager.getPullRequests(context, owner, repo, effective)
+        if (pulls.isEmpty()) return "(no $effective pull requests)"
+        return pulls.take(30).joinToString("\n") { p ->
+            val mergedTag = if (p.merged) " merged" else ""
+            val draftTag = if (p.draft) " draft" else ""
+            "#${p.number}  [${p.state}$mergedTag$draftTag]  ${p.head} → ${p.base}  by @${p.author}  — ${p.title}"
+        }
+    }
+
+    private suspend fun readPr(context: Context, number: Int): String {
+        val pr = GitHubManager.getPullRequestDetail(context, owner, repo, number)
+            ?: throw RuntimeException("read_pr: PR #$number not found.")
+        return buildString {
+            appendLine("#${pr.number}  ${pr.title}")
+            appendLine("state: ${pr.state}${if (pr.merged) " (merged)" else ""}${if (pr.draft) " (draft)" else ""}")
+            appendLine("author: @${pr.author}    created: ${pr.createdAt}")
+            appendLine("head:   ${pr.head}")
+            appendLine("base:   ${pr.base}")
+            appendLine("commits=${pr.commits}, +${pr.additions}/-${pr.deletions} across ${pr.changedFiles} file(s)")
+            if (pr.mergeable != null) appendLine("mergeable=${pr.mergeable}, state=${pr.mergeableState}")
+            if (pr.requestedReviewers.isNotEmpty()) appendLine("reviewers: ${pr.requestedReviewers.joinToString(", ") { "@$it" }}")
+            if (pr.htmlUrl.isNotBlank()) appendLine("url: ${pr.htmlUrl}")
+            if (pr.body.isNotBlank()) {
+                appendLine().appendLine("---")
+                appendLine(pr.body.take(3000))
+                if (pr.body.length > 3000) appendLine("[…body truncated]")
+            }
+        }.trimEnd()
+    }
+
+    private suspend fun listIssues(context: Context, state: String): String {
+        val effective = state.ifBlank { "open" }.lowercase()
+        val items = GitHubManager.getIssues(context, owner, repo, effective)
+            .filterNot { it.isPR }
+        if (items.isEmpty()) return "(no $effective issues)"
+        return items.take(30).joinToString("\n") { i ->
+            "#${i.number}  [${i.state}]  by @${i.author}  comments=${i.comments}  — ${i.title}"
+        }
+    }
+
+    private suspend fun readIssue(context: Context, number: Int): String {
+        val issue = GitHubManager.getIssueDetail(context, owner, repo, number)
+            ?: throw RuntimeException("read_issue: issue #$number not found.")
+        if (issue.isPR) {
+            // GitHub's issues endpoint surfaces PRs too — redirect the
+            // model rather than hide the fact.
+            return "Issue #$number is actually a pull request — call read_pr with number=$number for full PR details."
+        }
+        val comments = runCatching { GitHubManager.getIssueComments(context, owner, repo, number) }
+            .getOrDefault(emptyList())
+        return buildString {
+            appendLine("#${issue.number}  ${issue.title}")
+            appendLine("state: ${issue.state}${if (issue.locked) " (locked)" else ""}")
+            appendLine("author: @${issue.author}    created: ${issue.createdAt}")
+            if (issue.assignee.isNotBlank()) appendLine("assignee: @${issue.assignee}")
+            if (issue.labels.isNotEmpty()) appendLine("labels: ${issue.labels.joinToString(", ")}")
+            if (issue.milestoneTitle.isNotBlank()) appendLine("milestone: ${issue.milestoneTitle}")
+            if (issue.body.isNotBlank()) {
+                appendLine().appendLine("---")
+                appendLine(issue.body.take(2500))
+                if (issue.body.length > 2500) appendLine("[…body truncated]")
+            }
+            if (comments.isNotEmpty()) {
+                appendLine().appendLine("Comments (${comments.size}):")
+                comments.takeLast(5).forEach { c ->
+                    appendLine("--- @${c.author}  ${c.createdAt}")
+                    appendLine(c.body.take(800))
+                    if (c.body.length > 800) appendLine("[…comment truncated]")
+                }
+                if (comments.size > 5) appendLine("[earlier ${comments.size - 5} comment(s) omitted]")
+            }
+        }.trimEnd()
+    }
+
+    private suspend fun readWorkflowRun(context: Context, runId: Long): String {
+        val run = GitHubManager.getWorkflowRun(context, owner, repo, runId)
+            ?: throw RuntimeException("read_workflow_run: run $runId not found.")
+        val jobs = runCatching { GitHubManager.getWorkflowRunJobs(context, owner, repo, runId) }
+            .getOrDefault(emptyList())
+        return buildString {
+            appendLine("run #${run.runNumber}  ${run.name}")
+            appendLine("status=${run.status}, conclusion=${run.conclusion}")
+            appendLine("branch=${run.branch}, event=${run.event}, sha=${run.headSha.take(7)}")
+            appendLine("by @${run.actor}    created: ${run.createdAt}    updated: ${run.updatedAt}")
+            if (run.htmlUrl.isNotBlank()) appendLine("url: ${run.htmlUrl}")
+            if (jobs.isNotEmpty()) {
+                appendLine().appendLine("Jobs (${jobs.size}):")
+                jobs.forEach { j ->
+                    appendLine("  ${j.name}: status=${j.status}, conclusion=${j.conclusion}")
+                }
+                val failed = jobs.filter { it.conclusion == "failure" }
+                if (failed.isNotEmpty()) {
+                    appendLine().appendLine("Failed-job logs (tail):")
+                    failed.take(3).forEach { j ->
+                        val raw = runCatching { GitHubManager.getJobLogs(context, owner, repo, j.id) }
+                            .getOrDefault("")
+                        // Logs come back gigantic — keep only the tail
+                        // (where the error usually lives) so the model
+                        // gets actionable context without burning the
+                        // whole turn budget.
+                        val tail = raw.takeLast(2000)
+                        appendLine("--- ${j.name} (id=${j.id})")
+                        appendLine(if (tail.isBlank()) "(no logs)" else tail)
+                    }
+                    if (failed.size > 3) appendLine("[${failed.size - 3} more failed job(s) omitted]")
+                }
+            }
+        }.trimEnd()
+    }
+
     private suspend fun editFile(
         context: Context,
         path: String,
@@ -145,7 +339,7 @@ class GitHubToolExecutor(
             throw RuntimeException("edit_file: old_string and new_string are identical — nothing to change.")
         }
         val cleaned = path.trim().trim('/')
-        val current = GitHubManager.getFileContent(context, owner, repo, cleaned, branch)
+        val current = fetchFileContent(context, cleaned)
         if (current.isBlank()) {
             throw RuntimeException("edit_file: file \"$cleaned\" is empty or could not be read on branch \"$branch\". Use write_file to create it.")
         }
@@ -173,6 +367,9 @@ class GitHubToolExecutor(
             sha = existingSha,
         )
         return if (ok) {
+            // Reflect the new content in the cache so the model sees its
+            // own edits on subsequent reads without another API call.
+            fileCache[cleaned] = updated
             val delta = updated.length - current.length
             val sign = if (delta >= 0) "+" else ""
             "Edited $cleaned ($sign$delta chars) on $branch."
@@ -213,8 +410,10 @@ class GitHubToolExecutor(
             branch = branch,
             sha = existingSha,
         )
-        return if (ok) "Wrote $cleaned (${content.length} chars) on $branch."
-        else throw RuntimeException("write_file: GitHub rejected the commit. Check token scope or path.")
+        return if (ok) {
+            fileCache[cleaned] = content
+            "Wrote $cleaned (${content.length} chars) on $branch."
+        } else throw RuntimeException("write_file: GitHub rejected the commit. Check token scope or path.")
     }
 
     private suspend fun createBranch(context: Context, name: String, from: String): String {
@@ -251,7 +450,10 @@ class GitHubToolExecutor(
                 branch = branch,
                 sha = existingSha,
             )
-            if (ok) written += path
+            if (ok) {
+                written += path
+                fileCache[path] = content
+            }
         }
         return if (written.isEmpty()) throw RuntimeException("commit: no files were written.")
         else "Committed ${written.size} file(s) to $branch:\n${written.joinToString("\n")}"

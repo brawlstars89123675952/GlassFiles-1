@@ -254,9 +254,141 @@ object AgentTools {
         readOnly = false,
     )
 
+    // ─── Read-only repo introspection ────────────────────────────────
+
+    /** Lists the names of every branch in the active repository. */
+    val LIST_BRANCHES = AiTool(
+        name = "list_branches",
+        description = "List the names of all branches in the active repository.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {})
+            put("required", arr())
+        },
+        readOnly = true,
+    )
+
+    /**
+     * Returns the diff (file-by-file patch + commit summary) between two
+     * refs of the active repo. Useful for "what changed on branch X
+     * compared to main" or "show me the diff of PR #N".
+     */
+    val COMPARE_REFS = AiTool(
+        name = "compare_refs",
+        description = "Compare two refs (branches, tags, or SHAs) in the active repository and return the unified diff plus the list of commits.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("base", obj {
+                    put("type", "string")
+                    put("description", "Base ref — what we're comparing against (e.g. \"main\").")
+                })
+                put("head", obj {
+                    put("type", "string")
+                    put("description", "Head ref — the newer side (e.g. \"feature/foo\").")
+                })
+            })
+            put("required", arr("base", "head"))
+        },
+        readOnly = true,
+    )
+
+    /** Lists pull requests with optional state filter. */
+    val LIST_PULLS = AiTool(
+        name = "list_pulls",
+        description = "List pull requests in the active repository.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("state", obj {
+                    put("type", "string")
+                    put("description", "One of \"open\", \"closed\", \"all\". Defaults to \"open\".")
+                })
+            })
+            put("required", arr())
+        },
+        readOnly = true,
+    )
+
+    /** Reads a single PR's metadata, description, and head/base refs. */
+    val READ_PR = AiTool(
+        name = "read_pr",
+        description = "Read a pull request's title, description, head/base branches, and stats.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("number", obj {
+                    put("type", "integer")
+                    put("description", "PR number (the integer after \"#\").")
+                })
+            })
+            put("required", arr("number"))
+        },
+        readOnly = true,
+    )
+
+    /** Lists issues with optional state filter. */
+    val LIST_ISSUES = AiTool(
+        name = "list_issues",
+        description = "List issues in the active repository (excludes PRs).",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("state", obj {
+                    put("type", "string")
+                    put("description", "One of \"open\", \"closed\", \"all\". Defaults to \"open\".")
+                })
+            })
+            put("required", arr())
+        },
+        readOnly = true,
+    )
+
+    /** Reads a single issue's full metadata, description, and recent comments. */
+    val READ_ISSUE = AiTool(
+        name = "read_issue",
+        description = "Read an issue's title, description, labels, and recent comments.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("number", obj {
+                    put("type", "integer")
+                    put("description", "Issue number.")
+                })
+            })
+            put("required", arr("number"))
+        },
+        readOnly = true,
+    )
+
+    /**
+     * Reads a workflow run summary plus the per-job statuses, plus the
+     * full logs of any failed jobs. Designed to support the use case
+     * "tell me why CI failed and propose a fix".
+     */
+    val READ_WORKFLOW_RUN = AiTool(
+        name = "read_workflow_run",
+        description = "Read a GitHub Actions workflow run: status, jobs, and logs of failed jobs.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("run_id", obj {
+                    put("type", "integer")
+                    put("description", "Numeric workflow run ID.")
+                })
+            })
+            put("required", arr("run_id"))
+        },
+        readOnly = true,
+    )
+
     /** All tools, in canonical order. */
     val ALL: List<AiTool> = listOf(
         LIST_DIR, READ_FILE, READ_FILE_RANGE, SEARCH_REPO,
+        LIST_BRANCHES, COMPARE_REFS,
+        LIST_PULLS, READ_PR,
+        LIST_ISSUES, READ_ISSUE,
+        READ_WORKFLOW_RUN,
         EDIT_FILE, WRITE_FILE, CREATE_BRANCH, COMMIT, OPEN_PR,
     )
 

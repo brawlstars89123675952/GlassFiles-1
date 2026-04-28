@@ -318,6 +318,34 @@ object Strings {
     val aiAgentQuickFixLint get() = s("Поправь стиль", "Fix lint")
     val aiAgentQuickRefactor get() = s("Рефакторинг", "Refactor")
     val aiAgentQuickGenerateDocs get() = s("Сгенерируй KDoc", "Generate KDoc")
+    val aiAgentProtectedBranchTitle get() = s("Это защищённая ветка", "Protected branch")
+    val aiAgentProtectedBranchSubtitle get() = s(
+        "Эта операция изменит ветку «{branch}» по умолчанию. Обычно правки идут через feature-ветку и Pull Request.",
+        "This action will change the default branch \"{branch}\". Most teams expect changes to go through a feature branch + PR.",
+    )
+    val aiAgentProtectedBranchConfirm get() = s(
+        "Понимаю, что пишу прямо в основную ветку",
+        "I understand I'm writing directly to the main branch",
+    )
+    val aiAgentOpenPrPreview get() = s("Pull request", "Pull request")
+    val aiAgentPrivateRepoWarning get() = s(
+        "Это приватный репозиторий. Содержимое файлов будет отправлено внешнему AI-провайдеру.",
+        "This is a private repo. File contents will be sent to an external AI provider.",
+    )
+    val aiAgentPrivateRepoDismiss get() = s("Понял", "Got it")
+    val aiAgentReadOnlyWarning get() = s(
+        "Read-only доступ — write-инструменты отключены.",
+        "Read-only access — write tools disabled.",
+    )
+    val aiAgentNoApiKeyTitle get() = s("Нужен API ключ", "API key required")
+    val aiAgentNoApiKeySubtitle get() = s(
+        "Добавь ключ OpenAI или Anthropic в настройках AI, чтобы агент работал.",
+        "Add an OpenAI or Anthropic key in AI settings so the agent can run.",
+    )
+    val aiAgentPickRepoHint get() = s(
+        "Выбери репозиторий и ветку, чтобы инструменты заработали.",
+        "Pick a repo and branch to enable the tools.",
+    )
 
     val about get() = s("О приложении", "About")
     val version get() = s("Версия", "Version")
