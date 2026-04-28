@@ -449,15 +449,18 @@ internal fun RepoDetailScreen(
         }
         if (!canWrite && repo.permissions != null) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(colors.surfaceVariant)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Icon(Icons.Rounded.Visibility, null, Modifier.size(14.dp), tint = colors.onSurfaceVariant)
-                Text("Read-only", fontSize = 11.sp, color = colors.onSurfaceVariant, fontWeight = FontWeight.Medium)
+                Text(
+                    "Read-only",
+                    fontSize = 11.sp,
+                    color = colors.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 0.4.sp
+                )
             }
         }
         if (cloneProgress != null) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(colors.primary.copy(0.10f)).padding(horizontal = 12.dp, vertical = 8.dp)) { Text(cloneProgress!!, fontSize = 13.sp, color = colors.primary, fontWeight = FontWeight.Medium) }
