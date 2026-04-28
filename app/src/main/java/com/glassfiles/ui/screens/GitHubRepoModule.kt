@@ -449,7 +449,7 @@ internal fun RepoDetailScreen(
         }
         if (!canWrite && repo.permissions != null) {
             Row(
-                Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
+                Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
