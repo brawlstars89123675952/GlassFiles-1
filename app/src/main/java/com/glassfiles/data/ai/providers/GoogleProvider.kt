@@ -1,6 +1,7 @@
 package com.glassfiles.data.ai.providers
 
 import android.content.Context
+import android.util.Base64
 import com.glassfiles.data.ai.AiKeyStore
 import com.glassfiles.data.ai.CapabilityClassifier
 import com.glassfiles.data.ai.SystemPrompts
@@ -11,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 /**
  * Google AI Studio (Gemini) provider.
@@ -135,5 +137,77 @@ object GoogleProvider : AiProvider {
         }
         conn.disconnect()
         sb.toString()
+    }
+
+    /**
+     * Generates [n] images via the Gemini API's `:predict` endpoint, which
+     * exposes the Imagen family on the same `generativelanguage.googleapis.com`
+     * host that hosts `gemini-*` chat. Body and response shapes match the
+     * documented Imagen REST format:
+     *
+     * Request:  `{"instances":[{"prompt":"…"}], "parameters":{"sampleCount": N, "aspectRatio": "1:1"}}`
+     * Response: `{"predictions":[{"bytesBase64Encoded":"…","mimeType":"image/png"}]}`
+     *
+     * Maps the requested [size] (e.g. "1024x1024") to an aspectRatio Imagen
+     * accepts. The user's plain Gemini key works for AI Studio Imagen — Vertex
+     * AI is only required for enterprise / paid-tier Imagen, which is a
+     * separate code path we don't expose here.
+     */
+    override suspend fun generateImage(
+        context: Context,
+        modelId: String,
+        prompt: String,
+        apiKey: String,
+        size: String,
+        n: Int,
+    ): List<String> = withContext(Dispatchers.IO) {
+        val url = "${base(context)}/models/$modelId:predict?key=$apiKey"
+        val body = JSONObject()
+            .put("instances", JSONArray().put(JSONObject().put("prompt", prompt)))
+            .put(
+                "parameters",
+                JSONObject()
+                    .put("sampleCount", n.coerceIn(1, 4))
+                    .put("aspectRatio", aspectRatioForSize(size)),
+            )
+            .toString()
+
+        val conn = Http.postJson(url, body, emptyMap())
+        Http.ensureOk(conn, id.displayName)
+        val raw = conn.inputStream.bufferedReader().use { it.readText() }
+        conn.disconnect()
+
+        val preds = JSONObject(raw).optJSONArray("predictions") ?: JSONArray()
+        val outDir = File(context.cacheDir, "ai_images").apply { mkdirs() }
+        val results = mutableListOf<String>()
+        val now = System.currentTimeMillis()
+        for (i in 0 until preds.length()) {
+            val item = preds.getJSONObject(i)
+            val b64 = item.optString("bytesBase64Encoded", "")
+            if (b64.isBlank()) continue
+            val mime = item.optString("mimeType", "image/png")
+            val ext = if (mime.contains("jpeg")) "jpg" else "png"
+            val target = File(outDir, "google_${now}_$i.$ext")
+            target.writeBytes(Base64.decode(b64, Base64.DEFAULT))
+            results += target.absolutePath
+        }
+        if (results.isEmpty()) {
+            throw RuntimeException("${id.displayName} returned no image data")
+        }
+        results
+    }
+
+    private fun aspectRatioForSize(size: String): String {
+        val parts = size.lowercase().split("x")
+        if (parts.size != 2) return "1:1"
+        val w = parts[0].toIntOrNull() ?: return "1:1"
+        val h = parts[1].toIntOrNull() ?: return "1:1"
+        return when {
+            w == h -> "1:1"
+            w > h && w.toFloat() / h >= 1.7f -> "16:9"
+            w > h -> "4:3"
+            h.toFloat() / w >= 1.7f -> "9:16"
+            else -> "3:4"
+        }
     }
 }

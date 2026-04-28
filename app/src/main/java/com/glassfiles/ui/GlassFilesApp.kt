@@ -56,7 +56,7 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.launch
 import java.io.File
 
-enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_HUB, AI_CHAT, AI_CODING, AI_KEYS, AI_MODELS, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
+enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_HUB, AI_CHAT, AI_CODING, AI_IMAGE, AI_KEYS, AI_MODELS, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
 
 @Composable
 fun GlassFilesApp(
@@ -263,7 +263,7 @@ fun GlassFilesApp(
                         onBack = { goBack() },
                         onChat = { navigateTo(AppScreen.AI_CHAT) },
                         onCoding = { navigateTo(AppScreen.AI_CODING) },
-                        onImage = { /* PR-4 */ },
+                        onImage = { navigateTo(AppScreen.AI_IMAGE) },
                         onVideo = { /* PR-5 */ },
                         onModels = { navigateTo(AppScreen.AI_MODELS) },
                         onKeys = { navigateTo(AppScreen.AI_KEYS) },
@@ -274,6 +274,9 @@ fun GlassFilesApp(
                 }
                 AppScreen.AI_CODING -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
                     AiCodingScreen(onBack = { goBack() })
+                }
+                AppScreen.AI_IMAGE -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
+                    AiImageGenScreen(onBack = { goBack() })
                 }
                 AppScreen.AI_KEYS -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
                     AiKeysScreen(onBack = { goBack() })
