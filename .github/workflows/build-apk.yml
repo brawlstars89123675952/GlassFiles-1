@@ -3,9 +3,35 @@ name: Build APK
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - '**.pdf'
+      - 'CLAUDE.md'
+      - 'BUGS.md'
+      - 'GITHUB_*'
+      - 'WORKLOG_*'
+      - '.gitignore'
+      - 'workspace.json'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - '**.txt'
+      - '**.pdf'
+      - 'CLAUDE.md'
+      - 'BUGS.md'
+      - 'GITHUB_*'
+      - 'WORKLOG_*'
+      - '.gitignore'
+      - 'workspace.json'
   workflow_dispatch:
+
+# Cancel in-progress runs for the same ref when a new commit is pushed.
+# Saves CI minutes when force-pushing or rapid-firing commits to a PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
