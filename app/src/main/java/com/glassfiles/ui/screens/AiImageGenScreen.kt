@@ -145,6 +145,10 @@ fun AiImageGenScreen(onBack: () -> Unit) {
         loadError = null
         imageModels.clear()
         try {
+            // Two-pass: cached first, then force-refresh if nothing turned up.
+            // Some providers (xAI, Alibaba) only surface image-gen models via a
+            // client-side fallback list, so a stale cache filled before that
+            // fallback was added would otherwise hide them indefinitely.
             for (p in configured) {
                 val list = ModelRegistry.getModels(
                     context = context,
@@ -153,6 +157,19 @@ fun AiImageGenScreen(onBack: () -> Unit) {
                     force = false,
                 ).filter { AiCapability.IMAGE_GEN in it.capabilities }
                 imageModels.addAll(list)
+            }
+            if (imageModels.isEmpty()) {
+                for (p in configured) {
+                    val key = AiKeyStore.getKey(context, p)
+                    if (key.isBlank()) continue
+                    val list = ModelRegistry.getModels(
+                        context = context,
+                        provider = p,
+                        apiKey = key,
+                        force = true,
+                    ).filter { AiCapability.IMAGE_GEN in it.capabilities }
+                    imageModels.addAll(list)
+                }
             }
             if (selected == null) selected = imageModels.firstOrNull()
         } catch (e: Exception) {

@@ -142,6 +142,10 @@ fun AiVideoGenScreen(onBack: () -> Unit) {
         loadError = null
         videoModels.clear()
         try {
+            // Two-pass load: serve cached lists first, then force-refresh providers
+            // whose cache predates the fallback model ids (Qwen wan-video / Grok
+            // imagine-video are appended client-side, so a cache filled before that
+            // change won't surface them otherwise).
             for (p in configured) {
                 val list = ModelRegistry.getModels(
                     context = context,
@@ -150,6 +154,19 @@ fun AiVideoGenScreen(onBack: () -> Unit) {
                     force = false,
                 ).filter { AiCapability.VIDEO_GEN in it.capabilities }
                 videoModels.addAll(list)
+            }
+            if (videoModels.isEmpty()) {
+                for (p in configured) {
+                    val key = AiKeyStore.getKey(context, p)
+                    if (key.isBlank()) continue
+                    val list = ModelRegistry.getModels(
+                        context = context,
+                        provider = p,
+                        apiKey = key,
+                        force = true,
+                    ).filter { AiCapability.VIDEO_GEN in it.capabilities }
+                    videoModels.addAll(list)
+                }
             }
             if (selected == null) selected = videoModels.firstOrNull()
         } catch (e: Exception) {
