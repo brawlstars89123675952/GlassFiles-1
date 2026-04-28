@@ -1,6 +1,8 @@
 package com.glassfiles.data.ai.providers
 
 import android.content.Context
+import com.glassfiles.data.ai.agent.AiTool
+import com.glassfiles.data.ai.agent.AiToolCall
 import com.glassfiles.data.ai.models.AiMessage
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
@@ -65,4 +67,38 @@ interface AiProvider {
         aspectRatio: String = "16:9",
         onProgress: (String) -> Unit = {},
     ): String = throw UnsupportedOperationException("${id.displayName} doesn't support video generation in this build")
+
+    /**
+     * Optional: non-streaming chat that surfaces *tool calls* the model wants
+     * to make. Drives the agent loop:
+     *
+     *   1. UI calls [chatWithTools] with the current transcript and tool defs.
+     *   2. Provider returns either text only ([AiToolTurn.assistantText] +
+     *      empty [AiToolTurn.toolCalls]) → conversation ends until the user
+     *      types again,
+     *   3. or text + tool_calls → UI executes / approves them, appends a
+     *      `role = "tool"` message per call result, and re-invokes
+     *      [chatWithTools].
+     *
+     * Default impl falls back to plain [chat] (no tool calls available).
+     * Implementations that don't actually support tools should keep this
+     * default — the agent screen surfaces "tools unavailable" if every call
+     * comes back with empty [AiToolTurn.toolCalls].
+     */
+    suspend fun chatWithTools(
+        context: Context,
+        modelId: String,
+        messages: List<AiMessage>,
+        tools: List<AiTool>,
+        apiKey: String,
+    ): AiToolTurn {
+        val text = chat(context, modelId, messages, apiKey) {}
+        return AiToolTurn(assistantText = text, toolCalls = emptyList())
+    }
 }
+
+/** One non-streaming agent turn: free text + zero-or-more tool calls. */
+data class AiToolTurn(
+    val assistantText: String,
+    val toolCalls: List<AiToolCall>,
+)

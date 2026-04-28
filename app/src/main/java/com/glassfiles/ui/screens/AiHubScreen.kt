@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BubbleChart
+import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Image
@@ -45,6 +46,7 @@ import com.glassfiles.data.Strings
 fun AiHubScreen(
     onBack: () -> Unit,
     onChat: () -> Unit,
+    onAgent: () -> Unit,
     onCoding: () -> Unit,
     onImage: () -> Unit,
     onVideo: () -> Unit,
@@ -78,6 +80,7 @@ fun AiHubScreen(
                 listOf(
                     AiHubItem(Icons.Rounded.AutoAwesome, Strings.aiChat, Strings.aiHubSubtitle, soon = false, onChat),
                     AiHubItem(Icons.Rounded.Code, Strings.aiCoding, Strings.aiCodingSubtitle, soon = false, onCoding),
+                    AiHubItem(Icons.Rounded.Build, Strings.aiAgent, Strings.aiAgentSubtitle, soon = false, onAgent),
                     AiHubItem(Icons.Rounded.Image, Strings.aiImageGen, Strings.aiImageGenSubtitle, soon = false, onImage),
                     AiHubItem(Icons.Rounded.Movie, Strings.aiVideoGen, Strings.aiVideoGenSubtitle, soon = false, onVideo),
                     AiHubItem(Icons.Rounded.BubbleChart, Strings.aiModels, Strings.aiModelsSubtitle, soon = false, onModels),

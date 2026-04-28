@@ -3,6 +3,8 @@ package com.glassfiles.data.ai.providers
 import android.content.Context
 import com.glassfiles.data.ai.CapabilityClassifier
 import com.glassfiles.data.ai.SystemPrompts
+import com.glassfiles.data.ai.agent.AiTool
+import com.glassfiles.data.ai.agent.AiToolCall
 import com.glassfiles.data.ai.models.AiMessage
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
@@ -109,5 +111,123 @@ object AnthropicProvider : AiProvider {
         }
         conn.disconnect()
         sb.toString()
+    }
+
+    /**
+     * Anthropic tool-use: non-streaming `/v1/messages` with `tools` set.
+     * Tool calls come back as `tool_use` content blocks in the assistant turn;
+     * tool results are sent next time as `tool_result` blocks on a `user` turn.
+     *
+     * Spec: https://docs.anthropic.com/en/docs/build-with-claude/tool-use
+     */
+    override suspend fun chatWithTools(
+        context: Context,
+        modelId: String,
+        messages: List<AiMessage>,
+        tools: List<AiTool>,
+        apiKey: String,
+    ): AiToolTurn = withContext(Dispatchers.IO) {
+        val msgs = JSONArray()
+        messages.forEach { m -> msgs.put(toolMessageToJson(m)) }
+
+        val toolsJson = JSONArray()
+        tools.forEach { t ->
+            toolsJson.put(
+                JSONObject()
+                    .put("name", t.name)
+                    .put("description", t.description)
+                    .put("input_schema", t.parameters),
+            )
+        }
+
+        val body = JSONObject()
+            .put("model", modelId)
+            .put("messages", msgs)
+            .put("system", SystemPrompts.DEFAULT)
+            .put("max_tokens", 4096)
+            .put("tools", toolsJson)
+            .toString()
+
+        val conn = Http.postJson("$BASE/messages", body, authHeaders(apiKey))
+        Http.ensureOk(conn, id.displayName)
+        val raw = conn.inputStream.bufferedReader().use { it.readText() }
+        conn.disconnect()
+
+        val content = JSONObject(raw).optJSONArray("content") ?: JSONArray()
+        val text = StringBuilder()
+        val calls = mutableListOf<AiToolCall>()
+        for (i in 0 until content.length()) {
+            val block = content.optJSONObject(i) ?: continue
+            when (block.optString("type")) {
+                "text" -> text.append(block.optString("text", ""))
+                "tool_use" -> {
+                    val input = block.optJSONObject("input") ?: JSONObject()
+                    calls += AiToolCall(
+                        id = block.optString("id", "call_$i"),
+                        name = block.optString("name", ""),
+                        argsJson = input.toString(),
+                    )
+                }
+            }
+        }
+        AiToolTurn(assistantText = text.toString(), toolCalls = calls)
+    }
+
+    private fun toolMessageToJson(msg: AiMessage): JSONObject {
+        // Anthropic only accepts user/assistant in `messages`; map "system" → "user".
+        val role = when (msg.role) {
+            "tool" -> "user"  // tool results ride on a user turn as content blocks
+            "system" -> "user"
+            else -> msg.role
+        }
+        val blocks = JSONArray()
+
+        when {
+            msg.role == "tool" -> {
+                blocks.put(
+                    JSONObject()
+                        .put("type", "tool_result")
+                        .put("tool_use_id", msg.toolCallId.orEmpty())
+                        .put("content", msg.content),
+                )
+            }
+            msg.toolCalls != null -> {
+                if (msg.content.isNotBlank()) {
+                    blocks.put(JSONObject().put("type", "text").put("text", msg.content))
+                }
+                msg.toolCalls.forEach { tc ->
+                    val input = runCatching { JSONObject(tc.argsJson) }.getOrElse { JSONObject() }
+                    blocks.put(
+                        JSONObject()
+                            .put("type", "tool_use")
+                            .put("id", tc.id)
+                            .put("name", tc.name)
+                            .put("input", input),
+                    )
+                }
+            }
+            msg.imageBase64 != null -> {
+                blocks.put(
+                    JSONObject()
+                        .put("type", "image")
+                        .put(
+                            "source",
+                            JSONObject()
+                                .put("type", "base64")
+                                .put("media_type", "image/jpeg")
+                                .put("data", msg.imageBase64),
+                        ),
+                )
+                if (msg.content.isNotBlank()) blocks.put(JSONObject().put("type", "text").put("text", msg.content))
+            }
+            else -> {
+                val full = if (msg.fileContent != null) {
+                    if (msg.content.isNotBlank()) "${msg.content}\n\n--- File content ---\n${msg.fileContent}" else msg.fileContent
+                } else msg.content
+                if (full.isNotBlank()) blocks.put(JSONObject().put("type", "text").put("text", full))
+            }
+        }
+
+        return JSONObject().put("role", role).put("content", blocks)
     }
 }
