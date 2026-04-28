@@ -1,7 +1,9 @@
 package com.glassfiles.data.ai.providers
 
 import android.content.Context
+import com.glassfiles.data.ai.CapabilityClassifier
 import com.glassfiles.data.ai.SystemPrompts
+import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -15,6 +17,31 @@ object XaiProvider : OpenAiCompatProvider(
     systemPrompt = SystemPrompts.DEFAULT,
 ) {
     override fun baseUrl(context: Context): String = "https://api.x.ai/v1"
+
+    /**
+     * xAI's `/v1/models` endpoint returns chat models only (`grok-*`).
+     * Image and video generation endpoints are real and accept specific
+     * model ids (`grok-2-image`, `grok-imagine-video`), but those ids are
+     * never reported by the catalog API. We append them after the live
+     * fetch so the UI pickers actually find them.
+     */
+    override suspend fun listModels(context: Context, apiKey: String): List<AiModel> {
+        val live = super.listModels(context, apiKey)
+        val knownExtras = listOf(
+            "grok-2-image",
+            "grok-imagine-video",
+        )
+        val seen = live.map { it.id }.toSet()
+        val extras = knownExtras.filter { it !in seen }.map { rawId ->
+            AiModel(
+                providerId = id,
+                id = rawId,
+                displayName = rawId,
+                capabilities = CapabilityClassifier.classify(id, rawId),
+            )
+        }
+        return live + extras
+    }
 
     /**
      * xAI exposes `POST /v1/images/generations` for `grok-2-image*` etc., with

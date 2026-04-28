@@ -2,7 +2,9 @@ package com.glassfiles.data.ai.providers
 
 import android.content.Context
 import com.glassfiles.data.ai.AiKeyStore
+import com.glassfiles.data.ai.CapabilityClassifier
 import com.glassfiles.data.ai.SystemPrompts
+import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -32,6 +34,42 @@ object AlibabaProvider : OpenAiCompatProvider(
             "hk" -> "https://cn-hongkong.dashscope.aliyuncs.com/compatible-mode/v1"
             else -> "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
         }
+    }
+
+    /**
+     * DashScope's OpenAI-compatible `/models` endpoint reports chat
+     * models only (the Qwen family). The async wan/wanx image/video
+     * models live behind a different `/api/v1/services/aigc/...` API
+     * and never appear in the catalog. We append the known generation
+     * model ids ourselves so the picker on the image-gen / video-gen
+     * screens can find them.
+     *
+     * Sources:
+     *  - https://help.aliyun.com/zh/model-studio/wanx2-1-text-to-image
+     *  - https://help.aliyun.com/zh/model-studio/wan2-2-text-to-video
+     */
+    override suspend fun listModels(context: Context, apiKey: String): List<AiModel> {
+        val live = super.listModels(context, apiKey)
+        val knownExtras = listOf(
+            // Image (text-to-image) — async task API
+            "wanx2.1-t2i-turbo",
+            "wanx2.1-t2i-plus",
+            "wanx-v1",
+            // Video (text-to-video) — async task API
+            "wan2.2-t2v-plus",
+            "wan2.1-t2v-plus",
+            "wan2.1-t2v-turbo",
+        )
+        val seen = live.map { it.id }.toSet()
+        val extras = knownExtras.filter { it !in seen }.map { rawId ->
+            AiModel(
+                providerId = id,
+                id = rawId,
+                displayName = rawId,
+                capabilities = CapabilityClassifier.classify(id, rawId),
+            )
+        }
+        return live + extras
     }
 
     /** Native (non-compatible) DashScope base for async aigc tasks. */

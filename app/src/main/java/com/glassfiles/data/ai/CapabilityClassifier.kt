@@ -30,7 +30,7 @@ object CapabilityClassifier {
         if (matchesAny(id,
                 "gpt-image", "dall-e", "dalle",
                 "imagen",
-                "wanx", "wan-",                  // Alibaba image
+                "wanx", "wan-", "-t2i-",         // Alibaba image (wanx*, wan2.x-t2i-*)
                 "grok-2-image", "grok-image", "imagine",
                 "flux", "stable-diffusion", "sdxl", "sd-",
             )
@@ -39,7 +39,7 @@ object CapabilityClassifier {
         // ─── Video generation ───────────────────────────────────────────────
         if (matchesAny(id,
                 "veo", "video-",
-                "wan-video", "wanx-video", "cogvideox",
+                "wan-video", "wanx-video", "-t2v-", "text-to-video", "cogvideox",
                 "grok-video", "imagine-video", "grok-imagine-video",
             )
         ) caps += VIDEO_GEN
