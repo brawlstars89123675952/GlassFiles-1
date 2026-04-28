@@ -39,6 +39,13 @@ class GitHubToolExecutor(
      * Defaults to false — UI must opt into reading secrets.
      */
     private val approvedSecretReads: Boolean = false,
+    /**
+     * Optional warm cache to seed [fileCache] with — typically loaded
+     * by the UI from [ReadFileDiskCache.load] at session start so that
+     * repeat reads of the same files across sessions don't pay the
+     * GitHub round-trip cost.
+     */
+    initialCache: Map<String, String> = emptyMap(),
 ) {
     /**
      * In-memory cache of file contents for the current session. Keyed by
@@ -51,7 +58,14 @@ class GitHubToolExecutor(
      * loop ("read it, plan, then check before edit"). Caching collapses
      * those repeated reads into one network call.
      */
-    private val fileCache = mutableMapOf<String, String>()
+    private val fileCache = mutableMapOf<String, String>().apply { putAll(initialCache) }
+
+    /**
+     * Returns an immutable snapshot of the current file cache so the
+     * UI can persist it to disk via [ReadFileDiskCache.save] when the
+     * agent task finishes.
+     */
+    fun snapshotCache(): Map<String, String> = fileCache.toMap()
 
     suspend fun execute(context: Context, call: AiToolCall): AiToolResult {
         val args = runCatching { JSONObject(call.argsJson) }.getOrElse { JSONObject() }
@@ -107,6 +121,21 @@ class GitHubToolExecutor(
                     args.optString("body", ""),
                     args.getString("head"),
                     args.optString("base", ""),
+                )
+                AgentTools.COMMENT_PR.name -> commentPr(
+                    context,
+                    args.getInt("number"),
+                    args.getString("body"),
+                )
+                AgentTools.COMMENT_ISSUE.name -> commentIssue(
+                    context,
+                    args.getInt("number"),
+                    args.getString("body"),
+                )
+                AgentTools.CREATE_ISSUE.name -> createIssue(
+                    context,
+                    args.getString("title"),
+                    args.optString("body", ""),
                 )
                 else -> "Unknown tool: ${call.name}"
             }
@@ -543,6 +572,49 @@ class GitHubToolExecutor(
         )
         return if (ok) "Opened PR \"$title\": $head → $effectiveBase."
         else throw RuntimeException("open_pr: GitHub rejected the request. Check head/base names.")
+    }
+
+    /**
+     * Posts a comment on PR #[number]. PRs and issues share the same
+     * `/issues/{n}/comments` endpoint on GitHub, so we route through
+     * the same [GitHubManager.addComment] used for issue comments.
+     */
+    private suspend fun commentPr(context: Context, number: Int, body: String): String {
+        val ok = GitHubManager.addComment(
+            context = context,
+            owner = owner,
+            repo = repo,
+            number = number,
+            body = body,
+        )
+        return if (ok) "Commented on PR #$number."
+        else throw RuntimeException("comment_pr: GitHub rejected the request.")
+    }
+
+    /** Posts a comment on issue #[number]. */
+    private suspend fun commentIssue(context: Context, number: Int, body: String): String {
+        val ok = GitHubManager.addComment(
+            context = context,
+            owner = owner,
+            repo = repo,
+            number = number,
+            body = body,
+        )
+        return if (ok) "Commented on issue #$number."
+        else throw RuntimeException("comment_issue: GitHub rejected the request.")
+    }
+
+    /** Creates a new issue with [title] and (optional) [body]. */
+    private suspend fun createIssue(context: Context, title: String, body: String): String {
+        val ok = GitHubManager.createIssue(
+            context = context,
+            owner = owner,
+            repo = repo,
+            title = title,
+            body = body,
+        )
+        return if (ok) "Created issue \"$title\"."
+        else throw RuntimeException("create_issue: GitHub rejected the request.")
     }
 
     // ─── helpers ──────────────────────────────────────────────────────────

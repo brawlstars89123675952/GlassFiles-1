@@ -366,6 +366,22 @@ object Strings {
         "Configure an AI provider first.",
     )
 
+    // Per-repo system-prompt override (mega-PR D-E pack).
+    val aiAgentSystemPromptTitle get() = s(
+        "Системный промпт для репозитория",
+        "Repo system prompt",
+    )
+    val aiAgentSystemPromptHint get() = s(
+        "Этот текст добавляется как system-сообщение в каждом запуске агента в этом репозитории. Оставь пустым чтобы убрать.",
+        "Prepended as a system message on every agent run in this repo. Leave empty to clear.",
+    )
+    val aiAgentSystemPromptPlaceholder get() = s(
+        "Например: «Используй conventional commits, английский язык, без эмодзи»",
+        "e.g. \"Use conventional commits, English, no emojis\"",
+    )
+    val aiAgentSystemPromptSave get() = s("Сохранить", "Save")
+    val aiAgentSystemPromptCancel get() = s("Отмена", "Cancel")
+
     // Cost-policy UI (PR-COST-B). Three modes + warning dialog copy.
     val aiCostMode get() = s("Режим", "Mode")
     val aiCostModeEco get() = s("Эко", "Eco")

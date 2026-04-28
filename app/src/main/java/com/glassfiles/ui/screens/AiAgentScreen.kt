@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Stop
@@ -175,6 +176,11 @@ fun AiAgentScreen(
         mutableStateOf(sessions.firstOrNull { it.id == activeSessionId }?.createdAt ?: System.currentTimeMillis())
     }
     var showHistory by remember { mutableStateOf(false) }
+    // Per-repo system-prompt override editor visibility. Opens an
+    // AlertDialog with a multi-line text field; saves to AiAgentPrefs
+    // on confirm so subsequent runs in this repo prepend it as a
+    // `system` message.
+    var showSystemPrompt by remember { mutableStateOf(false) }
 
     val transcript = remember { mutableStateListOf<AgentEntry>() }
     var input by remember { mutableStateOf(TextFieldValue(initialPrompt.orEmpty())) }
@@ -306,7 +312,16 @@ fun AiAgentScreen(
                     models.firstOrNull { it.providerId == pid && it.id == session.modelId }
                 }
             } else null
-            selectedModel = saved ?: preferToolUseModel(models)
+            // Per-repo last-model — when the session itself doesn't pin
+            // a model, fall back to whatever the user last used for
+            // this exact repo. Saves them from re-picking on every new
+            // chat in a familiar repo.
+            val perRepo = selectedRepo?.fullName?.let { repoFull ->
+                com.glassfiles.data.ai.AiAgentPrefs.getLastModel(context, repoFull)
+            }?.let { saved ->
+                models.firstOrNull { it.uniqueKey == saved }
+            }
+            selectedModel = saved ?: perRepo ?: preferToolUseModel(models)
         }
         // Stop watching once we've done what we can. The pickers happily
         // honor any manual changes the user makes from here on.
@@ -330,6 +345,18 @@ fun AiAgentScreen(
             branches.clear()
             selectedBranch = null
             return@LaunchedEffect
+        }
+        // Per-repo last-model: if this repo has a remembered model and
+        // it differs from the current selection, swap to it. Done here
+        // (not just in the session-restore block) so manual repo
+        // switches in mid-chat also pick up the right model.
+        val rememberedModelKey = com.glassfiles.data.ai.AiAgentPrefs
+            .getLastModel(context, repo.fullName)
+        if (rememberedModelKey != null) {
+            val match = models.firstOrNull { it.uniqueKey == rememberedModelKey }
+            if (match != null && match != selectedModel) {
+                selectedModel = match
+            }
         }
         val previous = selectedBranch
         try {
@@ -482,11 +509,19 @@ fun AiAgentScreen(
             val costMode = com.glassfiles.data.ai.cost.AiCostModeStore.getMode(context)
             val limits = com.glassfiles.data.ai.cost.AiCostPolicy.limitsFor(costMode)
             val estimate = com.glassfiles.data.ai.cost.AiContextEstimate(limits)
+            // Warm the executor's file cache with anything we already
+            // have on disk for this (repo, branch). Across-session reuse
+            // turns the second "open this repo and ask about File.kt"
+            // into a no-op for files that were already touched
+            // recently. Stale entries fall off after 24h.
+            val warmCache = com.glassfiles.data.ai.agent.ReadFileDiskCache
+                .load(context, repo.fullName, branch)
             val executor = GitHubToolExecutor(
                 owner = repoOwner(repo),
                 repo = repoName(repo),
                 branch = branch,
                 estimate = estimate,
+                initialCache = warmCache,
             )
             val provider = AiProviders.get(model.providerId)
             // Filter destructive tools out of the schema sent to the model
@@ -508,9 +543,22 @@ fun AiAgentScreen(
                 allModels = models,
                 exclude = model,
             )
+            // Per-repo system-prompt override. When set, prepended as a
+            // `system` role message ahead of the transcript so the
+            // model picks up the user's house rules. Empty / blank
+            // overrides are ignored — the agent works fine without one.
+            val systemOverride = com.glassfiles.data.ai.AiAgentPrefs
+                .getSystemPromptOverride(context, repo.fullName)
+                ?.takeIf { it.isNotBlank() }
+            val baseMessages = transcript.toAiMessages()
+            val seed = if (systemOverride != null) {
+                listOf(AiMessage(role = "system", content = systemOverride)) + baseMessages
+            } else {
+                baseMessages
+            }
             try {
                 runAgentLoop(
-                    seedMessages = transcript.toAiMessages(),
+                    seedMessages = seed,
                     initialProvider = provider,
                     initialModelId = model.id,
                     initialApiKey = key,
@@ -538,6 +586,18 @@ fun AiAgentScreen(
                 persistSession()
                 running = false
                 runJob = null
+                // Persist the executor's file cache so the next session
+                // on this (repo, branch) starts warm. Failures are
+                // logged inside the store and do not affect the agent
+                // outcome.
+                runCatching {
+                    com.glassfiles.data.ai.agent.ReadFileDiskCache.save(
+                        context,
+                        repo.fullName,
+                        branch,
+                        executor.snapshotCache(),
+                    )
+                }
                 // Local-only usage record. We never store prompt /
                 // file contents — only counters and labels. See
                 // AiUsageRecord kdoc for the privacy contract.
@@ -705,6 +765,15 @@ fun AiAgentScreen(
             IconButton(onClick = ::startNewSession) {
                 Icon(Icons.Rounded.Add, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
             }
+            // Per-repo settings — system prompt override etc. Disabled
+            // until a repo is picked because the override is keyed by
+            // repo full-name.
+            IconButton(
+                onClick = { showSystemPrompt = true },
+                enabled = selectedRepo != null,
+            ) {
+                Icon(Icons.Rounded.Tune, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+            }
             if (running) {
                 IconButton(onClick = ::stop) {
                     Icon(Icons.Rounded.Stop, null, Modifier.size(20.dp), tint = colors.error)
@@ -760,7 +829,19 @@ fun AiAgentScreen(
                 options = models.toList(),
                 optionLabel = { "${it.providerId.displayName} · ${it.displayName}" },
                 selected = selectedModel,
-                onSelect = { selectedModel = it },
+                onSelect = { picked ->
+                    selectedModel = picked
+                    // Per-repo last-model. Tied to the active repo so
+                    // re-opening the same repo re-picks the same
+                    // model without prompting the user.
+                    selectedRepo?.fullName?.let { repoFull ->
+                        com.glassfiles.data.ai.AiAgentPrefs.setLastModel(
+                            context,
+                            repoFull,
+                            picked.uniqueKey,
+                        )
+                    }
+                },
                 enabled = !running && models.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -1109,6 +1190,28 @@ fun AiAgentScreen(
                     pendingWarningInput = null
                     runTaskInternal(pendingInput.first, pendingInput.second)
                 },
+            )
+        }
+        // Per-repo system-prompt override dialog. Mounted alongside the
+        // warning gate so it survives sheet lifecycle. Only opens when
+        // a repo is picked (the IconButton is disabled otherwise).
+        val activeRepoForPrompt = selectedRepo
+        if (showSystemPrompt && activeRepoForPrompt != null) {
+            val current = remember(activeRepoForPrompt.fullName) {
+                com.glassfiles.data.ai.AiAgentPrefs
+                    .getSystemPromptOverride(context, activeRepoForPrompt.fullName)
+                    .orEmpty()
+            }
+            com.glassfiles.ui.screens.ai.SystemPromptOverrideDialog(
+                repoFullName = activeRepoForPrompt.fullName,
+                initialPrompt = current,
+                onSave = { text ->
+                    com.glassfiles.data.ai.AiAgentPrefs.setSystemPromptOverride(
+                        context, activeRepoForPrompt.fullName, text,
+                    )
+                    showSystemPrompt = false
+                },
+                onDismiss = { showSystemPrompt = false },
             )
         }
     }
