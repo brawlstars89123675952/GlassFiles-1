@@ -75,7 +75,7 @@ fun AiHubScreen(
             items(
                 listOf(
                     AiHubItem(Icons.Rounded.AutoAwesome, Strings.aiChat, Strings.aiHubSubtitle, soon = false, onChat),
-                    AiHubItem(Icons.Rounded.Code, Strings.aiCoding, Strings.aiCodingSubtitle, soon = true, onCoding),
+                    AiHubItem(Icons.Rounded.Code, Strings.aiCoding, Strings.aiCodingSubtitle, soon = false, onCoding),
                     AiHubItem(Icons.Rounded.Image, Strings.aiImageGen, Strings.aiImageGenSubtitle, soon = true, onImage),
                     AiHubItem(Icons.Rounded.Movie, Strings.aiVideoGen, Strings.aiVideoGenSubtitle, soon = true, onVideo),
                     AiHubItem(Icons.Rounded.BubbleChart, Strings.aiModels, Strings.aiModelsSubtitle, soon = false, onModels),
