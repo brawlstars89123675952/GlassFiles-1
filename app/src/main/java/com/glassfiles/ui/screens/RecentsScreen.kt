@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.glassfiles.data.*
+import com.glassfiles.notifications.AppNotifications
 import com.glassfiles.ui.components.*
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -73,7 +74,9 @@ fun RecentsScreen(
         ZipViewerScreen(zipPath = zipViewFile!!, onBack = { zipViewFile = null }, onExtract = {
             scope.launch {
                 showProgress = true
-                ArchiveHelper.decompress(File(zipViewFile!!)) { progressVal = it }
+                val archivePath = zipViewFile!!
+                val result = ArchiveHelper.decompress(File(archivePath)) { progressVal = it }
+                AppNotifications.notifyFileOperation(context, "Extract", result != null, File(archivePath).name, result?.absolutePath ?: archivePath)
                 showProgress = false; refreshKey++; zipViewFile = null
                 Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
             }
@@ -103,13 +106,25 @@ fun RecentsScreen(
             FileAction.COPY -> Toast.makeText(context, "${Strings.copied}: ${file.name}", Toast.LENGTH_SHORT).show()
             FileAction.MOVE -> Toast.makeText(context, "${Strings.cutFile}: ${file.name}", Toast.LENGTH_SHORT).show()
             FileAction.RENAME -> { renamingFile = file; renameText = file.name }
-            FileAction.DELETE -> scope.launch { FileOperations.delete(File(file.path)); refreshKey++; Toast.makeText(context, Strings.deleted, Toast.LENGTH_SHORT).show() }
-            FileAction.TRASH -> scope.launch { trashMgr.moveToTrash(File(file.path)); refreshKey++; Toast.makeText(context, Strings.toTrash, Toast.LENGTH_SHORT).show() }
+            FileAction.DELETE -> scope.launch {
+                val op = FileOperations.delete(File(file.path))
+                AppNotifications.notifyFileOperation(context, "Delete", op.success, file.name, file.path)
+                refreshKey++
+                Toast.makeText(context, Strings.deleted, Toast.LENGTH_SHORT).show()
+            }
+            FileAction.TRASH -> scope.launch {
+                val moved = trashMgr.moveToTrash(File(file.path))
+                AppNotifications.notifyFileOperation(context, "Move to trash", moved, file.name, file.path)
+                refreshKey++
+                Toast.makeText(context, Strings.toTrash, Toast.LENGTH_SHORT).show()
+            }
             FileAction.SHARE -> { try { val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(file.path)); val m = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension) ?: "*/*"
                 context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = m; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }, Strings.share)) } catch (_: Exception) {} }
             FileAction.COMPRESS -> scope.launch { showProgress = true; val r = ArchiveHelper.compress(File(file.path)) { progressVal = it }; showProgress = false; refreshKey++
+                AppNotifications.notifyFileOperation(context, "Compress", r != null, file.name, r?.absolutePath ?: file.path)
                 Toast.makeText(context, if (r != null) "Compressed: ${r.name}" else Strings.error, Toast.LENGTH_SHORT).show() }
-            FileAction.DECOMPRESS -> scope.launch { showProgress = true; ArchiveHelper.decompress(File(file.path)) { progressVal = it }; showProgress = false; refreshKey++
+            FileAction.DECOMPRESS -> scope.launch { showProgress = true; val r = ArchiveHelper.decompress(File(file.path)) { progressVal = it }; showProgress = false; refreshKey++
+                AppNotifications.notifyFileOperation(context, "Extract", r != null, file.name, r?.absolutePath ?: file.path)
                 Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show() }
             FileAction.FAVORITE -> favMgr.toggle(file.path, file.name, file.isDirectory)
             FileAction.INSTALL_APK -> installApk(context, File(file.path))
@@ -209,7 +224,13 @@ fun RecentsScreen(
     // Rename dialog
     if (renamingFile != null) AlertDialog(onDismissRequest = { renamingFile = null }, title = { Text(Strings.rename) },
         text = { OutlinedTextField(renameText, { renameText = it }, singleLine = true) },
-        confirmButton = { TextButton(onClick = { scope.launch { FileOperations.rename(File(renamingFile!!.path), renameText); renamingFile = null; refreshKey++ } }) { Text("OK") } },
+        confirmButton = { TextButton(onClick = { scope.launch {
+            val target = renamingFile ?: return@launch
+            val op = FileOperations.rename(File(target.path), renameText)
+            AppNotifications.notifyFileOperation(context, "Rename", op.success, target.name, op.destPath.ifBlank { target.path })
+            renamingFile = null
+            refreshKey++
+        } }) { Text("OK") } },
         dismissButton = { TextButton(onClick = { renamingFile = null }) { Text(Strings.cancel) } })
 
     // Properties sheet

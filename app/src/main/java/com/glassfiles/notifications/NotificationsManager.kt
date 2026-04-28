@@ -30,12 +30,28 @@ object NotificationsManager {
     const val EXTRA_REPO = "repo_full_name"
     const val ACTION_OPEN_THREAD = "open_thread"
 
-    fun show(context: Context, n: GHNotification) {
-        if (!hasPostPermission(context)) return
-
-        val channel = NotificationChannels.channelForReason(n.reason)
+    fun show(context: Context, n: GHNotification): Boolean {
         val title = formatTitle(n)
         val body = formatBody(n)
+        AppNotificationInboxStore.add(
+            context,
+            AppNotificationEvent(
+                source = AppNotificationPreferences.SOURCE_GITHUB,
+                type = n.reason.ifBlank { "github" },
+                title = title,
+                body = body,
+                externalId = "github:${n.id}",
+                target = AppNotificationTarget(AppNotificationTarget.DEST_GITHUB, n.repoName, n.subjectType),
+                important = n.reason in setOf("mention", "team_mention", "review_requested", "security_alert", "ci_activity"),
+                showSystem = false,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+
+        if (!AppNotificationPreferences.isSourceEnabled(context, AppNotificationPreferences.SOURCE_GITHUB)) return false
+        if (!hasPostPermission(context)) return false
+
+        val channel = NotificationChannels.channelForReason(n.reason)
 
         val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(smallIconRes())
@@ -53,9 +69,11 @@ object NotificationsManager {
 
         try {
             NotificationManagerCompat.from(context).notify(notifIdFor(n.id), builder.build())
+            return true
         } catch (_: SecurityException) {
             // POST_NOTIFICATIONS denied at runtime — silently noop.
         }
+        return false
     }
 
     fun cancel(context: Context, notificationId: String) {

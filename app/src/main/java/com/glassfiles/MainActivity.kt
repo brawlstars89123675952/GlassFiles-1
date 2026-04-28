@@ -37,6 +37,9 @@ import androidx.compose.ui.unit.sp
 import com.glassfiles.BuildConfig
 import com.glassfiles.data.AppSettings
 import com.glassfiles.data.security.LicenseManager
+import com.glassfiles.notifications.AppNotificationInboxStore
+import com.glassfiles.notifications.AppNotificationTarget
+import com.glassfiles.notifications.AppNotifications
 import com.glassfiles.notifications.GitHubNotificationTarget
 import com.glassfiles.notifications.NotificationsManager
 import com.glassfiles.security.SecurityManager
@@ -48,6 +51,7 @@ class MainActivity : ComponentActivity() {
 
     val hasPermission = mutableStateOf(false)
     private val pendingGitHubNotificationTarget = mutableStateOf<GitHubNotificationTarget?>(null)
+    private val pendingAppNotificationTarget = mutableStateOf<AppNotificationTarget?>(null)
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var appSettings: AppSettings
 
@@ -188,6 +192,10 @@ class MainActivity : ComponentActivity() {
                             githubNotificationTarget = pendingGitHubNotificationTarget.value,
                             onGitHubNotificationTargetConsumed = {
                                 pendingGitHubNotificationTarget.value = null
+                            },
+                            appNotificationTarget = pendingAppNotificationTarget.value,
+                            onAppNotificationTargetConsumed = {
+                                pendingAppNotificationTarget.value = null
                             }
                         )
                     }
@@ -204,8 +212,11 @@ class MainActivity : ComponentActivity() {
 
     private fun handleNotificationIntent(intent: Intent?) {
         if (intent == null) return
-        val action = intent.getStringExtra(NotificationsManager.EXTRA_ACTION) ?: return
-        if (action != NotificationsManager.ACTION_OPEN_THREAD) return
+        val action = intent.getStringExtra(NotificationsManager.EXTRA_ACTION)
+        if (action != NotificationsManager.ACTION_OPEN_THREAD) {
+            handleAppNotificationIntent(intent)
+            return
+        }
 
         pendingGitHubNotificationTarget.value = GitHubNotificationTarget.from(
             subjectUrl = intent.getStringExtra(NotificationsManager.EXTRA_SUBJECT_URL).orEmpty(),
@@ -213,8 +224,23 @@ class MainActivity : ComponentActivity() {
             repoFullName = intent.getStringExtra(NotificationsManager.EXTRA_REPO).orEmpty(),
             subjectType = intent.getStringExtra(NotificationsManager.EXTRA_SUBJECT_TYPE).orEmpty()
         )
+        intent.getStringExtra(NotificationsManager.EXTRA_THREAD_ID)
+            ?.let { AppNotificationInboxStore.markRead(this, "github:github:$it") }
         // Consume extras so we don't re-handle on rotation/recompose.
         intent.removeExtra(NotificationsManager.EXTRA_ACTION)
+    }
+
+    private fun handleAppNotificationIntent(intent: Intent) {
+        val appAction = intent.getStringExtra(AppNotifications.EXTRA_ACTION) ?: return
+        if (appAction != AppNotifications.ACTION_OPEN_TARGET) return
+        intent.getStringExtra(AppNotifications.EXTRA_INBOX_ID)
+            ?.let { AppNotificationInboxStore.markRead(this, it) }
+        pendingAppNotificationTarget.value = AppNotificationTarget(
+            destination = intent.getStringExtra(AppNotifications.EXTRA_DESTINATION).orEmpty(),
+            path = intent.getStringExtra(AppNotifications.EXTRA_PATH).orEmpty(),
+            extra = intent.getStringExtra(AppNotifications.EXTRA_EXTRA).orEmpty()
+        )
+        intent.removeExtra(AppNotifications.EXTRA_ACTION)
     }
 
     override fun onResume() {

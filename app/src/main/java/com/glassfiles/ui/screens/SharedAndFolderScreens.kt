@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.glassfiles.data.*
+import com.glassfiles.notifications.AppNotifications
 import com.glassfiles.ui.components.*
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
@@ -162,7 +163,9 @@ fun FolderDetailScreen(
         ZipViewerScreen(zipPath = zipViewFile!!, onBack = { zipViewFile = null }, onExtract = {
             scope.launch {
                 showProgress = true
-                ArchiveHelper.decompress(File(zipViewFile!!)) { progressVal = it }
+                val archivePath = zipViewFile!!
+                val result = ArchiveHelper.decompress(File(archivePath)) { progressVal = it }
+                AppNotifications.notifyFileOperation(context, "Extract", result != null, File(archivePath).name, result?.absolutePath ?: archivePath)
                 showProgress = false; refreshKey++; zipViewFile = null
                 Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
             }
@@ -193,16 +196,28 @@ fun FolderDetailScreen(
             FileAction.COPY -> { clipFile = Pair(file, true); Toast.makeText(context, "${Strings.copied}: ${file.name}", Toast.LENGTH_SHORT).show() }
             FileAction.MOVE -> { clipFile = Pair(file, false); Toast.makeText(context, "${Strings.cutFile}: ${file.name}", Toast.LENGTH_SHORT).show() }
             FileAction.RENAME -> { renamingFile = file; renameText = file.name }
-            FileAction.DELETE -> scope.launch { FileOperations.delete(File(file.path)); refreshKey++; Toast.makeText(context, Strings.deleted, Toast.LENGTH_SHORT).show() }
+            FileAction.DELETE -> scope.launch {
+                val op = FileOperations.delete(File(file.path))
+                AppNotifications.notifyFileOperation(context, "Delete", op.success, file.name, file.path)
+                refreshKey++
+                Toast.makeText(context, Strings.deleted, Toast.LENGTH_SHORT).show()
+            }
             FileAction.TRASH -> {
                 if (appSettings?.confirmDelete != false) pendingDeleteFile = file
-                else scope.launch { trashMgr.moveToTrash(File(file.path)); refreshKey++; Toast.makeText(context, Strings.toTrash, Toast.LENGTH_SHORT).show() }
+                else scope.launch {
+                    val moved = trashMgr.moveToTrash(File(file.path))
+                    AppNotifications.notifyFileOperation(context, "Move to trash", moved, file.name, file.path)
+                    refreshKey++
+                    Toast.makeText(context, Strings.toTrash, Toast.LENGTH_SHORT).show()
+                }
             }
             FileAction.SHARE -> { try { val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(file.path)); val m = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension) ?: "*/*"
                 context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = m; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }, Strings.share)) } catch (_: Exception) {} }
             FileAction.COMPRESS -> scope.launch { showProgress = true; val r = ArchiveHelper.compress(File(file.path)) { progressVal = it }; showProgress = false; refreshKey++
+                AppNotifications.notifyFileOperation(context, "Compress", r != null, file.name, r?.absolutePath ?: file.path)
                 Toast.makeText(context, if (r != null) "Compressed: ${r.name}" else Strings.error, Toast.LENGTH_SHORT).show() }
-            FileAction.DECOMPRESS -> scope.launch { showProgress = true; ArchiveHelper.decompress(File(file.path)) { progressVal = it }; showProgress = false; refreshKey++
+            FileAction.DECOMPRESS -> scope.launch { showProgress = true; val r = ArchiveHelper.decompress(File(file.path)) { progressVal = it }; showProgress = false; refreshKey++
+                AppNotifications.notifyFileOperation(context, "Extract", r != null, file.name, r?.absolutePath ?: file.path)
                 Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show() }
             FileAction.FAVORITE -> favMgr.toggle(file.path, file.name, file.isDirectory)
             FileAction.INSTALL_APK -> installApk(context, File(file.path))
@@ -266,6 +281,7 @@ fun FolderDetailScreen(
                 val (src, isCopy) = clipFile!!; val curPath = files.firstOrNull()?.path?.let { File(it).parent } ?: return@clickable
                 scope.launch { showProgress = true
                     val op = if (isCopy) FileOperations.copy(File(src.path), File(curPath)) { progressVal = it } else FileOperations.move(File(src.path), File(curPath)) { progressVal = it }
+                    AppNotifications.notifyFileOperation(context, if (isCopy) "Copy" else "Move", op.success, src.name, op.destPath.ifBlank { src.path })
                     showProgress = false; clipFile = null; refreshKey++; Toast.makeText(context, op.message, Toast.LENGTH_SHORT).show() }
             }.padding(horizontal = 8.dp, vertical = 6.dp)) { Icon(Icons.Rounded.ContentPaste, null, Modifier.size(18.dp), tint = Blue) } }
             // Create new file/folder
@@ -505,7 +521,13 @@ fun FolderDetailScreen(
     }
     if (renamingFile != null) AlertDialog(onDismissRequest = { renamingFile = null }, title = { Text(Strings.rename) },
         text = { OutlinedTextField(renameText, { renameText = it }, singleLine = true) },
-        confirmButton = { TextButton(onClick = { scope.launch { FileOperations.rename(File(renamingFile!!.path), renameText); renamingFile = null; refreshKey++ } }) { Text("OK") } },
+        confirmButton = { TextButton(onClick = { scope.launch {
+            val target = renamingFile ?: return@launch
+            val op = FileOperations.rename(File(target.path), renameText)
+            AppNotifications.notifyFileOperation(context, "Rename", op.success, target.name, op.destPath.ifBlank { target.path })
+            renamingFile = null
+            refreshKey++
+        } }) { Text("OK") } },
         dismissButton = { TextButton(onClick = { renamingFile = null }) { Text(Strings.cancel) } })
     // Confirm delete dialog
     if (pendingDeleteFile != null) AlertDialog(
@@ -513,7 +535,12 @@ fun FolderDetailScreen(
         title = { Text(Strings.confirmDeleteTitle) },
         text = { Text("\"${pendingDeleteFile?.name}\" будет перемещён в корзину") },
         confirmButton = { TextButton(onClick = { val f = pendingDeleteFile!!; pendingDeleteFile = null
-            scope.launch { trashMgr.moveToTrash(File(f.path)); refreshKey++; Toast.makeText(context, Strings.toTrash, Toast.LENGTH_SHORT).show() }
+            scope.launch {
+                val moved = trashMgr.moveToTrash(File(f.path))
+                AppNotifications.notifyFileOperation(context, "Move to trash", moved, f.name, f.path)
+                refreshKey++
+                Toast.makeText(context, Strings.toTrash, Toast.LENGTH_SHORT).show()
+            }
         }) { Text(Strings.delete, color = Red) } },
         dismissButton = { TextButton(onClick = { pendingDeleteFile = null }) { Text(Strings.cancel) } })
     FilePropertiesSheet(file = propertiesFile, onDismiss = { propertiesFile = null })

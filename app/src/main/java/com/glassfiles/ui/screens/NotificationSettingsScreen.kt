@@ -28,6 +28,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.glassfiles.notifications.AppNotificationPreferences
+import com.glassfiles.notifications.AppNotificationTarget
+import com.glassfiles.notifications.AppNotifications
 import com.glassfiles.notifications.NotificationsPreferences
 import com.glassfiles.notifications.NotificationsWorker
 import com.glassfiles.ui.theme.*
@@ -45,6 +48,12 @@ fun NotificationSettingsScreen(onBack: () -> Unit) {
     var showCustomDialog by remember { mutableStateOf(false) }
     var oemDismissed by remember { mutableStateOf(NotificationsPreferences.isOemWarningDismissed(context)) }
     var showOemHelp by remember { mutableStateOf(false) }
+    var showInbox by remember { mutableStateOf(false) }
+
+    if (showInbox) {
+        AppNotificationInboxScreen(onBack = { showInbox = false })
+        return
+    }
 
     val scrollState = rememberScrollState()
     val postPermissionLauncher = rememberLauncherForActivityResult(
@@ -93,7 +102,7 @@ fun NotificationSettingsScreen(onBack: () -> Unit) {
             NSection("General", Icons.Rounded.NotificationsActive) {
                 NToggle(
                     title = "Enable notifications",
-                    subtitle = "Receive Android notifications for GitHub activity",
+                    subtitle = "Receive Android notifications from GlassFiles and GitHub",
                     checked = enabled,
                     onChange = {
                         enabled = it
@@ -110,6 +119,14 @@ fun NotificationSettingsScreen(onBack: () -> Unit) {
                 Modifier.fillMaxWidth().graphicsLayerOrAlpha(dimmedAlpha),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                NSection("Notification sources", Icons.Rounded.Tune) {
+                    AppNotificationPreferences.SOURCES.forEach { source ->
+                        SourceToggleRow(context, source, enabled)
+                        if (source != AppNotificationPreferences.SOURCES.last()) {
+                            HorizontalDivider(color = SeparatorColor)
+                        }
+                    }
+                }
 
                 // ── Polling frequency ──
                 NSection("Polling frequency", Icons.Rounded.Schedule) {
@@ -219,6 +236,38 @@ fun NotificationSettingsScreen(onBack: () -> Unit) {
 
                 // ── System link ──
                 NSection("System settings", Icons.Rounded.Settings) {
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                            .background(SurfaceLight)
+                            .clickable(enabled = enabled) { showInbox = true }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Open notification history",
+                            color = TextPrimary, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                    }
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                            .background(Blue.copy(alpha = 0.10f))
+                            .clickable(enabled = enabled) {
+                                AppNotifications.post(
+                                    context,
+                                    com.glassfiles.notifications.AppNotificationEvent(
+                                        source = AppNotificationPreferences.SOURCE_SYSTEM,
+                                        type = "test",
+                                        title = "GlassFiles test notification",
+                                        body = "Notifications are working",
+                                        externalId = "test:${System.currentTimeMillis()}",
+                                        target = AppNotificationTarget(AppNotificationTarget.DEST_NOTIFICATIONS)
+                                    )
+                                )
+                            }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Send test notification",
+                            color = Blue, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                    }
                     NCaption("Per-channel toggles, sound, vibration and Do Not Disturb are managed by Android.")
                     Box(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
@@ -254,6 +303,37 @@ fun NotificationSettingsScreen(onBack: () -> Unit) {
     if (showOemHelp) {
         OemHelpDialog(onDismiss = { showOemHelp = false })
     }
+}
+
+@Composable
+private fun SourceToggleRow(context: Context, source: String, enabled: Boolean) {
+    var checked by remember(source) { mutableStateOf(AppNotificationPreferences.isSourceEnabled(context, source)) }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(AppNotificationPreferences.displayName(source), fontSize = 15.sp, color = TextPrimary)
+            Text(sourceSubtitle(source), fontSize = 12.sp, color = TextSecondary)
+        }
+        Switch(
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = {
+                checked = it
+                AppNotificationPreferences.setSourceEnabled(context, source, it)
+            },
+            colors = SwitchDefaults.colors(checkedTrackColor = Blue, checkedThumbColor = Color.White)
+        )
+    }
+}
+
+private fun sourceSubtitle(source: String): String = when (source) {
+    AppNotificationPreferences.SOURCE_GITHUB -> "PRs, issues, CI, mentions and reviews"
+    AppNotificationPreferences.SOURCE_FILE_OPS -> "Copy, move, delete, archive and extract results"
+    AppNotificationPreferences.SOURCE_STORAGE -> "Low storage and storage analyzer warnings"
+    AppNotificationPreferences.SOURCE_SECURITY -> "Crash logs and security warnings"
+    AppNotificationPreferences.SOURCE_TERMINAL -> "Terminal notify command"
+    AppNotificationPreferences.SOURCE_DRIVE -> "Drive upload, download and sync results"
+    AppNotificationPreferences.SOURCE_SHIZUKU -> "Restricted storage and permission alerts"
+    else -> "General app notifications"
 }
 
 // ─────────────────────────────────────────────────────────────────────

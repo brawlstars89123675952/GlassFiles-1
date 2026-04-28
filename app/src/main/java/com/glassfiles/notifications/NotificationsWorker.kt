@@ -61,9 +61,10 @@ class NotificationsWorker(
         for (n in notifications) {
             if (!NotificationFilter.shouldShow(n, snapshot)) continue
             try {
-                NotificationsManager.show(ctx, n)
-                NotificationsPreferences.markSeen(ctx, n.id)
-                shown++
+                if (NotificationsManager.show(ctx, n)) {
+                    NotificationsPreferences.markSeen(ctx, n.id)
+                    shown++
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to show notification ${n.id}", e)
             }

@@ -42,6 +42,10 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.glassfiles.data.*
 import com.glassfiles.data.drive.GoogleDriveManager
+import com.glassfiles.notifications.AppNotificationEvent
+import com.glassfiles.notifications.AppNotificationPreferences
+import com.glassfiles.notifications.AppNotificationTarget
+import com.glassfiles.notifications.AppNotifications
 import com.glassfiles.notifications.GitHubNotificationTarget
 import com.glassfiles.ui.components.*
 import com.glassfiles.ui.screens.*
@@ -60,7 +64,9 @@ fun GlassFilesApp(
     onRequestPermission: () -> Unit = {},
     appSettings: com.glassfiles.data.AppSettings? = null,
     githubNotificationTarget: GitHubNotificationTarget? = null,
-    onGitHubNotificationTargetConsumed: () -> Unit = {}
+    onGitHubNotificationTargetConsumed: () -> Unit = {},
+    appNotificationTarget: AppNotificationTarget? = null,
+    onAppNotificationTargetConsumed: () -> Unit = {}
 ) {
     if (!hasPermission) { PermissionScreen(onRequestPermission); return }
 
@@ -111,6 +117,31 @@ fun GlassFilesApp(
         val target = githubNotificationTarget ?: return@LaunchedEffect
         pendingGitHubTarget = target
         navigateTo(AppScreen.GITHUB)
+    }
+
+    LaunchedEffect(appNotificationTarget) {
+        val target = appNotificationTarget ?: return@LaunchedEffect
+        when (target.destination) {
+            AppNotificationTarget.DEST_STORAGE -> navigateTo(AppScreen.STORAGE)
+            AppNotificationTarget.DEST_SETTINGS,
+            AppNotificationTarget.DEST_NOTIFICATIONS -> navigateTo(AppScreen.SETTINGS)
+            AppNotificationTarget.DEST_TERMINAL -> {
+                terminalWasOpened = true
+                navigateTo(AppScreen.TERMINAL)
+            }
+            AppNotificationTarget.DEST_GITHUB -> navigateTo(AppScreen.GITHUB)
+            AppNotificationTarget.DEST_PATH -> {
+                val file = File(target.path)
+                val folder = if (file.isDirectory) file else file.parentFile
+                if (folder != null && folder.exists()) {
+                    folderStack = listOf(folder.name to folder.absolutePath)
+                }
+                previousScreen = activeScreen
+                activeScreen = AppScreen.MAIN
+            }
+            else -> activeScreen = AppScreen.MAIN
+        }
+        onAppNotificationTargetConsumed()
     }
 
     LaunchedEffect(Unit) {
@@ -285,7 +316,21 @@ fun GlassFilesApp(
                                         if (isDrive) {
                                             val r = GoogleDriveManager.listFilesDebug(context, path.removePrefix("gdrive://"))
                                             files = r.files
-                                            if (r.error.isNotEmpty()) errorMsg = "${r.error}\n\n${r.debug}"
+                                            if (r.error.isNotEmpty()) {
+                                                errorMsg = "${r.error}\n\n${r.debug}"
+                                                AppNotifications.post(
+                                                    context,
+                                                    AppNotificationEvent(
+                                                        source = AppNotificationPreferences.SOURCE_DRIVE,
+                                                        type = "drive_error",
+                                                        title = "Google Drive error",
+                                                        body = r.error,
+                                                        externalId = "drive:${path}:${r.error}",
+                                                        target = AppNotificationTarget(AppNotificationTarget.DEST_HOME),
+                                                        important = true
+                                                    )
+                                                )
+                                            }
                                             else if (files.isEmpty()) errorMsg = "0 файлов\n\n${r.debug}"
                                         } else if (isShizuku) {
                                             val realPath = path.removePrefix("shizuku://")
@@ -302,7 +347,22 @@ fun GlassFilesApp(
                                                 )
                                             }
                                             if (files.isEmpty()) {
-                                                errorMsg = ShizukuManager.getLastError(realPath).ifBlank { Strings.shEmptyOrNoAccess }
+                                                val shizukuError = ShizukuManager.getLastError(realPath)
+                                                errorMsg = shizukuError.ifBlank { Strings.shEmptyOrNoAccess }
+                                                if (shizukuError.isNotBlank()) {
+                                                    AppNotifications.post(
+                                                        context,
+                                                        AppNotificationEvent(
+                                                            source = AppNotificationPreferences.SOURCE_SHIZUKU,
+                                                            type = "shizuku_access",
+                                                            title = "Shizuku access warning",
+                                                            body = shizukuError.take(180),
+                                                            externalId = "shizuku:$realPath:$shizukuError",
+                                                            target = AppNotificationTarget(AppNotificationTarget.DEST_PATH, path),
+                                                            important = true
+                                                        )
+                                                    )
+                                                }
                                             }
                                         } else {
                                             files = FileManager.listFiles(path, settings.showHiddenFiles)

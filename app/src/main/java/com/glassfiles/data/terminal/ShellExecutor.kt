@@ -12,6 +12,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
+import com.glassfiles.notifications.AppNotifications
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -201,6 +202,7 @@ class ShellExecutor(
                 if (context == null) return ShellResult("", "No context", 1)
                 if (args.isEmpty()) return ShellResult("", "notify <msg>", 1)
                 Toast.makeText(context, args, Toast.LENGTH_LONG).show()
+                AppNotifications.notifyTerminal(context, args)
                 ShellResult("✅", "", 0)
             }
             "open" -> {
