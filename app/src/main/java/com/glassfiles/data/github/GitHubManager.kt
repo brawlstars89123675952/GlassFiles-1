@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.IOException
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -119,6 +120,17 @@ object GitHubManager {
             val arr = JSONArray(r.body)
             (0 until arr.length()).map { parseRepo(arr.getJSONObject(it)) }
         } catch (e: Exception) { Log.e(TAG, "Parse repos: ${e.message}"); emptyList() }
+    }
+
+    suspend fun getRepo(context: Context, owner: String, repo: String): GHRepo? {
+        val r = request(context, "/repos/$owner/$repo")
+        if (!r.success) return null
+        return try {
+            parseRepo(JSONObject(r.body))
+        } catch (e: Exception) {
+            Log.e(TAG, "Parse repo: ${e.message}")
+            null
+        }
     }
 
     suspend fun searchRepos(context: Context, query: String): List<GHRepo> {
@@ -1764,29 +1776,92 @@ object GitHubManager {
         checkSuiteId = j.optLong("check_suite_id", 0)
     )
 
-    suspend fun getNotifications(context: Context, all: Boolean = false): List<GHNotification> {
-        val r = request(context, "/notifications?all=$all&per_page=50")
-        if (!r.success) return emptyList()
+    suspend fun getNotifications(
+        context: Context,
+        all: Boolean = false,
+        participating: Boolean = false,
+        since: String? = null
+    ): List<GHNotification> = fetchNotifications(
+        context = context,
+        all = all,
+        participating = participating,
+        since = since,
+        strictErrors = false
+    )
+
+    suspend fun listNotifications(
+        context: Context,
+        all: Boolean = false,
+        participating: Boolean = false,
+        since: String? = null
+    ): List<GHNotification> = fetchNotifications(
+        context = context,
+        all = all,
+        participating = participating,
+        since = since,
+        strictErrors = true
+    )
+
+    private suspend fun fetchNotifications(
+        context: Context,
+        all: Boolean,
+        participating: Boolean,
+        since: String?,
+        strictErrors: Boolean
+    ): List<GHNotification> {
+        val sinceQ = if (!since.isNullOrBlank()) "&since=${URLEncoder.encode(since, "UTF-8")}" else ""
+        val r = request(context, "/notifications?all=$all&participating=$participating&per_page=50$sinceQ")
+        if (!r.success) {
+            val rateLimited = r.code == 403 &&
+                (r.body.contains("rate limit", ignoreCase = true) ||
+                    r.body.contains("API rate limit exceeded", ignoreCase = true))
+            if (strictErrors && !rateLimited) {
+                throw IOException("GitHub notifications request failed: HTTP ${r.code}")
+            }
+            return emptyList()
+        }
         return try {
             val arr = JSONArray(r.body)
             (0 until arr.length()).map { i ->
                 val j = arr.getJSONObject(i)
                 val sub = j.optJSONObject("subject")
                 val repo = j.optJSONObject("repository")
+                val subjectUrl = sub?.optString("url") ?: ""
+                val repoHtmlUrl = repo?.optString("html_url") ?: ""
+                val htmlUrl = githubApiUrlToWebUrl(subjectUrl).ifBlank { repoHtmlUrl }
                 GHNotification(
                     id = j.optString("id"), unread = j.optBoolean("unread", false),
                     reason = j.optString("reason", ""),
                     title = sub?.optString("title") ?: "", type = sub?.optString("type") ?: "",
                     repoName = repo?.optString("full_name") ?: "",
                     updatedAt = j.optString("updated_at", ""),
-                    url = sub?.optString("url") ?: ""
+                    url = subjectUrl,
+                    lastReadAt = j.optString("last_read_at", "").takeIf { it.isNotBlank() && it != "null" },
+                    subjectUrl = subjectUrl,
+                    repositoryUrl = repo?.optString("url") ?: "",
+                    htmlUrl = htmlUrl
                 )
             }
-        } catch (e: Exception) { emptyList() }
+        } catch (e: Exception) {
+            if (strictErrors) throw IOException("Failed to parse GitHub notifications", e)
+            emptyList()
+        }
+    }
+
+    private fun githubApiUrlToWebUrl(apiUrl: String): String {
+        if (apiUrl.isBlank()) return ""
+        if (apiUrl.startsWith("https://github.com/")) return apiUrl
+        return apiUrl
+            .replace("https://api.github.com/repos/", "https://github.com/")
+            .replace("/pulls/", "/pull/")
     }
 
     suspend fun markNotificationRead(context: Context, threadId: String): Boolean =
         request(context, "/notifications/threads/$threadId", "PATCH").let { it.code == 205 || it.success }
+
+    /** Alias matching the notifications spec naming. */
+    suspend fun markThreadRead(context: Context, threadId: String): Boolean =
+        markNotificationRead(context, threadId)
 
     suspend fun markAllNotificationsRead(context: Context): Boolean =
         request(context, "/notifications", "PUT", "{\"read\":true}").let { it.code == 205 || it.success }
@@ -4656,8 +4731,25 @@ data class GHJob(val id: Long, val name: String, val status: String, val conclus
 
 data class GHStep(val name: String, val status: String, val conclusion: String, val number: Int)
 
-data class GHNotification(val id: String, val unread: Boolean, val reason: String,
-    val title: String, val type: String, val repoName: String, val updatedAt: String, val url: String)
+data class GHNotification(
+    val id: String,
+    val unread: Boolean,
+    val reason: String,
+    val title: String,
+    val type: String,
+    val repoName: String,
+    val updatedAt: String,
+    val url: String,
+    val lastReadAt: String? = null,
+    val subjectUrl: String = "",
+    val repositoryUrl: String = "",
+    val htmlUrl: String = ""
+) {
+    /** Alias for spec parity. */
+    val subjectTitle: String get() = title
+    val subjectType: String get() = type
+    val repositoryFullName: String get() = repoName
+}
 
 data class GHThreadSubscription(
     val subscribed: Boolean,

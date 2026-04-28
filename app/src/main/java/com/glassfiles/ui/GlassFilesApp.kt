@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.glassfiles.data.*
 import com.glassfiles.data.drive.GoogleDriveManager
+import com.glassfiles.notifications.GitHubNotificationTarget
 import com.glassfiles.ui.components.*
 import com.glassfiles.ui.screens.*
 import com.glassfiles.ui.theme.*
@@ -54,7 +55,13 @@ import java.io.File
 enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_CHAT, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
 
 @Composable
-fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Unit = {}, appSettings: com.glassfiles.data.AppSettings? = null) {
+fun GlassFilesApp(
+    hasPermission: Boolean = false,
+    onRequestPermission: () -> Unit = {},
+    appSettings: com.glassfiles.data.AppSettings? = null,
+    githubNotificationTarget: GitHubNotificationTarget? = null,
+    onGitHubNotificationTargetConsumed: () -> Unit = {}
+) {
     if (!hasPermission) { PermissionScreen(onRequestPermission); return }
 
     val context = LocalContext.current
@@ -84,6 +91,7 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
     var ghWinY by remember { mutableFloatStateOf(-1f) }
     var githubUploadFile by remember { mutableStateOf<FileItem?>(null) }
     var githubCommitFiles by remember { mutableStateOf<List<String>?>(null) }
+    var pendingGitHubTarget by remember { mutableStateOf<GitHubNotificationTarget?>(null) }
     val githubAvatarUrl = remember { com.glassfiles.data.github.GitHubManager.getCachedUser(context)?.avatarUrl }
 
     fun navigateTo(screen: AppScreen) {
@@ -98,6 +106,12 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
 
     val backdrop = rememberLayerBackdrop()
     val trashManager = remember { TrashManager(context) }
+
+    LaunchedEffect(githubNotificationTarget) {
+        val target = githubNotificationTarget ?: return@LaunchedEffect
+        pendingGitHubTarget = target
+        navigateTo(AppScreen.GITHUB)
+    }
 
     LaunchedEffect(Unit) {
         driveSignedIn = GoogleDriveManager.isSignedIn(context)
@@ -168,6 +182,11 @@ fun GlassFilesApp(hasPermission: Boolean = false, onRequestPermission: () -> Uni
             if (!githubMiniMode && activeScreen == AppScreen.GITHUB) {
                 Box(Modifier.fillMaxSize()) {
                     GitHubScreen(
+                        initialTarget = pendingGitHubTarget,
+                        onInitialTargetConsumed = {
+                            pendingGitHubTarget = null
+                            onGitHubNotificationTargetConsumed()
+                        },
                         onBack = {
                             githubMiniMode = true
                             val prev = previousScreen

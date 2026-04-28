@@ -28,6 +28,12 @@ import com.glassfiles.ui.theme.*
 fun SettingsScreen(settings: AppSettings, onBack: () -> Unit) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+    var showNotifications by remember { mutableStateOf(false) }
+
+    if (showNotifications) {
+        NotificationSettingsScreen(onBack = { showNotifications = false })
+        return
+    }
 
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         // Top bar
@@ -140,6 +146,24 @@ fun SettingsScreen(settings: AppSettings, onBack: () -> Unit) {
                 SettingsLabel("AI response language")
                 SettingsChips(listOf("Русский", "English", "Auto"), listOf("Русский", "English", "Auto").indexOf(settings.aiLanguage)) {
                     settings.changeAiLanguage(listOf("Русский", "English", "Auto")[it])
+                }
+            }
+
+            // ═══════════════════════════════════
+            // Уведомления
+            // ═══════════════════════════════════
+            SettingsSection("Notifications", Icons.Rounded.Notifications) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        .clickable { showNotifications = true }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("GitHub notifications", fontSize = 15.sp, color = TextPrimary)
+                        Text("Polling, quiet hours, channels", fontSize = 12.sp, color = TextSecondary)
+                    }
+                    Icon(Icons.Rounded.ChevronRight, null, Modifier.size(20.dp), tint = TextTertiary)
                 }
             }
 

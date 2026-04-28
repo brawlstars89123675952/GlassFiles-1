@@ -1,6 +1,10 @@
 package com.glassfiles
 
 import android.app.Application
+import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.notifications.NotificationChannels
+import com.glassfiles.notifications.NotificationsPreferences
+import com.glassfiles.notifications.NotificationsWorker
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -11,6 +15,20 @@ class GlassFilesApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         installCrashLogger()
+        initNotifications()
+    }
+
+    private fun initNotifications() {
+        try {
+            NotificationChannels.registerAll(this)
+            if (NotificationsPreferences.isEnabled(this) &&
+                GitHubManager.getToken(this).isNotBlank()
+            ) {
+                NotificationsWorker.enqueue(this)
+            }
+        } catch (_: Throwable) {
+            // Don't let notification init crash the app.
+        }
     }
 
     private fun installCrashLogger() {

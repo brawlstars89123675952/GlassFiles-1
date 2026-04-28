@@ -15,6 +15,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Android 13+ runtime permission to post notifications. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Allows WorkManager to re-schedule periodic work after a reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".GlassFilesApplication"
@@ -98,6 +102,15 @@
             android:enabled="true"
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <!-- GitHub notifications: "Mark as read" action handler. -->
+        <receiver
+            android:name="com.glassfiles.notifications.MarkReadReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.glassfiles.notifications.MARK_READ" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>

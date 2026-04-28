@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.*
+import com.glassfiles.notifications.GitHubNotificationTarget
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
 import java.io.File
@@ -43,7 +44,14 @@ import java.io.File
 internal val LocalGHCompact = compositionLocalOf { false }
 
 @Composable
-fun GitHubScreen(onBack: () -> Unit, onMinimize: () -> Unit = {}, onClose: (() -> Unit)? = null, compact: Boolean = false) {
+fun GitHubScreen(
+    onBack: () -> Unit,
+    onMinimize: () -> Unit = {},
+    onClose: (() -> Unit)? = null,
+    compact: Boolean = false,
+    initialTarget: GitHubNotificationTarget? = null,
+    onInitialTargetConsumed: () -> Unit = {}
+) {
     CompositionLocalProvider(LocalGHCompact provides compact) {
     val context = LocalContext.current
     var isLoggedIn by remember { mutableStateOf(GitHubManager.isLoggedIn(context)) }
@@ -53,9 +61,29 @@ fun GitHubScreen(onBack: () -> Unit, onMinimize: () -> Unit = {}, onClose: (() -
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showNotifications by rememberSaveable { mutableStateOf(false) }
     var showProfile by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingTarget by remember { mutableStateOf(initialTarget) }
     val saveableStateHolder = rememberSaveableStateHolder()
     
     LaunchedEffect(isLoggedIn) { if (isLoggedIn) user = GitHubManager.getUser(context) }
+    LaunchedEffect(initialTarget) {
+        if (initialTarget != null) pendingTarget = initialTarget
+    }
+    LaunchedEffect(isLoggedIn, pendingTarget) {
+        val target = pendingTarget ?: return@LaunchedEffect
+        if (!isLoggedIn) return@LaunchedEffect
+        showSettings = false
+        showGists = false
+        showProfile = null
+        showNotifications = false
+        val repo = GitHubManager.getRepo(context, target.owner, target.repo)
+        if (repo != null) {
+            selectedRepo = repo
+        } else {
+            showNotifications = true
+            pendingTarget = null
+            onInitialTargetConsumed()
+        }
+    }
     BackHandler(enabled = isLoggedIn) {
         when {
             selectedRepo != null -> selectedRepo = null
@@ -71,7 +99,19 @@ fun GitHubScreen(onBack: () -> Unit, onMinimize: () -> Unit = {}, onClose: (() -
         showSettings -> saveableStateHolder.SaveableStateProvider("settings") { GitHubSettingsScreen(onBack = { showSettings = false }, onLogout = { GitHubManager.logout(context); isLoggedIn = false; user = null; showSettings = false }, onClose = onClose) }
         showGists -> saveableStateHolder.SaveableStateProvider("gists") { GistsScreen({ showGists = false }, onMinimize, onClose) }
         showNotifications -> saveableStateHolder.SaveableStateProvider("notifications") { NotificationsScreen(onBack = { showNotifications = false }) }
-        selectedRepo != null -> saveableStateHolder.SaveableStateProvider("repo:${selectedRepo!!.fullName}") { RepoDetailScreen(selectedRepo!!, { selectedRepo = null }, onMinimize, onClose) }
+        selectedRepo != null -> saveableStateHolder.SaveableStateProvider("repo:${selectedRepo!!.fullName}") {
+            RepoDetailScreen(
+                selectedRepo!!,
+                { selectedRepo = null },
+                onMinimize,
+                onClose,
+                initialTarget = pendingTarget?.takeIf { it.repoFullName == selectedRepo!!.fullName },
+                onInitialTargetConsumed = {
+                    pendingTarget = null
+                    onInitialTargetConsumed()
+                }
+            )
+        }
         showProfile != null -> saveableStateHolder.SaveableStateProvider("profile:${showProfile!!}") { ProfileScreen(username = showProfile!!, onBack = { showProfile = null }, onRepoClick = { selectedRepo = it }) }
         else -> saveableStateHolder.SaveableStateProvider("home") { ReposScreen(user, onBack, onMinimize, onClose, { GitHubManager.logout(context); isLoggedIn = false; user = null }, { selectedRepo = it }, { showGists = true }, { showSettings = true }, { showNotifications = true }, { showProfile = it }) }
     }

@@ -49,6 +49,7 @@ import coil.request.ImageRequest
 import androidx.compose.material.icons.outlined.Link
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.*
+import com.glassfiles.notifications.GitHubNotificationTarget
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -86,7 +87,14 @@ private val README_PLAIN_URL_REGEX = Regex("""https?://[^\s<>)"]+""")
 // - public-apis/public-apis (huge table)
 
 @Composable
-internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -> Unit = {}, onClose: (() -> Unit)? = null) {
+internal fun RepoDetailScreen(
+    repo: GHRepo,
+    onBack: () -> Unit,
+    onMinimize: () -> Unit = {},
+    onClose: (() -> Unit)? = null,
+    initialTarget: GitHubNotificationTarget? = null,
+    onInitialTargetConsumed: () -> Unit = {}
+) {
     val context = LocalContext.current; val scope = rememberCoroutineScope()
     val colors = MaterialTheme.colorScheme
     var selectedTab by rememberSaveable(repo.fullName) { mutableStateOf(RepoTab.FILES) }; var contents by remember { mutableStateOf<List<GHContent>>(emptyList()) }
@@ -129,6 +137,36 @@ internal fun RepoDetailScreen(repo: GHRepo, onBack: () -> Unit, onMinimize: () -
     val commitsListState = rememberSaveable(repo.fullName, "commits", saver = LazyListState.Saver) { LazyListState(0, 0) }
     val issuesListState = rememberSaveable(repo.fullName, "issues", saver = LazyListState.Saver) { LazyListState(0, 0) }
     val pullsListState = rememberSaveable(repo.fullName, "pulls", saver = LazyListState.Saver) { LazyListState(0, 0) }
+
+    LaunchedEffect(initialTarget) {
+        val target = initialTarget ?: return@LaunchedEffect
+        when (target.subjectType) {
+            "PullRequest" -> {
+                selectedTab = RepoTab.PULLS
+                target.number?.let { selectedPullNumber = it }
+            }
+            "Issue" -> {
+                selectedTab = RepoTab.ISSUES
+                target.number?.let {
+                    selectedIssue = GHIssue(
+                        number = it,
+                        title = "",
+                        state = "",
+                        author = "",
+                        createdAt = "",
+                        comments = 0,
+                        isPR = false
+                    )
+                }
+            }
+            "Release" -> selectedTab = RepoTab.RELEASES
+            "Discussion" -> showDiscussions = true
+            else -> {
+                selectedTab = if (target.number != null) RepoTab.ISSUES else RepoTab.FILES
+            }
+        }
+        onInitialTargetConsumed()
+    }
 
     fun handleRepoBack() {
         when {

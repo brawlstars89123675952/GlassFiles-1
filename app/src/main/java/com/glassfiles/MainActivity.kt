@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.sp
 import com.glassfiles.BuildConfig
 import com.glassfiles.data.AppSettings
 import com.glassfiles.data.security.LicenseManager
+import com.glassfiles.notifications.GitHubNotificationTarget
+import com.glassfiles.notifications.NotificationsManager
 import com.glassfiles.security.SecurityManager
 import com.glassfiles.ui.GlassFilesApp
 import com.glassfiles.ui.screens.OnboardingScreen
@@ -45,6 +47,7 @@ import com.glassfiles.ui.theme.*
 class MainActivity : ComponentActivity() {
 
     val hasPermission = mutableStateOf(false)
+    private val pendingGitHubNotificationTarget = mutableStateOf<GitHubNotificationTarget?>(null)
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var appSettings: AppSettings
 
@@ -68,6 +71,9 @@ class MainActivity : ComponentActivity() {
 
         // Request battery optimization exemption
         requestBatteryOptimization()
+
+        // Handle "open thread" deep link if launched from a notification.
+        handleNotificationIntent(intent)
 
         appSettings = AppSettings(this)
 
@@ -178,12 +184,37 @@ class MainActivity : ComponentActivity() {
                         else -> GlassFilesApp(
                             hasPermission = permState,
                             onRequestPermission = { requestStoragePermission() },
-                            appSettings = appSettings
+                            appSettings = appSettings,
+                            githubNotificationTarget = pendingGitHubNotificationTarget.value,
+                            onGitHubNotificationTargetConsumed = {
+                                pendingGitHubNotificationTarget.value = null
+                            }
                         )
                     }
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: Intent?) {
+        if (intent == null) return
+        val action = intent.getStringExtra(NotificationsManager.EXTRA_ACTION) ?: return
+        if (action != NotificationsManager.ACTION_OPEN_THREAD) return
+
+        pendingGitHubNotificationTarget.value = GitHubNotificationTarget.from(
+            subjectUrl = intent.getStringExtra(NotificationsManager.EXTRA_SUBJECT_URL).orEmpty(),
+            htmlUrl = intent.getStringExtra(NotificationsManager.EXTRA_HTML_URL).orEmpty(),
+            repoFullName = intent.getStringExtra(NotificationsManager.EXTRA_REPO).orEmpty(),
+            subjectType = intent.getStringExtra(NotificationsManager.EXTRA_SUBJECT_TYPE).orEmpty()
+        )
+        // Consume extras so we don't re-handle on rotation/recompose.
+        intent.removeExtra(NotificationsManager.EXTRA_ACTION)
     }
 
     override fun onResume() {

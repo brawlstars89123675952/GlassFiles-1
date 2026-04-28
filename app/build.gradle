@@ -134,6 +134,9 @@ dependencies {
     implementation 'com.goterl:lazysodium-android:5.2.0@aar'
     implementation 'net.java.dev.jna:jna:5.17.0@aar'
 
+    // Background scheduler for periodic GitHub notifications polling.
+    implementation 'androidx.work:work-runtime-ktx:2.9.0'
+
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 }
