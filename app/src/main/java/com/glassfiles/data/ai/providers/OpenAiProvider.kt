@@ -18,4 +18,23 @@ object OpenAiProvider : OpenAiCompatProvider(
     }
 
     override fun displayName(rawId: String): String = rawId
+
+    override suspend fun generateImage(
+        context: Context,
+        modelId: String,
+        prompt: String,
+        apiKey: String,
+        size: String,
+        n: Int,
+    ): List<String> = OpenAiCompatImageGen.generate(
+        baseUrl = baseUrl(context),
+        cacheDir = context.cacheDir,
+        providerLabel = id.displayName,
+        fileTag = "openai",
+        modelId = modelId,
+        prompt = prompt,
+        apiKey = apiKey,
+        size = size,
+        n = n,
+    )
 }
