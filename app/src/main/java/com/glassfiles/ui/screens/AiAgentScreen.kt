@@ -120,7 +120,13 @@ import java.util.Locale
  * stays put.
  */
 @Composable
-fun AiAgentScreen(onBack: () -> Unit) {
+fun AiAgentScreen(
+    onBack: () -> Unit,
+    initialRepoFullName: String? = null,
+    initialBranch: String? = null,
+    initialPrompt: String? = null,
+    onInitialConsumed: () -> Unit = {},
+) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
@@ -137,15 +143,23 @@ fun AiAgentScreen(onBack: () -> Unit) {
     val models = remember { mutableStateListOf<AiModel>() }
     var selectedModel by remember { mutableStateOf<AiModel?>(null) }
 
+    // When the screen was opened from a GitHub entry point (with a
+    // preselected repo / prompt) we start a *fresh* session instead of
+    // continuing the most recent one — otherwise the user lands on an
+    // unrelated chat from another repo.
+    val launchedFromGitHub = !initialRepoFullName.isNullOrBlank() || !initialPrompt.isNullOrBlank()
+
     var sessions by remember { mutableStateOf(AiChatSessionStore.list(context, AGENT_SESSION_MODE)) }
-    var activeSessionId by remember { mutableStateOf(sessions.firstOrNull()?.id ?: newAgentSessionId()) }
+    var activeSessionId by remember {
+        mutableStateOf(if (launchedFromGitHub) newAgentSessionId() else (sessions.firstOrNull()?.id ?: newAgentSessionId()))
+    }
     var sessionCreatedAt by remember {
         mutableStateOf(sessions.firstOrNull { it.id == activeSessionId }?.createdAt ?: System.currentTimeMillis())
     }
     var showHistory by remember { mutableStateOf(false) }
 
     val transcript = remember { mutableStateListOf<AgentEntry>() }
-    var input by remember { mutableStateOf(TextFieldValue("")) }
+    var input by remember { mutableStateOf(TextFieldValue(initialPrompt.orEmpty())) }
     var pendingImage by remember { mutableStateOf<String?>(null) }
     var autoApproveReads by remember { mutableStateOf(true) }
     var running by remember { mutableStateOf(false) }
@@ -154,8 +168,20 @@ fun AiAgentScreen(onBack: () -> Unit) {
 
     // ID of the session whose repo / branch / model we still want to
     // re-apply once the async repo + model lists finish loading. Cleared
-    // once everything that *can* be restored has been.
-    var pendingRestoreSessionId by remember { mutableStateOf<String?>(activeSessionId) }
+    // once everything that *can* be restored has been. Skipped entirely
+    // when launched from GitHub — in that case the caller picks repo /
+    // branch and we don't want to overlay a stale saved session on top.
+    var pendingRestoreSessionId by remember {
+        mutableStateOf<String?>(if (launchedFromGitHub) null else activeSessionId)
+    }
+
+    // GitHub-launch overrides we still want to apply once `repos` finishes
+    // loading (since `getRepos` is async). Cleared once applied so subsequent
+    // user picks aren't fought.
+    var pendingInitialRepoFullName by remember {
+        mutableStateOf(initialRepoFullName?.takeIf { it.isNotBlank() })
+    }
+    val pendingInitialBranch = remember { initialBranch?.takeIf { it.isNotBlank() } }
 
     // Pending approvals: tool calls awaiting user decision. The agent loop
     // suspends on these CompletableDeferred until Approve/Reject flips them.
@@ -181,8 +207,16 @@ fun AiAgentScreen(onBack: () -> Unit) {
 
     // Restore the saved transcript synchronously when the screen first
     // opens. Repo / branch / model selection happens later (see below)
-    // because those lists are populated asynchronously.
+    // because those lists are populated asynchronously. Skipped when
+    // launched from a GitHub entry point — the caller wants a clean slate
+    // scoped to their repo, not a continuation of the most recent chat.
     LaunchedEffect(Unit) {
+        if (launchedFromGitHub) {
+            // Pre-seed the branch so the branch-loading effect can honour
+            // it as soon as `selectedRepo` is set.
+            pendingInitialBranch?.let { selectedBranch = it }
+            return@LaunchedEffect
+        }
         sessions.firstOrNull { it.id == activeSessionId }?.let { session ->
             sessionCreatedAt = session.createdAt
             transcript.clear()
@@ -190,6 +224,24 @@ fun AiAgentScreen(onBack: () -> Unit) {
             // Pre-seed the desired branch so the branch-loading effect
             // can honour it once the repo is picked.
             if (session.branch.isNotBlank()) selectedBranch = session.branch
+        }
+    }
+
+    // Apply GitHub-launch repo override as soon as `repos` is populated.
+    LaunchedEffect(repos.size, pendingInitialRepoFullName) {
+        val want = pendingInitialRepoFullName ?: return@LaunchedEffect
+        val match = repos.firstOrNull { it.fullName == want }
+        if (match != null) {
+            selectedRepo = match
+            pendingInitialRepoFullName = null
+            // Tell the host we've consumed the initial state so back-nav
+            // won't replay it on the next visit to the screen.
+            onInitialConsumed()
+        } else if (repos.isNotEmpty()) {
+            // Repo not in the list (e.g. user logged out, private repo).
+            // Stop trying so the user can pick manually.
+            pendingInitialRepoFullName = null
+            onInitialConsumed()
         }
     }
 

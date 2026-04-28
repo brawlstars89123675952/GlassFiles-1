@@ -50,7 +50,8 @@ fun GitHubScreen(
     onClose: (() -> Unit)? = null,
     compact: Boolean = false,
     initialTarget: GitHubNotificationTarget? = null,
-    onInitialTargetConsumed: () -> Unit = {}
+    onInitialTargetConsumed: () -> Unit = {},
+    onOpenAiAgent: ((repoFullName: String, branch: String?, prompt: String?) -> Unit)? = null
 ) {
     CompositionLocalProvider(LocalGHCompact provides compact) {
     val context = LocalContext.current
@@ -109,7 +110,8 @@ fun GitHubScreen(
                 onInitialTargetConsumed = {
                     pendingTarget = null
                     onInitialTargetConsumed()
-                }
+                },
+                onOpenAiAgent = onOpenAiAgent
             )
         }
         showProfile != null -> saveableStateHolder.SaveableStateProvider("profile:${showProfile!!}") { ProfileScreen(username = showProfile!!, onBack = { showProfile = null }, onRepoClick = { selectedRepo = it }) }

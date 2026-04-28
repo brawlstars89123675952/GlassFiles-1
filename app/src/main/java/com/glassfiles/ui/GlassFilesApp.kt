@@ -86,6 +86,9 @@ fun GlassFilesApp(
     var terminalWasOpened by remember { mutableStateOf(false) }
     var aiInitialPrompt by remember { mutableStateOf<String?>(null) }
     var aiInitialImage by remember { mutableStateOf<String?>(null) }
+    var aiAgentInitialRepo by remember { mutableStateOf<String?>(null) }
+    var aiAgentInitialBranch by remember { mutableStateOf<String?>(null) }
+    var aiAgentInitialPrompt by remember { mutableStateOf<String?>(null) }
     var selectedTagName by remember { mutableStateOf("") }
 
     var githubWasOpened by remember { mutableStateOf(false) }
@@ -230,7 +233,16 @@ fun GlassFilesApp(
                             activeScreen = prev
                             previousScreen = AppScreen.MAIN
                         },
-                        onClose = { closeGitHubFully() }
+                        onClose = { closeGitHubFully() },
+                        onOpenAiAgent = { repoFullName, branch, prompt ->
+                            aiAgentInitialRepo = repoFullName
+                            aiAgentInitialBranch = branch
+                            aiAgentInitialPrompt = prompt
+                            // Mini-fy GitHub so it stays in the background
+                            // bubble; user can swipe back to it from agent.
+                            githubMiniMode = true
+                            navigateTo(AppScreen.AI_AGENT)
+                        }
                     )
                 }
             }
@@ -275,7 +287,22 @@ fun GlassFilesApp(
                     AiSettingsScreen(onBack = { goBack() })
                 }
                 AppScreen.AI_AGENT -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
-                    AiAgentScreen(onBack = { goBack() })
+                    AiAgentScreen(
+                        onBack = {
+                            goBack()
+                            aiAgentInitialRepo = null
+                            aiAgentInitialBranch = null
+                            aiAgentInitialPrompt = null
+                        },
+                        initialRepoFullName = aiAgentInitialRepo,
+                        initialBranch = aiAgentInitialBranch,
+                        initialPrompt = aiAgentInitialPrompt,
+                        onInitialConsumed = {
+                            aiAgentInitialRepo = null
+                            aiAgentInitialBranch = null
+                            aiAgentInitialPrompt = null
+                        },
+                    )
                 }
                 AppScreen.AI_CHAT -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
                     AiChatScreen(onBack = { goBack(); aiInitialPrompt = null; aiInitialImage = null }, initialPrompt = aiInitialPrompt, initialImageBase64 = aiInitialImage)

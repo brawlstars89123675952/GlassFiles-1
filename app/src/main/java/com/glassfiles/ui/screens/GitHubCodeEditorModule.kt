@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentPaste
@@ -54,6 +55,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -117,7 +119,8 @@ fun CodeEditorScreen(
     file: GHContent,
     branch: String,
     initialContent: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onAskAi: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -456,7 +459,8 @@ fun CodeEditorScreen(
                 }
             },
             onSave = { showCommitDialog = true },
-            onOpenImage = { openUrl(context, file.downloadUrl) }
+            onOpenImage = { openUrl(context, file.downloadUrl) },
+            onAskAi = onAskAi
         )
 
         if (!isImage) {
@@ -622,9 +626,14 @@ private fun GitHubEditorTopBar(
     onRedo: () -> Unit,
     onCycleMode: () -> Unit,
     onSave: () -> Unit,
-    onOpenImage: () -> Unit
+    onOpenImage: () -> Unit,
+    onAskAi: (() -> Unit)? = null
 ) {
+    val colors = MaterialTheme.colorScheme
     GHTopBar(fileName, subtitle = subtitle, onBack = onBack) {
+        if (onAskAi != null) {
+            IconButton(onClick = onAskAi) { Icon(Icons.Rounded.AutoAwesome, null, tint = colors.primary) }
+        }
         if (!isImage) {
             IconButton(onClick = onToggleSearch) { Icon(Icons.Rounded.Search, null, tint = if (showSearch) Blue else TextSecondary) }
             IconButton(onClick = onGoTo) { Icon(Icons.Rounded.Tag, null, tint = TextSecondary) }

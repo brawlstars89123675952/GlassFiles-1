@@ -93,7 +93,8 @@ internal fun RepoDetailScreen(
     onMinimize: () -> Unit = {},
     onClose: (() -> Unit)? = null,
     initialTarget: GitHubNotificationTarget? = null,
-    onInitialTargetConsumed: () -> Unit = {}
+    onInitialTargetConsumed: () -> Unit = {},
+    onOpenAiAgent: ((repoFullName: String, branch: String?, prompt: String?) -> Unit)? = null
 ) {
     val context = LocalContext.current; val scope = rememberCoroutineScope()
     val colors = MaterialTheme.colorScheme
@@ -324,6 +325,15 @@ internal fun RepoDetailScreen(
                 editingFile = null
                 fileContent = null
                 scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch) }
+            },
+            onAskAi = onOpenAiAgent?.let { open ->
+                { ->
+                    open(
+                        repo.fullName,
+                        selectedBranch,
+                        "Look at the file `${safeEditingFile.path}` on branch `$selectedBranch` and explain what it does.",
+                    )
+                }
             }
         )
         return
@@ -440,6 +450,14 @@ internal fun RepoDetailScreen(
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         GHTopBar(repo.name, subtitle = if (currentPath.isNotBlank()) currentPath else repo.owner, onBack = ::handleRepoBack, onMinimize = onMinimize, onClose = onClose) {
             val ic = if (LocalGHCompact.current) 16.dp else 20.dp
+            if (onOpenAiAgent != null) {
+                IconButton(
+                    onClick = { onOpenAiAgent(repo.fullName, selectedBranch, null) },
+                    modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier,
+                ) {
+                    Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(ic), tint = colors.primary)
+                }
+            }
             IconButton(onClick = { scope.launch { if (isStarred) GitHubManager.unstarRepo(context, repo.owner, repo.name) else GitHubManager.starRepo(context, repo.owner, repo.name); isStarred = !isStarred } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isStarred) Icons.Rounded.Star else Icons.Rounded.StarBorder, null, Modifier.size(ic), tint = Color(0xFFFFCC00)) }
             IconButton(onClick = { scope.launch { if (isWatching) GitHubManager.unwatchRepo(context, repo.owner, repo.name) else GitHubManager.watchRepo(context, repo.owner, repo.name); isWatching = !isWatching } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isWatching) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, Modifier.size(ic), tint = if (isWatching) colors.primary else colors.onSurfaceVariant) }
             if (canAdmin) IconButton(onClick = { showRepoSettings = true }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.Settings, null, Modifier.size(ic), tint = TextSecondary) }
