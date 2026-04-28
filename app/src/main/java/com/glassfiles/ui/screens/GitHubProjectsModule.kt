@@ -69,6 +69,7 @@ import com.glassfiles.data.github.GHProjectV2View
 import com.glassfiles.data.github.GHProjectV2Workflow
 import com.glassfiles.data.github.GHRepo
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.data.github.canWrite
 import com.glassfiles.ui.theme.Blue
 import com.glassfiles.ui.theme.SurfaceLight
 import com.glassfiles.ui.theme.SurfaceWhite
@@ -155,8 +156,10 @@ internal fun ProjectsTab(repo: GHRepo) {
                     modifier = Modifier.weight(1f),
                     leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = TextSecondary) }
                 )
-                IconButton(onClick = { showCreateDialog = true }) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue)
+                if (repo.canWrite()) {
+                    IconButton(onClick = { showCreateDialog = true }) {
+                        Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue)
+                    }
                 }
             }
         }

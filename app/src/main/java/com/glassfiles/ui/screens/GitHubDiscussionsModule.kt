@@ -73,6 +73,7 @@ import kotlinx.coroutines.launch
 internal fun DiscussionsScreen(
     repoOwner: String,
     repoName: String,
+    canWrite: Boolean = true,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -122,8 +123,10 @@ internal fun DiscussionsScreen(
             subtitle = "$repoOwner/$repoName",
             onBack = onBack,
             actions = {
-                IconButton(onClick = { showCreateDialog = true }) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue)
+                if (canWrite) {
+                    IconButton(onClick = { showCreateDialog = true }) {
+                        Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue)
+                    }
                 }
             }
         )

@@ -306,7 +306,7 @@ internal fun RepoDetailScreen(
     if (showTeams) { RepoTeamsScreen(repoOwner = repo.owner, repoName = repo.name) { showTeams = false }; return }
     if (showCompare) { CompareCommitsScreen(repoOwner = repo.owner, repoName = repo.name, initialBase = selectedBranch) { showCompare = false }; return }
     if (showWebhooks) { WebhooksScreen(repoOwner = repo.owner, repoName = repo.name) { showWebhooks = false }; return }
-    if (showDiscussions) { DiscussionsScreen(repoOwner = repo.owner, repoName = repo.name) { showDiscussions = false }; return }
+    if (showDiscussions) { DiscussionsScreen(repoOwner = repo.owner, repoName = repo.name, canWrite = repo.canWrite()) { showDiscussions = false }; return }
     if (showRulesets) { RulesetsScreen(repoOwner = repo.owner, repoName = repo.name) { showRulesets = false }; return }
     if (showSecurity) { SecurityScreen(repoOwner = repo.owner, repoName = repo.name) { showSecurity = false }; return }
     
@@ -350,6 +350,7 @@ internal fun RepoDetailScreen(
             repoOwner = repo.owner,
             repoName = repo.name,
             defaultBranch = repo.defaultBranch,
+            canWrite = repo.canWrite(),
             onBack = { selectedTab = RepoTab.FILES },
             onReleaseClick = { /* optional */ }
         )
@@ -433,15 +434,31 @@ internal fun RepoDetailScreen(
     }
 
 
+    val canWrite = repo.canWrite()
+    val canAdmin = repo.canAdmin()
+
     Column(Modifier.fillMaxSize().background(SurfaceLight)) {
         GHTopBar(repo.name, subtitle = if (currentPath.isNotBlank()) currentPath else repo.owner, onBack = ::handleRepoBack, onMinimize = onMinimize, onClose = onClose) {
             val ic = if (LocalGHCompact.current) 16.dp else 20.dp
             IconButton(onClick = { scope.launch { if (isStarred) GitHubManager.unstarRepo(context, repo.owner, repo.name) else GitHubManager.starRepo(context, repo.owner, repo.name); isStarred = !isStarred } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isStarred) Icons.Rounded.Star else Icons.Rounded.StarBorder, null, Modifier.size(ic), tint = Color(0xFFFFCC00)) }
             IconButton(onClick = { scope.launch { if (isWatching) GitHubManager.unwatchRepo(context, repo.owner, repo.name) else GitHubManager.watchRepo(context, repo.owner, repo.name); isWatching = !isWatching } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(if (isWatching) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, Modifier.size(ic), tint = if (isWatching) colors.primary else colors.onSurfaceVariant) }
-            IconButton(onClick = { showRepoSettings = true }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.Settings, null, Modifier.size(ic), tint = TextSecondary) }
+            if (canAdmin) IconButton(onClick = { showRepoSettings = true }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.Settings, null, Modifier.size(ic), tint = TextSecondary) }
             IconButton(onClick = { showCompare = true }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.CompareArrows, null, Modifier.size(ic), tint = colors.primary) }
             IconButton(onClick = { scope.launch { val ok = GitHubManager.forkRepo(context, repo.owner, repo.name); Toast.makeText(context, if (ok) Strings.ghForked else Strings.error, Toast.LENGTH_SHORT).show() } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.CallSplit, null, Modifier.size(ic), tint = colors.primary) }
             IconButton(onClick = { cloneProgress = "Starting..."; scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git"); val ok = GitHubManager.cloneRepo(context, repo.owner, repo.name, dest) { cloneProgress = it }; Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show(); cloneProgress = null } }, modifier = if (LocalGHCompact.current) Modifier.size(32.dp) else Modifier) { Icon(Icons.Rounded.Download, null, Modifier.size(ic), tint = colors.primary) }
+        }
+        if (!canWrite && repo.permissions != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.surfaceVariant)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(Icons.Rounded.Visibility, null, Modifier.size(14.dp), tint = colors.onSurfaceVariant)
+                Text("Read-only", fontSize = 11.sp, color = colors.onSurfaceVariant, fontWeight = FontWeight.Medium)
+            }
         }
         if (cloneProgress != null) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(colors.primary.copy(0.10f)).padding(horizontal = 12.dp, vertical = 8.dp)) { Text(cloneProgress!!, fontSize = 13.sp, color = colors.primary, fontWeight = FontWeight.Medium) }
         // Branch + actions
@@ -451,7 +468,13 @@ internal fun RepoDetailScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(Icons.Rounded.AccountTree, null, Modifier.size(if (cmp) 12.dp else 14.dp), tint = colors.primary); Text(selectedBranch, fontSize = if (cmp) 10.sp else 12.sp, color = colors.primary, fontWeight = FontWeight.Medium); Icon(Icons.Rounded.ArrowDropDown, null, Modifier.size(if (cmp) 12.dp else 14.dp), tint = colors.primary) }
             }
             Spacer(Modifier.weight(1f))
-            when (selectedTab) { RepoTab.FILES -> { SmallAction(Icons.Rounded.NoteAdd, Strings.ghCreateFile) { showCreateFile = true }; SmallAction(Icons.Rounded.Upload, Strings.ghUpload) { showUpload = true } }; RepoTab.ISSUES -> SmallAction(Icons.Rounded.Add, Strings.ghNewIssue) { showCreateIssue = true }; RepoTab.PULLS -> SmallAction(Icons.Rounded.Add, Strings.ghNewPR) { showCreatePR = true }; RepoTab.ACTIONS -> SmallAction(Icons.Rounded.PlayArrow, Strings.ghRunWorkflow) { showDispatch = true }; else -> {} }
+            when (selectedTab) {
+                RepoTab.FILES -> if (canWrite) { SmallAction(Icons.Rounded.NoteAdd, Strings.ghCreateFile) { showCreateFile = true }; SmallAction(Icons.Rounded.Upload, Strings.ghUpload) { showUpload = true } }
+                RepoTab.ISSUES -> if (canWrite || repo.permissions == null) SmallAction(Icons.Rounded.Add, Strings.ghNewIssue) { showCreateIssue = true }
+                RepoTab.PULLS -> if (canWrite || repo.permissions == null) SmallAction(Icons.Rounded.Add, Strings.ghNewPR) { showCreatePR = true }
+                RepoTab.ACTIONS -> if (canWrite) SmallAction(Icons.Rounded.PlayArrow, Strings.ghRunWorkflow) { showDispatch = true }
+                else -> {}
+            }
         }
         // Tabs
         Row(Modifier.fillMaxWidth().background(colors.surface).horizontalScroll(rememberScrollState()).padding(horizontal = if (cmp) 8.dp else 16.dp, vertical = if (cmp) 3.dp else 6.dp), horizontalArrangement = Arrangement.spacedBy(if (cmp) 4.dp else 6.dp)) {
@@ -502,7 +525,7 @@ internal fun RepoDetailScreen(
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.10f)))
         if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
         else when (selectedTab) {
-            RepoTab.FILES -> FilesTab(filteredContents, listState = filesListState, onDirClick = { currentPath = it.path }, onFileClick = { scope.launch { openedFile = it; fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, it.path, selectedBranch) } }, onEdit = { openedFile = null; fileContent = null; editingFile = it }, onDelete = { deleteTarget = it }, onDownload = { scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${it.name}"); val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, it.path, dest, selectedBranch); Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show() } })
+            RepoTab.FILES -> FilesTab(filteredContents, listState = filesListState, canWrite = canWrite, onDirClick = { currentPath = it.path }, onFileClick = { scope.launch { openedFile = it; fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, it.path, selectedBranch) } }, onEdit = { openedFile = null; fileContent = null; editingFile = it }, onDelete = { deleteTarget = it }, onDownload = { scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${it.name}"); val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, it.path, dest, selectedBranch); Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show() } })
             RepoTab.COMMITS -> CommitsTab(filteredCommits, commitsHasMore, { scope.launch { commitsPage++; val r = GitHubManager.getCommits(context, repo.owner, repo.name, commitsPage); if (r.size < 30) commitsHasMore = false; commits = commits + r } }, listState = commitsListState) { selectedCommitSha = it.sha }
             RepoTab.ISSUES -> IssuesTab(filteredIssues, issuesHasMore, { scope.launch { issuesPage++; val r = GitHubManager.getIssues(context, repo.owner, repo.name, page = issuesPage); if (r.size < 30) issuesHasMore = false; issues = issues + r } }, listState = issuesListState) { selectedIssue = it }
             RepoTab.PULLS -> PullsTab(filteredPulls, repo, { scope.launch { pulls = GitHubManager.getPullRequests(context, repo.owner, repo.name) } }, listState = pullsListState, onOpenDetail = { selectedPullNumber = it.number }) { prNumber -> selectedPRNumber = prNumber }
@@ -533,14 +556,14 @@ internal fun RepoDetailScreen(
     if (showCreateIssue) CreateIssueDialog(repo, { showCreateIssue = false }) { showCreateIssue = false; scope.launch { issues = GitHubManager.getIssues(context, repo.owner, repo.name) } }
     if (showCreatePR) CreatePRDialog(repo, branches, { showCreatePR = false }) { showCreatePR = false; scope.launch { pulls = GitHubManager.getPullRequests(context, repo.owner, repo.name) } }
     if (deleteTarget != null) DeleteFileDialog(repo, deleteTarget!!, selectedBranch, { deleteTarget = null }) { deleteTarget = null; scope.launch { contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch) } }
-    if (showBranchPicker) BranchPickerDialog(branches, selectedBranch, { selectedBranch = it; showBranchPicker = false }, { showBranchPicker = false }) { showBranchPicker = false; showCreateBranch = true }
+    if (showBranchPicker) BranchPickerDialog(branches, selectedBranch, canWrite, { selectedBranch = it; showBranchPicker = false }, { showBranchPicker = false }) { showBranchPicker = false; showCreateBranch = true }
     if (showDispatch && workflows.isNotEmpty()) DispatchWorkflowDialog(repo, workflows, branches, { showDispatch = false }) { showDispatch = false; scope.launch { workflowRuns = GitHubManager.getWorkflowRuns(context, repo.owner, repo.name) } }
 }
 
 @Composable private fun SmallAction(icon: ImageVector, label: String, onClick: () -> Unit) { val c = LocalGHCompact.current; Row(Modifier.clip(RoundedCornerShape(if (c) 6.dp else 8.dp)).background(SurfaceWhite).border(0.5.dp, SeparatorColor, RoundedCornerShape(if (c) 6.dp else 8.dp)).clickable(onClick = onClick).padding(horizontal = if (c) 5.dp else 8.dp, vertical = if (c) 3.dp else 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (c) 2.dp else 4.dp)) { Icon(icon, null, Modifier.size(if (c) 11.dp else 14.dp), tint = Blue); Text(label, fontSize = if (c) 9.sp else 11.sp, color = Blue) } }
 
 @Composable
-internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, onDirClick: (GHContent) -> Unit, onFileClick: (GHContent) -> Unit, onEdit: (GHContent) -> Unit, onDelete: (GHContent) -> Unit, onDownload: (GHContent) -> Unit) {
+internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWrite: Boolean = true, onDirClick: (GHContent) -> Unit, onFileClick: (GHContent) -> Unit, onEdit: (GHContent) -> Unit, onDelete: (GHContent) -> Unit, onDownload: (GHContent) -> Unit) {
     var expanded by remember { mutableStateOf<String?>(null) }
     LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 16.dp)) { items(contents) { item -> Column {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(12.dp)).clickable { if (item.type == "dir") onDirClick(item) else expanded = if (expanded == item.path) null else item.path }.padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -554,7 +577,10 @@ internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, onDir
             if (item.type != "dir" && item.size > 0) Text(ghFmtSize(item.size), fontSize = 11.sp, color = TextTertiary, fontFamily = FontFamily.Monospace)
         }
         AnimatedVisibility(expanded == item.path && item.type != "dir") { Row(Modifier.fillMaxWidth().padding(start = 50.dp, end = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip(Icons.Rounded.Visibility, "View") { onFileClick(item) }; Chip(Icons.Rounded.Edit, Strings.ghEditFile) { onEdit(item) }; Chip(Icons.Rounded.Download, Strings.ghDownloadFile) { onDownload(item) }; Chip(Icons.Rounded.Delete, Strings.ghDeleteFile, Color(0xFFFF3B30)) { onDelete(item) }
+            Chip(Icons.Rounded.Visibility, "View") { onFileClick(item) }
+            if (canWrite) Chip(Icons.Rounded.Edit, Strings.ghEditFile) { onEdit(item) }
+            Chip(Icons.Rounded.Download, Strings.ghDownloadFile) { onDownload(item) }
+            if (canWrite) Chip(Icons.Rounded.Delete, Strings.ghDeleteFile, Color(0xFFFF3B30)) { onDelete(item) }
         } }
         Box(Modifier.fillMaxWidth().padding(start = 50.dp).height(0.5.dp).background(SeparatorColor))
     } } }
@@ -842,14 +868,15 @@ private fun PullRequestDetailScreen(
             }
 
             item {
+                val canWrite = repo.canWrite()
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Chip(Icons.Rounded.Edit, "Edit", TextSecondary) { showEdit = true }
+                    if (canWrite) Chip(Icons.Rounded.Edit, "Edit", TextSecondary) { showEdit = true }
                     Chip(Icons.Rounded.Article, "Files", Blue) { onOpenFiles(pullNumber) }
-                    Chip(Icons.Rounded.RateReview, "Review", Blue) { showReview = true }
-                    Chip(Icons.Rounded.Group, "Reviewers", Blue) { showReviewers = true }
+                    if (canWrite) Chip(Icons.Rounded.RateReview, "Review", Blue) { showReview = true }
+                    if (canWrite) Chip(Icons.Rounded.Group, "Reviewers", Blue) { showReviewers = true }
                     Chip(Icons.Rounded.History, "Reviews", TextSecondary) { showReviews = true }
                     Chip(Icons.Rounded.FactCheck, "Checks", Blue) { showChecks = true }
-                    if (current.state == "open" && !current.merged && !current.draft) {
+                    if (canWrite && current.state == "open" && !current.merged && !current.draft) {
                         Chip(Icons.Rounded.CallMerge, if (merging) "Merging..." else Strings.ghMerge, Color(0xFF34C759)) {
                             if (!merging) showMerge = true
                         }
@@ -2130,32 +2157,34 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
                 IconButton(onClick = { showMetaDialog = true }) {
                     Icon(Icons.Rounded.Tune, null, Modifier.size(20.dp), tint = Blue)
                 }
-                IconButton(onClick = { showLockDialog = true }) {
-                    Icon(
-                        if (detail!!.locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
-                        null,
-                        Modifier.size(20.dp),
-                        tint = if (detail!!.locked) Color(0xFF34C759) else Color(0xFFFF9500)
-                    )
-                }
-                val isOpen = detail!!.state == "open"
-                IconButton(onClick = {
-                    scope.launch {
-                        val ok = if (isOpen) {
-                            GitHubManager.closeIssue(context, repo.owner, repo.name, issueNumber)
-                        } else {
-                            GitHubManager.reopenIssue(context, repo.owner, repo.name, issueNumber)
-                        }
-                        if (ok) refreshIssueDetail()
-                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                if (repo.canWrite()) {
+                    IconButton(onClick = { showLockDialog = true }) {
+                        Icon(
+                            if (detail!!.locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
+                            null,
+                            Modifier.size(20.dp),
+                            tint = if (detail!!.locked) Color(0xFF34C759) else Color(0xFFFF9500)
+                        )
                     }
-                }) {
-                    Icon(
-                        if (isOpen) Icons.Rounded.Close else Icons.Rounded.Refresh,
-                        null,
-                        Modifier.size(20.dp),
-                        tint = if (isOpen) Color(0xFFFF3B30) else Color(0xFF34C759)
-                    )
+                    val isOpen = detail!!.state == "open"
+                    IconButton(onClick = {
+                        scope.launch {
+                            val ok = if (isOpen) {
+                                GitHubManager.closeIssue(context, repo.owner, repo.name, issueNumber)
+                            } else {
+                                GitHubManager.reopenIssue(context, repo.owner, repo.name, issueNumber)
+                            }
+                            if (ok) refreshIssueDetail()
+                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Icon(
+                            if (isOpen) Icons.Rounded.Close else Icons.Rounded.Refresh,
+                            null,
+                            Modifier.size(20.dp),
+                            tint = if (isOpen) Color(0xFFFF3B30) else Color(0xFF34C759)
+                        )
+                    }
                 }
             }
         }

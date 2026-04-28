@@ -46,6 +46,7 @@ fun ReleasesScreen(
     repoOwner: String,
     repoName: String,
     defaultBranch: String = "main",
+    canWrite: Boolean = true,
     onBack: () -> Unit,
     onReleaseClick: (GHRelease) -> Unit = {}
 ) {
@@ -66,8 +67,10 @@ fun ReleasesScreen(
             subtitle = repoName,
             onBack = onBack,
             actions = {
-                IconButton(onClick = { showCreate = true }) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+                if (canWrite) {
+                    IconButton(onClick = { showCreate = true }) {
+                        Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         )
@@ -90,7 +93,7 @@ fun ReleasesScreen(
 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
             items(releases) { release ->
-                ReleaseCard(release, repoOwner, repoName, defaultBranch, releases) { updatedReleases ->
+                ReleaseCard(release, repoOwner, repoName, defaultBranch, releases, canWrite) { updatedReleases ->
                     releases = updatedReleases
                 }
                 Spacer(Modifier.height(12.dp))
@@ -118,6 +121,7 @@ private fun ReleaseCard(
     repoName: String,
     defaultBranch: String,
     releases: List<GHRelease>,
+    canWrite: Boolean,
     onReleasesUpdate: (List<GHRelease>) -> Unit
 ) {
     val context = LocalContext.current
@@ -216,7 +220,7 @@ private fun ReleaseCard(
                                     Toast.makeText(context, if (ok) "${Strings.done}: ${dest.name}" else Strings.error, Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            onDelete = if (asset.id > 0L) { { deletingAsset = asset } } else null
+                            onDelete = if (canWrite && asset.id > 0L) { { deletingAsset = asset } } else null
                         )
                     }
                 }
@@ -245,19 +249,23 @@ private fun ReleaseCard(
                         Text("Publish", color = GitHubSuccessGreen, fontSize = 12.sp)
                     }
                 }
-                ReleaseActionButton(
-                    icon = Icons.Rounded.UploadFile,
-                    label = "Asset",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    enabled = !uploadingAsset && release.id > 0L,
-                    loading = uploadingAsset,
-                    onClick = { assetPicker.launch("*/*") }
-                )
+                if (canWrite) {
+                    ReleaseActionButton(
+                        icon = Icons.Rounded.UploadFile,
+                        label = "Asset",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        enabled = !uploadingAsset && release.id > 0L,
+                        loading = uploadingAsset,
+                        onClick = { assetPicker.launch("*/*") }
+                    )
+                }
                 if (release.htmlUrl.isNotBlank()) {
                     ReleaseActionButton(Icons.Rounded.OpenInNew, "Open", MaterialTheme.colorScheme.onSurfaceVariant) { openGitHubUrl(context, release.htmlUrl) }
                 }
-                ReleaseActionButton(Icons.Rounded.Edit, "Edit", MaterialTheme.colorScheme.onSurfaceVariant) { showEdit = true }
-                ReleaseActionButton(Icons.Rounded.Delete, "Delete", MaterialTheme.colorScheme.error) { showDelete = true }
+                if (canWrite) {
+                    ReleaseActionButton(Icons.Rounded.Edit, "Edit", MaterialTheme.colorScheme.onSurfaceVariant) { showEdit = true }
+                    ReleaseActionButton(Icons.Rounded.Delete, "Delete", MaterialTheme.colorScheme.error) { showDelete = true }
+                }
             }
         }
     }

@@ -113,6 +113,7 @@ import com.glassfiles.data.github.GHWorkflowRun
 import com.glassfiles.data.github.GHWorkflowRunReview
 import com.glassfiles.data.github.GHWorkflowPermissions
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.data.github.canWrite
 import com.glassfiles.data.github.KernelErrorCatalog
 import com.glassfiles.data.github.KernelErrorPatterns
 import com.glassfiles.ui.theme.Blue
@@ -301,6 +302,7 @@ internal fun ActionsTab(
         ActionsOverviewHeader(
             workflows = workflows,
             branches = branches,
+            canWrite = repo.canWrite(),
             selectedWorkflowId = selectedWorkflowId,
             onSelectWorkflow = { workflowId ->
                 selectedWorkflowId = workflowId
@@ -650,6 +652,7 @@ private fun ActionsRunsHistoryScreen(
                     ModernRunCard(
                         run = run,
                         nowMs = nowMs,
+                        canWrite = repo.canWrite(),
                         onRunClick = { onRunClick(run) },
                         onCancel = {
                             scope.launch {
@@ -688,6 +691,7 @@ private fun ActionsRunsHistoryScreen(
 private fun ActionsOverviewHeader(
     workflows: List<GHWorkflow>,
     branches: List<String>,
+    canWrite: Boolean = true,
     selectedWorkflowId: Long?,
     onSelectWorkflow: (Long?) -> Unit,
     activeCount: Int,
@@ -840,13 +844,15 @@ private fun ActionsOverviewHeader(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { onToggleWorkflowState(selectedWorkflow) }) {
-                        Text(
-                            if (selectedWorkflow.state == "active") "Disable" else "Enable",
-                            color = if (selectedWorkflow.state == "active") Red else Blue,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                    if (canWrite) {
+                        TextButton(onClick = { onToggleWorkflowState(selectedWorkflow) }) {
+                            Text(
+                                if (selectedWorkflow.state == "active") "Disable" else "Enable",
+                                color = if (selectedWorkflow.state == "active") Red else Blue,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
@@ -861,13 +867,15 @@ private fun ActionsOverviewHeader(
                         Chip(Icons.Rounded.Article, "Latest #${latestRun.runNumber}") { onOpenLatestRun() }
                     }
                 }
-                TextButton(onClick = onDispatch, enabled = !dispatching && workflows.isNotEmpty() && dispatchSchema != null && missingRequiredInputs.isEmpty()) {
-                    if (dispatching) {
-                        CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Rounded.PlayArrow, null, tint = Blue, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(Strings.ghRunWorkflow, color = Blue, fontWeight = FontWeight.Medium)
+                if (canWrite) {
+                    TextButton(onClick = onDispatch, enabled = !dispatching && workflows.isNotEmpty() && dispatchSchema != null && missingRequiredInputs.isEmpty()) {
+                        if (dispatching) {
+                            CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Rounded.PlayArrow, null, tint = Blue, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(Strings.ghRunWorkflow, color = Blue, fontWeight = FontWeight.Medium)
+                        }
                     }
                 }
             }
@@ -1564,6 +1572,7 @@ private fun dispatchInputPrefKey(repo: GHRepo, workflow: GHWorkflow, inputKey: S
 private fun ModernRunCard(
     run: GHWorkflowRun,
     nowMs: Long,
+    canWrite: Boolean = true,
     onRunClick: () -> Unit,
     onCancel: () -> Unit,
     onRerun: () -> Unit
@@ -1682,10 +1691,12 @@ private fun ModernRunCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (live) {
-                Chip(Icons.Rounded.Cancel, Strings.cancel, Red) { onCancel() }
-            } else {
-                Chip(Icons.Rounded.Refresh, Strings.ghRerun) { onRerun() }
+            if (canWrite) {
+                if (live) {
+                    Chip(Icons.Rounded.Cancel, Strings.cancel, Red) { onCancel() }
+                } else {
+                    Chip(Icons.Rounded.Refresh, Strings.ghRerun) { onRerun() }
+                }
             }
             Spacer(Modifier.weight(1f))
             Chip(Icons.Rounded.Article, "Open") { onRunClick() }

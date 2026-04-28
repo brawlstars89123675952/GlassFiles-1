@@ -4583,7 +4583,16 @@ object GitHubManager {
         owner = j.optJSONObject("owner")?.optString("login") ?: "",
         htmlUrl = j.optString("html_url", ""),
         isArchived = j.optBoolean("archived", false),
-        isTemplate = j.optBoolean("is_template", false)
+        isTemplate = j.optBoolean("is_template", false),
+        permissions = j.optJSONObject("permissions")?.let { p ->
+            GHPermissions(
+                admin = p.optBoolean("admin", false),
+                maintain = p.optBoolean("maintain", false),
+                push = p.optBoolean("push", false),
+                triage = p.optBoolean("triage", false),
+                pull = p.optBoolean("pull", false)
+            )
+        }
     )
 
     data class ApiResult(val success: Boolean, val body: String, val code: Int)
@@ -4623,7 +4632,27 @@ data class GHUser(val login: String, val name: String, val avatarUrl: String, va
 data class GHRepo(val name: String, val fullName: String, val description: String, val language: String,
     val stars: Int, val forks: Int, val isPrivate: Boolean, val isFork: Boolean, val defaultBranch: String,
     val updatedAt: String, val owner: String, val htmlUrl: String = "", val isArchived: Boolean = false,
-    val isTemplate: Boolean = false)
+    val isTemplate: Boolean = false,
+    val permissions: GHPermissions? = null)
+
+/**
+ * Mirror of the `permissions` object returned by the GitHub REST API for a repo.
+ * Only present on responses authenticated as a user; null for unauthenticated /
+ * search results / older endpoints.
+ */
+data class GHPermissions(
+    val admin: Boolean = false,
+    val maintain: Boolean = false,
+    val push: Boolean = false,
+    val triage: Boolean = false,
+    val pull: Boolean = false
+)
+
+/** True if the current user can push commits / edit content / run workflows. */
+fun GHRepo.canWrite(): Boolean = permissions?.let { it.push || it.maintain || it.admin } == true
+
+/** True if the current user has full admin rights (settings, webhooks, collaborators). */
+fun GHRepo.canAdmin(): Boolean = permissions?.admin == true
 
 data class GHActionResult(val success: Boolean, val code: Int, val message: String)
 
