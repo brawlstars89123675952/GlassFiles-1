@@ -284,6 +284,27 @@ object Strings {
     val aiSettingsClearCacheDone get() = s("Кэш очищен", "Cache cleared")
     val aiSettingsExpandCode get() = s("На весь экран", "Expand")
 
+    // AI · Agent
+    val aiAgent get() = s("AI агент", "AI Agent")
+    val aiAgentSubtitle get() = s("Агент с доступом к GitHub", "Agent with GitHub access")
+    val aiAgentSelectRepo get() = s("Выбери репозиторий", "Pick a repository")
+    val aiAgentSelectBranch get() = s("Ветка", "Branch")
+    val aiAgentSelectModel get() = s("Модель", "Model")
+    val aiAgentNoModels get() = s("Нет моделей. Добавь ключ OpenAI или Anthropic.", "No models. Add an OpenAI or Anthropic key.")
+    val aiAgentNoRepos get() = s("Войди в GitHub чтобы выбрать репо.", "Sign in to GitHub to pick a repo.")
+    val aiAgentInputHint get() = s("Опиши задачу для агента…", "Describe the task for the agent…")
+    val aiAgentAutoApprove get() = s("Авто-одобрение чтения", "Auto-approve reads")
+    val aiAgentAutoApproveHint get() = s("Read-only инструменты выполняются без подтверждения. Запись и коммиты всегда требуют одобрения.", "Read-only tools run without confirmation. Writes and commits always require approval.")
+    val aiAgentApprove get() = s("Одобрить", "Approve")
+    val aiAgentReject get() = s("Отклонить", "Reject")
+    val aiAgentRunning get() = s("Агент работает…", "Agent working…")
+    val aiAgentStop get() = s("Остановить", "Stop")
+    val aiAgentToolCallTitle get() = s("Вызов инструмента", "Tool call")
+    val aiAgentToolResultTitle get() = s("Результат", "Result")
+    val aiAgentToolError get() = s("Ошибка", "Error")
+    val aiAgentRejected get() = s("Отклонено пользователем.", "Rejected by user.")
+    val aiAgentEmptyChat get() = s("Опиши что нужно сделать в репозитории.", "Tell the agent what to do in the repo.")
+
     val about get() = s("О приложении", "About")
     val version get() = s("Версия", "Version")
 
