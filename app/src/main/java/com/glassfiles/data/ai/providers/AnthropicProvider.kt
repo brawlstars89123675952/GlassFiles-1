@@ -173,6 +173,112 @@ object AnthropicProvider : AiProvider {
         AiToolTurn(assistantText = text.toString(), toolCalls = calls)
     }
 
+    /**
+     * Streaming variant of [chatWithTools]. Sets `stream: true` on
+     * `/v1/messages` and walks the SSE event stream, dispatching
+     * `text_delta` events to [onTextDelta] in real time and accumulating
+     * `input_json_delta` events into per-block buffers. Buffers are
+     * finalised on `content_block_stop` and surfaced as fully-parsed
+     * [AiToolCall]s in the returned [AiToolTurn].
+     *
+     * Spec: https://docs.anthropic.com/en/docs/build-with-claude/streaming
+     */
+    override suspend fun chatWithToolsStreaming(
+        context: Context,
+        modelId: String,
+        messages: List<AiMessage>,
+        tools: List<AiTool>,
+        apiKey: String,
+        onTextDelta: (String) -> Unit,
+    ): AiToolTurn = withContext(Dispatchers.IO) {
+        val msgs = JSONArray()
+        messages.forEach { m -> msgs.put(toolMessageToJson(m)) }
+
+        val toolsJson = JSONArray()
+        tools.forEach { t ->
+            toolsJson.put(
+                JSONObject()
+                    .put("name", t.name)
+                    .put("description", t.description)
+                    .put("input_schema", t.parameters),
+            )
+        }
+
+        val body = JSONObject()
+            .put("model", modelId)
+            .put("messages", msgs)
+            .put("system", SystemPrompts.DEFAULT)
+            .put("max_tokens", 4096)
+            .put("tools", toolsJson)
+            .put("stream", true)
+            .toString()
+
+        val conn = Http.postJson("$BASE/messages", body, authHeaders(apiKey))
+        Http.ensureOk(conn, id.displayName)
+
+        val text = StringBuilder()
+        // Per-block scratch state: index → (kind, id, name, json buffer)
+        val toolBuffers = mutableMapOf<Int, ToolBuffer>()
+        val finishedCalls = mutableListOf<AiToolCall>()
+
+        Http.iterateSse(conn) { data ->
+            val event = runCatching { JSONObject(data) }.getOrNull() ?: return@iterateSse
+            when (event.optString("type")) {
+                "content_block_start" -> {
+                    val idx = event.optInt("index", -1)
+                    val block = event.optJSONObject("content_block") ?: return@iterateSse
+                    if (block.optString("type") == "tool_use") {
+                        toolBuffers[idx] = ToolBuffer(
+                            id = block.optString("id", "call_$idx"),
+                            name = block.optString("name", ""),
+                        )
+                    }
+                }
+                "content_block_delta" -> {
+                    val idx = event.optInt("index", -1)
+                    val delta = event.optJSONObject("delta") ?: return@iterateSse
+                    when (delta.optString("type")) {
+                        "text_delta" -> {
+                            val chunk = delta.optString("text", "")
+                            if (chunk.isNotEmpty()) {
+                                text.append(chunk)
+                                onTextDelta(chunk)
+                            }
+                        }
+                        "input_json_delta" -> {
+                            val partial = delta.optString("partial_json", "")
+                            toolBuffers[idx]?.argsJson?.append(partial)
+                        }
+                    }
+                }
+                "content_block_stop" -> {
+                    val idx = event.optInt("index", -1)
+                    toolBuffers.remove(idx)?.let { tb ->
+                        val argsString = tb.argsJson.toString().ifBlank { "{}" }
+                        finishedCalls += AiToolCall(
+                            id = tb.id,
+                            name = tb.name,
+                            argsJson = argsString,
+                        )
+                    }
+                }
+                // message_start / message_delta / message_stop / ping —
+                // no per-event work needed beyond what Http.iterateSse
+                // already filters.
+            }
+        }
+        conn.disconnect()
+
+        AiToolTurn(assistantText = text.toString(), toolCalls = finishedCalls)
+    }
+
+    /** Mutable scratch buffer used while a `tool_use` block streams in. */
+    private data class ToolBuffer(
+        val id: String,
+        val name: String,
+        val argsJson: StringBuilder = StringBuilder(),
+    )
+
     private fun toolMessageToJson(msg: AiMessage): JSONObject {
         // Anthropic only accepts user/assistant in `messages`; map "system" → "user".
         val role = when (msg.role) {

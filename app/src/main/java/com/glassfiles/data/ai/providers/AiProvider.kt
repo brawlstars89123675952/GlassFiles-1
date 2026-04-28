@@ -95,6 +95,32 @@ interface AiProvider {
         val text = chat(context, modelId, messages, apiKey) {}
         return AiToolTurn(assistantText = text, toolCalls = emptyList())
     }
+
+    /**
+     * Streaming variant of [chatWithTools]. As the provider streams the
+     * model's response, [onTextDelta] is fired for each free-text chunk,
+     * giving the UI a chance to render the assistant message live. Tool
+     * calls are only delivered as a complete batch in the returned
+     * [AiToolTurn]: providers that emit them as partial JSON deltas (e.g.
+     * Anthropic, OpenAI compat) accumulate the partials internally so the
+     * caller always receives a fully-parsed [AiToolCall] list.
+     *
+     * Default implementation falls back to non-streaming [chatWithTools]
+     * and emits the entire assistant text in a single delta. Streaming
+     * providers should override.
+     */
+    suspend fun chatWithToolsStreaming(
+        context: Context,
+        modelId: String,
+        messages: List<AiMessage>,
+        tools: List<AiTool>,
+        apiKey: String,
+        onTextDelta: (String) -> Unit,
+    ): AiToolTurn {
+        val turn = chatWithTools(context, modelId, messages, tools, apiKey)
+        if (turn.assistantText.isNotEmpty()) onTextDelta(turn.assistantText)
+        return turn
+    }
 }
 
 /** One non-streaming agent turn: free text + zero-or-more tool calls. */

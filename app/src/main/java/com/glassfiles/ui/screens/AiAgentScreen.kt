@@ -1344,15 +1344,49 @@ private suspend fun runAgentLoop(
 ) {
     var messages = seedMessages
     repeat(MAX_ITERATIONS) {
-        val turn = provider.chatWithTools(
-            context = context,
-            modelId = modelId,
-            messages = messages,
-            tools = AgentTools.ALL,
-            apiKey = apiKey,
-        )
-        if (turn.assistantText.isNotBlank()) {
-            transcript += AgentEntry.Assistant(turn.assistantText)
+        // Insert a streaming Assistant placeholder so text deltas land in
+        // the UI as they arrive. The placeholder has a stable id, so
+        // LazyList keeps its position in the list across replacements.
+        val streamingEntry = AgentEntry.Assistant(text = "")
+        transcript += streamingEntry
+        val streamingIndex = transcript.lastIndex
+
+        val turn = try {
+            provider.chatWithToolsStreaming(
+                context = context,
+                modelId = modelId,
+                messages = messages,
+                tools = AgentTools.ALL,
+                apiKey = apiKey,
+                onTextDelta = { delta ->
+                    if (streamingIndex in transcript.indices) {
+                        val current = transcript[streamingIndex] as? AgentEntry.Assistant
+                        if (current != null) {
+                            transcript[streamingIndex] = current.copy(text = current.text + delta)
+                        }
+                    }
+                },
+            )
+        } catch (e: Exception) {
+            // Drop the empty placeholder before rethrowing so the run-job
+            // catch block doesn't have to deal with it.
+            if (streamingIndex in transcript.indices) {
+                val current = transcript[streamingIndex]
+                if (current is AgentEntry.Assistant && current.text.isEmpty()) {
+                    transcript.removeAt(streamingIndex)
+                }
+            }
+            throw e
+        }
+
+        // If the model produced no text at all, drop the placeholder so
+        // we don't leave an empty assistant card sitting between tool
+        // call cards.
+        if (turn.assistantText.isBlank() && streamingIndex in transcript.indices) {
+            val current = transcript[streamingIndex]
+            if (current is AgentEntry.Assistant && current.text.isEmpty()) {
+                transcript.removeAt(streamingIndex)
+            }
         }
         if (turn.toolCalls.isEmpty()) return
 
@@ -1471,7 +1505,7 @@ private fun List<AiChatSessionStore.Message>.toAgentEntries(): List<AgentEntry> 
 
 private fun AgentEntry.stableKey(): String = when (this) {
     is AgentEntry.User -> "u:${text.hashCode()}:${imageBase64?.hashCode() ?: 0}:${System.identityHashCode(this)}"
-    is AgentEntry.Assistant -> "a:${text.hashCode()}:${System.identityHashCode(this)}"
+    is AgentEntry.Assistant -> "a:$id"
     is AgentEntry.ToolCall -> "tc:${call.id}"
     is AgentEntry.ToolResult -> "tr:${result.callId}"
     is AgentEntry.Pending -> "pending:${pending.call.id}"
@@ -1479,11 +1513,15 @@ private fun AgentEntry.stableKey(): String = when (this) {
 
 private sealed class AgentEntry {
     data class User(val text: String, val imageBase64: String? = null) : AgentEntry()
-    data class Assistant(val text: String) : AgentEntry()
+    /** [id] keeps the LazyList key stable across streaming text updates;
+     * each replacement keeps the same id via `copy(text = ...)`. */
+    data class Assistant(val text: String, val id: String = newAssistantId()) : AgentEntry()
     data class ToolCall(val call: AiToolCall) : AgentEntry()
     data class ToolResult(val result: AiToolResult) : AgentEntry()
     data class Pending(val pending: PendingApproval) : AgentEntry()
 }
+
+private fun newAssistantId(): String = "a_${System.nanoTime()}"
 
 private data class PendingApproval(
     val call: AiToolCall,

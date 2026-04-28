@@ -200,6 +200,108 @@ abstract class OpenAiCompatProvider(
     }
 
     /**
+     * Streaming variant of [chatWithTools]. Sets `stream: true` and walks
+     * the SSE deltas, forwarding `delta.content` chunks to [onTextDelta]
+     * and accumulating `delta.tool_calls[*].function.{name, arguments}`
+     * fragments into per-index buffers. The final `AiToolCall` list is
+     * returned in the [AiToolTurn].
+     *
+     * Spec: https://platform.openai.com/docs/guides/function-calling#streaming
+     */
+    override suspend fun chatWithToolsStreaming(
+        context: Context,
+        modelId: String,
+        messages: List<AiMessage>,
+        tools: List<AiTool>,
+        apiKey: String,
+        onTextDelta: (String) -> Unit,
+    ): AiToolTurn = withContext(Dispatchers.IO) {
+        val msgs = JSONArray()
+        if (systemPrompt.isNotBlank()) {
+            msgs.put(JSONObject().put("role", "system").put("content", systemPrompt))
+        }
+        messages.forEach { m -> msgs.put(toolMessageToJson(m)) }
+
+        val toolsJson = JSONArray()
+        tools.forEach { t ->
+            toolsJson.put(
+                JSONObject()
+                    .put("type", "function")
+                    .put(
+                        "function",
+                        JSONObject()
+                            .put("name", t.name)
+                            .put("description", t.description)
+                            .put("parameters", t.parameters),
+                    ),
+            )
+        }
+
+        val body = JSONObject()
+            .put("model", modelId)
+            .put("messages", msgs)
+            .put("tools", toolsJson)
+            .put("tool_choice", "auto")
+            .put("stream", true)
+            .toString()
+
+        val conn = Http.postJson(
+            "${baseUrl(context)}/chat/completions",
+            body,
+            mapOf("Authorization" to "Bearer $apiKey") + extraHeaders(context),
+        )
+        Http.ensureOk(conn, id.displayName)
+
+        val text = StringBuilder()
+        val toolBuffers = sortedMapOf<Int, ToolBuffer>()
+
+        Http.iterateSse(conn) { data ->
+            val choices = runCatching { JSONObject(data).optJSONArray("choices") }.getOrNull()
+                ?: return@iterateSse
+            if (choices.length() == 0) return@iterateSse
+            val delta = choices.optJSONObject(0)?.optJSONObject("delta") ?: return@iterateSse
+
+            val content = delta.optString("content", "")
+            if (content.isNotEmpty()) {
+                text.append(content)
+                onTextDelta(content)
+            }
+
+            val tcArr = delta.optJSONArray("tool_calls") ?: return@iterateSse
+            for (i in 0 until tcArr.length()) {
+                val tc = tcArr.optJSONObject(i) ?: continue
+                val idx = tc.optInt("index", i)
+                val buf = toolBuffers.getOrPut(idx) { ToolBuffer() }
+                tc.optString("id", "").takeIf { it.isNotEmpty() }?.let { buf.id = it }
+                val fn = tc.optJSONObject("function")
+                if (fn != null) {
+                    fn.optString("name", "").takeIf { it.isNotEmpty() }?.let { buf.name = it }
+                    val argsFragment = fn.optString("arguments", "")
+                    if (argsFragment.isNotEmpty()) buf.argsJson.append(argsFragment)
+                }
+            }
+        }
+        conn.disconnect()
+
+        val calls = toolBuffers.values.mapIndexed { i, buf ->
+            AiToolCall(
+                id = buf.id ?: "call_$i",
+                name = buf.name.orEmpty(),
+                argsJson = buf.argsJson.toString().ifBlank { "{}" },
+            )
+        }
+        AiToolTurn(assistantText = text.toString(), toolCalls = calls)
+    }
+
+    /** Mutable scratch buffer used while OpenAI streams a tool call's
+     * `function.name` and `function.arguments` across multiple deltas. */
+    private data class ToolBuffer(
+        var id: String? = null,
+        var name: String? = null,
+        val argsJson: StringBuilder = StringBuilder(),
+    )
+
+    /**
      * Serialises an [AiMessage] for the function-calling endpoint. Tool-result
      * messages get a `tool_call_id`; assistant turns that emitted tool calls
      * carry them back as `tool_calls` for context continuity.
