@@ -3,6 +3,13 @@ package com.glassfiles.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.util.Base64
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,8 +20,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,13 +37,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
@@ -50,7 +63,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +79,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
 import com.glassfiles.data.ai.AiKeyStore
+import com.glassfiles.data.ai.ChatHistoryStore
 import com.glassfiles.data.ai.ModelRegistry
 import com.glassfiles.data.ai.SystemPrompts
 import com.glassfiles.data.ai.models.AiCapability
@@ -68,15 +87,28 @@ import com.glassfiles.data.ai.models.AiMessage
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import com.glassfiles.data.ai.providers.AiProviders
+import com.glassfiles.ui.components.AiPickerSheet
+import com.glassfiles.ui.components.CodeColors
+import com.glassfiles.ui.components.highlightCode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+
+private const val HISTORY_MODE = "coding"
 
 /**
  * Coding-focused chat. Distinct from [AiChatScreen]:
  *  - Only models classified as [AiCapability.CODING] are picker-eligible.
  *  - The assistant runs with [SystemPrompts.CODING] regardless of provider.
- *  - The transcript renders code fences as monospace cards with a "Copy" action.
+ *  - The transcript renders code fences as monospace cards with syntax
+ *    highlighting and a "Copy" action.
+ *  - Conversation persists across navigation via [ChatHistoryStore].
+ *  - User can attach a screenshot when reporting a bug.
+ *  - Right-aligned user bubbles, left-aligned assistant bubbles.
+ *  - Input bar rises with the keyboard via `Modifier.imePadding()`.
  */
 @Composable
 fun AiCodingScreen(onBack: () -> Unit) {
@@ -93,10 +125,28 @@ fun AiCodingScreen(onBack: () -> Unit) {
 
     val transcript = remember { mutableStateListOf<CodingMessage>() }
     var draft by remember { mutableStateOf(TextFieldValue("")) }
+    var pendingImage by remember { mutableStateOf<String?>(null) }
     var streaming by remember { mutableStateOf(false) }
     var streamJob by remember { mutableStateOf<Job?>(null) }
 
     val listState = rememberLazyListState()
+
+    // Hydrate transcript from persistent storage on first composition.
+    LaunchedEffect(Unit) {
+        val saved = ChatHistoryStore.load(context, HISTORY_MODE)
+        if (saved.isNotEmpty()) {
+            transcript.addAll(
+                saved.map {
+                    CodingMessage(
+                        role = it.role,
+                        content = it.content,
+                        imageBase64 = it.imageBase64,
+                        isError = it.isError,
+                    )
+                },
+            )
+        }
+    }
 
     // Refresh model list when provider changes.
     LaunchedEffect(provider) {
@@ -113,7 +163,6 @@ fun AiCodingScreen(onBack: () -> Unit) {
             )
             val coding = all.filter { AiCapability.CODING in it.capabilities }
             codingModels.addAll(coding)
-            // Persisted modelId may belong to a different provider; reset if so.
             val saved = loadSavedModel(context)
             modelId = when {
                 saved != null && coding.any { it.id == saved } -> saved
@@ -139,41 +188,62 @@ fun AiCodingScreen(onBack: () -> Unit) {
         }
     }
 
-    fun send() {
+    fun persist() {
+        ChatHistoryStore.save(
+            context = context,
+            mode = HISTORY_MODE,
+            entries = transcript.map {
+                ChatHistoryStore.Entry(
+                    role = it.role,
+                    content = it.content,
+                    imageBase64 = it.imageBase64,
+                    isError = it.isError,
+                )
+            },
+        )
+    }
+
+    val photoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                pendingImage = withContext(Dispatchers.IO) {
+                    encodeImage(context, uri)
+                }
+            }
+        }
+    }
+
+    val currentModel = codingModels.firstOrNull { it.id == modelId }
+    val visionAvailable = currentModel?.let { AiCapability.VISION in it.capabilities } == true
+
+    fun sendInternal(messages: List<AiMessage>) {
         val p = provider ?: return
         val mid = modelId.takeIf { it.isNotBlank() } ?: return
-        val text = draft.text.trim()
-        if (text.isBlank() || streaming) return
         val key = AiKeyStore.getKey(context, p)
         if (key.isBlank()) {
             transcript += CodingMessage("assistant", Strings.aiCodingNeedKey, isError = true)
+            persist()
             return
         }
-        transcript += CodingMessage("user", text)
         transcript += CodingMessage("assistant", "")
-        draft = TextFieldValue("")
+        persist()
         streaming = true
 
         streamJob = scope.launch {
             try {
-                val msgs = buildList {
-                    add(AiMessage("system", SystemPrompts.CODING))
-                    addAll(
-                        transcript
-                            .filter { !it.isError && (it.role == "user" || it.role == "assistant") }
-                            .dropLast(1) // drop the empty placeholder we just appended
-                            .map { AiMessage(it.role, it.content) },
-                    )
-                }
                 val full = AiProviders.get(p).chat(
                     context = context,
                     modelId = mid,
-                    messages = msgs,
+                    messages = messages,
                     apiKey = key,
                     onChunk = { chunk ->
                         val last = transcript.lastIndex
                         if (last >= 0) {
-                            transcript[last] = transcript[last].copy(content = transcript[last].content + chunk)
+                            transcript[last] = transcript[last].copy(
+                                content = transcript[last].content + chunk,
+                            )
                         }
                     },
                 )
@@ -181,6 +251,7 @@ fun AiCodingScreen(onBack: () -> Unit) {
                 if (last >= 0 && transcript[last].content.isBlank()) {
                     transcript[last] = transcript[last].copy(content = full)
                 }
+                persist()
             } catch (e: Exception) {
                 val last = transcript.lastIndex
                 val err = "${e.javaClass.simpleName}: ${e.message ?: ""}"
@@ -189,11 +260,35 @@ fun AiCodingScreen(onBack: () -> Unit) {
                 } else {
                     transcript += CodingMessage("assistant", err, isError = true)
                 }
+                persist()
             } finally {
                 streaming = false
                 streamJob = null
             }
         }
+    }
+
+    fun send() {
+        provider ?: return
+        modelId.takeIf { it.isNotBlank() } ?: return
+        val text = draft.text.trim()
+        if ((text.isBlank() && pendingImage == null) || streaming) return
+
+        val image = pendingImage?.takeIf { visionAvailable }
+        transcript += CodingMessage("user", text, imageBase64 = image)
+        draft = TextFieldValue("")
+        pendingImage = null
+        persist()
+
+        val msgs = buildList {
+            add(AiMessage("system", SystemPrompts.CODING))
+            addAll(
+                transcript
+                    .filter { !it.isError && (it.role == "user" || it.role == "assistant") }
+                    .map { AiMessage(it.role, it.content, imageBase64 = it.imageBase64) },
+            )
+        }
+        sendInternal(msgs)
     }
 
     fun stop() {
@@ -202,24 +297,68 @@ fun AiCodingScreen(onBack: () -> Unit) {
         streaming = false
     }
 
-    Column(Modifier.fillMaxSize().background(colors.surface)) {
+    fun regenerate() {
+        if (streaming || transcript.isEmpty()) return
+        // Drop the trailing assistant turn (if any) and re-run with the same user input.
+        if (transcript.last().role == "assistant") transcript.removeAt(transcript.lastIndex)
+        if (transcript.isEmpty() || transcript.last().role != "user") return
+        persist()
+        val msgs = buildList {
+            add(AiMessage("system", SystemPrompts.CODING))
+            addAll(
+                transcript
+                    .filter { !it.isError && (it.role == "user" || it.role == "assistant") }
+                    .map { AiMessage(it.role, it.content, imageBase64 = it.imageBase64) },
+            )
+        }
+        sendInternal(msgs)
+    }
+
+    fun clearAll() {
+        transcript.clear()
+        ChatHistoryStore.clear(context, HISTORY_MODE)
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(colors.surface)
+            .statusBarsPadding(),
+    ) {
         // ── Top bar ─────────────────────────────────────────────────────
         Row(
-            Modifier.fillMaxWidth().padding(top = 44.dp, start = 4.dp, end = 8.dp, bottom = 8.dp),
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = colors.onSurface)
             }
-            Text(
-                Strings.aiCoding,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.onSurface,
-                modifier = Modifier.weight(1f),
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    Strings.aiCoding.uppercase(),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    color = colors.onSurface,
+                    fontFamily = FontFamily.Monospace,
+                )
+                Text(
+                    Strings.aiCodingHint,
+                    fontSize = 10.sp,
+                    color = colors.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
             if (transcript.isNotEmpty()) {
-                IconButton(onClick = { transcript.clear() }) {
+                IconButton(onClick = ::regenerate, enabled = !streaming) {
+                    Icon(
+                        Icons.Rounded.Refresh,
+                        null,
+                        Modifier.size(20.dp),
+                        tint = if (streaming) colors.onSurfaceVariant.copy(alpha = 0.4f) else colors.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = ::clearAll) {
                     Icon(
                         Icons.Rounded.DeleteSweep,
                         null,
@@ -229,6 +368,9 @@ fun AiCodingScreen(onBack: () -> Unit) {
                 }
             }
         }
+
+        // 1px hairline divider — replaces the visual weight of a card border.
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.12f)))
 
         // ── Model picker bar ────────────────────────────────────────────
         ModelPickerBar(
@@ -247,6 +389,8 @@ fun AiCodingScreen(onBack: () -> Unit) {
             loadingModels = loadingModels,
             modelLoadError = modelLoadError,
         )
+
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.12f)))
 
         // ── Transcript ──────────────────────────────────────────────────
         if (transcript.isEmpty()) {
@@ -285,14 +429,26 @@ fun AiCodingScreen(onBack: () -> Unit) {
             }
         }
 
+        // ── Pending attachment preview ──────────────────────────────────
+        if (pendingImage != null) {
+            AttachmentPreview(
+                base64 = pendingImage!!,
+                visionAvailable = visionAvailable,
+                onRemove = { pendingImage = null },
+            )
+        }
+
         // ── Input bar ───────────────────────────────────────────────────
         InputBar(
             value = draft,
             onValueChange = { draft = it },
             enabled = provider != null && modelId.isNotBlank(),
             streaming = streaming,
+            hasAttachment = pendingImage != null,
             onSend = ::send,
             onStop = ::stop,
+            onPickImage = { photoPicker.launch("image/*") },
+            modifier = Modifier.imePadding().navigationBarsPadding(),
         )
     }
 }
@@ -328,16 +484,18 @@ private fun ModelPickerBar(
     }
 
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         PickerChip(
             label = Strings.aiCodingPickProvider,
             value = provider?.displayName ?: "—",
-            onSelect = { onProviderChange(it) },
+            title = Strings.aiCodingPickProvider,
             options = configured,
             optionLabel = { it.displayName },
+            selected = provider,
+            onSelect = { onProviderChange(it) },
             modifier = Modifier.weight(1f),
         )
         PickerChip(
@@ -349,9 +507,17 @@ private fun ModelPickerBar(
                 codingModels.isEmpty() -> Strings.aiCodingNoCoding
                 else -> "—"
             },
-            onSelect = { onModelChange(it.id) },
+            title = Strings.aiCodingPickModel,
             options = codingModels,
             optionLabel = { it.displayName },
+            optionSubtitle = { m ->
+                val caps = m.capabilities
+                    .filter { it != AiCapability.CODING }
+                    .joinToString(" · ") { it.name.lowercase() }
+                if (caps.isBlank()) m.id else "$caps · ${m.id}"
+            },
+            selected = codingModels.firstOrNull { it.id == modelId },
+            onSelect = { onModelChange(it.id) },
             modifier = Modifier.weight(1.5f),
         )
     }
@@ -361,61 +527,61 @@ private fun ModelPickerBar(
 private fun <T> PickerChip(
     label: String,
     value: String,
-    onSelect: (T) -> Unit,
+    title: String,
     options: List<T>,
     optionLabel: (T) -> String,
+    optionSubtitle: (T) -> String? = { null },
+    selected: T?,
+    onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    var expanded by remember { mutableStateOf(false) }
+    var open by remember { mutableStateOf(false) }
 
-    Box(modifier) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(colors.surfaceVariant.copy(alpha = 0.5f))
-                .clickable(enabled = options.isNotEmpty()) { expanded = true }
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    label.uppercase(),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.6.sp,
-                    color = colors.onSurfaceVariant,
-                )
-                Text(
-                    value,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.onSurface,
-                    maxLines = 1,
-                )
-            }
-            Icon(
-                Icons.Rounded.ExpandMore,
-                null,
-                Modifier.size(16.dp),
-                tint = colors.onSurfaceVariant,
+    Row(
+        modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.surfaceVariant.copy(alpha = 0.5f))
+            .clickable(enabled = options.isNotEmpty()) { open = true }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                label.uppercase(),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.6.sp,
+                color = colors.onSurfaceVariant,
+                fontFamily = FontFamily.Monospace,
+            )
+            Text(
+                value,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.onSurface,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
             )
         }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(optionLabel(option), fontSize = 13.sp, color = colors.onSurface) },
-                    onClick = {
-                        onSelect(option)
-                        expanded = false
-                    },
-                )
-            }
-        }
+        Icon(
+            Icons.Rounded.ExpandMore,
+            null,
+            Modifier.size(16.dp),
+            tint = colors.onSurfaceVariant,
+        )
+    }
+
+    if (open) {
+        AiPickerSheet(
+            title = title,
+            options = options,
+            optionLabel = optionLabel,
+            optionSubtitle = optionSubtitle,
+            selected = selected,
+            onDismiss = { open = false },
+            onSelect = onSelect,
+        )
     }
 }
 
@@ -426,6 +592,7 @@ private fun <T> PickerChip(
 private data class CodingMessage(
     val role: String,
     val content: String,
+    val imageBase64: String? = null,
     val isError: Boolean = false,
 )
 
@@ -443,82 +610,54 @@ private fun CodingMessageRow(message: CodingMessage, context: Context) {
         else -> colors.onSurface
     }
 
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(
-                start = if (isUser) 32.dp else 0.dp,
-                end = if (isUser) 0.dp else 32.dp,
-            ),
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
     ) {
         Column(
-            Modifier
+            modifier = Modifier
+                .padding(
+                    start = if (isUser) 32.dp else 0.dp,
+                    end = if (isUser) 0.dp else 32.dp,
+                )
                 .clip(RoundedCornerShape(12.dp))
                 .background(container)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            renderMessageBody(message.content, onContainer, context)
+            if (message.imageBase64 != null) {
+                MessageImage(message.imageBase64)
+            }
+            if (message.content.isNotBlank()) {
+                renderMessageBody(message.content, onContainer, context)
+            }
         }
     }
 }
 
 @Composable
-private fun renderMessageBody(content: String, textColor: androidx.compose.ui.graphics.Color, context: Context) {
+private fun MessageImage(base64: String) {
     val colors = MaterialTheme.colorScheme
-    val parts = splitOnFences(content)
-    parts.forEach { part ->
+    val bitmap = remember(base64) { decodeBitmap(base64) }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 200.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(colors.surface),
+        )
+    }
+}
+
+@Composable
+private fun renderMessageBody(content: String, textColor: Color, context: Context) {
+    splitOnFences(content).forEach { part ->
         if (part.isFence) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(colors.surface)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        part.lang.ifBlank { "code" }.uppercase(),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.6.sp,
-                        color = colors.onSurfaceVariant,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Row(
-                        Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable {
-                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                cm.setPrimaryClip(ClipData.newPlainText("code", part.text))
-                            }
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Rounded.ContentCopy,
-                            null,
-                            Modifier.size(12.dp),
-                            tint = colors.primary,
-                        )
-                        Spacer(Modifier.size(4.dp))
-                        Text(
-                            Strings.aiCodingCopy,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = colors.primary,
-                        )
-                    }
-                }
-                Text(
-                    part.text,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = colors.onSurface,
-                )
-            }
+            CodeFence(text = part.text, lang = part.lang, context = context)
         } else if (part.text.isNotBlank()) {
             Text(
                 part.text,
@@ -526,6 +665,76 @@ private fun renderMessageBody(content: String, textColor: androidx.compose.ui.gr
                 color = textColor,
             )
         }
+    }
+}
+
+@Composable
+private fun CodeFence(text: String, lang: String, context: Context) {
+    val colors = MaterialTheme.colorScheme
+    val codeColors = remember(colors) {
+        CodeColors(
+            plain = colors.onSurface,
+            keyword = colors.primary,
+            string = colors.tertiary,
+            number = colors.tertiary,
+            comment = colors.onSurfaceVariant,
+            annotation = colors.primary,
+        )
+    }
+    val highlighted: AnnotatedString = remember(text, lang, codeColors) {
+        highlightCode(text, lang, codeColors)
+    }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(colors.surface)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                lang.ifBlank { "code" }.uppercase(),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.6.sp,
+                color = colors.onSurfaceVariant,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.weight(1f),
+            )
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("code", text))
+                    }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.ContentCopy,
+                    null,
+                    Modifier.size(12.dp),
+                    tint = colors.primary,
+                )
+                Spacer(Modifier.size(4.dp))
+                Text(
+                    Strings.aiCodingCopy,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.primary,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+        }
+        Text(
+            text = highlighted,
+            fontSize = 12.sp,
+            fontFamily = FontFamily.Monospace,
+            color = colors.onSurface,
+        )
     }
 }
 
@@ -553,6 +762,61 @@ private fun splitOnFences(text: String): List<MsgPart> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Attachment preview (above the input bar)
+// ─────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun AttachmentPreview(base64: String, visionAvailable: Boolean, onRemove: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val bitmap = remember(base64) { decodeBitmap(base64) }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.surfaceVariant.copy(alpha = 0.5f))
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(6.dp)),
+            )
+        }
+        Spacer(Modifier.size(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                Strings.aiCodingAttachImage,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.onSurface,
+                fontFamily = FontFamily.Monospace,
+            )
+            Text(
+                if (visionAvailable) Strings.aiCodingScreenshotHint else Strings.aiCodingNoVision,
+                fontSize = 10.sp,
+                color = if (visionAvailable) colors.onSurfaceVariant else colors.error,
+                maxLines = 2,
+            )
+        }
+        IconButton(onClick = onRemove) {
+            Icon(
+                Icons.Rounded.Close,
+                null,
+                Modifier.size(18.dp),
+                tint = colors.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Input bar
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -562,68 +826,112 @@ private fun InputBar(
     onValueChange: (TextFieldValue) -> Unit,
     enabled: Boolean,
     streaming: Boolean,
+    hasAttachment: Boolean,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    onPickImage: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(colors.surface)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(20.dp))
-                .background(colors.surfaceVariant.copy(alpha = 0.5f))
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+    Column(modifier.fillMaxWidth().background(colors.surface)) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.12f)))
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                enabled = enabled,
-                modifier = Modifier.fillMaxWidth().widthIn(min = 0.dp),
-                textStyle = LocalTextStyle.current.merge(
-                    TextStyle(
-                        color = colors.onSurface,
-                        fontSize = 14.sp,
-                        fontFamily = FontFamily.Monospace,
-                    ),
-                ),
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.primary),
-                decorationBox = { inner ->
-                    if (value.text.isEmpty()) {
-                        Text(
-                            Strings.aiCodingPlaceholder,
+            IconButton(
+                onClick = onPickImage,
+                enabled = enabled && !streaming,
+            ) {
+                Icon(
+                    Icons.Rounded.AddPhotoAlternate,
+                    null,
+                    Modifier.size(22.dp),
+                    tint = if (enabled && !streaming) colors.onSurfaceVariant else colors.onSurfaceVariant.copy(alpha = 0.4f),
+                )
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.surfaceVariant.copy(alpha = 0.5f))
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+            ) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth().widthIn(min = 0.dp),
+                    textStyle = LocalTextStyle.current.merge(
+                        TextStyle(
+                            color = colors.onSurface,
                             fontSize = 14.sp,
-                            color = colors.onSurfaceVariant,
                             fontFamily = FontFamily.Monospace,
-                        )
-                    }
-                    inner()
-                },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Text,
-                    imeAction = ImeAction.Default,
-                ),
-            )
-        }
-        Spacer(Modifier.size(8.dp))
-        IconButton(
-            onClick = if (streaming) onStop else onSend,
-            enabled = streaming || (enabled && value.text.isNotBlank()),
-        ) {
-            Icon(
-                if (streaming) Icons.Rounded.Stop else Icons.AutoMirrored.Rounded.Send,
-                null,
-                Modifier.size(20.dp),
-                tint = if (streaming) colors.error else colors.primary,
-            )
+                        ),
+                    ),
+                    cursorBrush = SolidColor(colors.primary),
+                    decorationBox = { inner ->
+                        if (value.text.isEmpty()) {
+                            Text(
+                                Strings.aiCodingPlaceholder,
+                                fontSize = 14.sp,
+                                color = colors.onSurfaceVariant,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                        }
+                        inner()
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Default,
+                    ),
+                )
+            }
+            Spacer(Modifier.size(4.dp))
+            IconButton(
+                onClick = if (streaming) onStop else onSend,
+                enabled = streaming || (enabled && (value.text.isNotBlank() || hasAttachment)),
+            ) {
+                Icon(
+                    if (streaming) Icons.Rounded.Stop else Icons.AutoMirrored.Rounded.Send,
+                    null,
+                    Modifier.size(22.dp),
+                    tint = if (streaming) colors.error else colors.primary,
+                )
+            }
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Image helpers
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Read a content URI, downscale to ~1024px on the long edge and JPEG-encode
+ * to base64 so it fits comfortably in a chat payload (vision providers cap
+ * at ~5 MB; ~80% JPEG quality at 1024px is well under that).
+ */
+private fun encodeImage(context: Context, uri: Uri): String? {
+    return runCatching {
+        val source = context.contentResolver.openInputStream(uri)?.use { input ->
+            BitmapFactory.decodeStream(input)
+        } ?: return@runCatching null
+        val maxEdge = 1024
+        val scale = (maxEdge.toFloat() / maxOf(source.width, source.height)).coerceAtMost(1f)
+        val w = (source.width * scale).toInt().coerceAtLeast(1)
+        val h = (source.height * scale).toInt().coerceAtLeast(1)
+        val scaled = if (scale < 1f) Bitmap.createScaledBitmap(source, w, h, true) else source
+        val baos = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+        Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+    }.getOrNull()
+}
+
+private fun decodeBitmap(base64: String): Bitmap? = runCatching {
+    val bytes = Base64.decode(base64, Base64.DEFAULT)
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+}.getOrNull()
 
 // ─────────────────────────────────────────────────────────────────────────
 // Selection persistence
