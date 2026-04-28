@@ -1,10 +1,17 @@
 package com.glassfiles.ui.screens
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.util.Base64
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,18 +28,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -53,14 +65,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
+import com.glassfiles.data.ai.AiChatSessionStore
 import com.glassfiles.data.ai.AiKeyStore
 import com.glassfiles.data.ai.ModelRegistry
 import com.glassfiles.data.ai.agent.AgentTools
@@ -76,8 +92,14 @@ import com.glassfiles.data.github.GHRepo
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.components.AiPickerChip
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * AI agent over GitHub.
@@ -111,8 +133,16 @@ fun AiAgentScreen(onBack: () -> Unit) {
     val models = remember { mutableStateListOf<AiModel>() }
     var selectedModel by remember { mutableStateOf<AiModel?>(null) }
 
+    var sessions by remember { mutableStateOf(AiChatSessionStore.list(context, AGENT_SESSION_MODE)) }
+    var activeSessionId by remember { mutableStateOf(sessions.firstOrNull()?.id ?: newAgentSessionId()) }
+    var sessionCreatedAt by remember {
+        mutableStateOf(sessions.firstOrNull { it.id == activeSessionId }?.createdAt ?: System.currentTimeMillis())
+    }
+    var showHistory by remember { mutableStateOf(false) }
+
     val transcript = remember { mutableStateListOf<AgentEntry>() }
     var input by remember { mutableStateOf("") }
+    var pendingImage by remember { mutableStateOf<String?>(null) }
     var autoApproveReads by remember { mutableStateOf(true) }
     var running by remember { mutableStateOf(false) }
     var runJob by remember { mutableStateOf<Job?>(null) }
@@ -141,6 +171,21 @@ fun AiAgentScreen(onBack: () -> Unit) {
         if (selectedModel == null) selectedModel = preferToolUseModel(models)
     }
 
+    // Restore the most recent agent conversation when the screen opens.
+    LaunchedEffect(Unit) {
+        sessions.firstOrNull { it.id == activeSessionId }?.let { session ->
+            sessionCreatedAt = session.createdAt
+            transcript.clear()
+            transcript.addAll(session.messages.mapNotNull { message ->
+                when (message.role) {
+                    "user" -> AgentEntry.User(message.content, message.imageBase64)
+                    "assistant" -> AgentEntry.Assistant(message.content)
+                    else -> null
+                }
+            })
+        }
+    }
+
     LaunchedEffect(selectedRepo) {
         branches.clear()
         selectedBranch = null
@@ -157,6 +202,91 @@ fun AiAgentScreen(onBack: () -> Unit) {
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────
+    fun refreshSessions() {
+        sessions = AiChatSessionStore.list(context, AGENT_SESSION_MODE)
+    }
+
+    fun transcriptMessages(): List<AiChatSessionStore.Message> = transcript.mapNotNull { entry ->
+        when (entry) {
+            is AgentEntry.User -> AiChatSessionStore.Message(
+                role = "user",
+                content = entry.text,
+                imageBase64 = entry.imageBase64,
+            )
+            is AgentEntry.Assistant -> if (entry.text.isBlank()) null else AiChatSessionStore.Message(
+                role = "assistant",
+                content = entry.text,
+            )
+            is AgentEntry.ToolCall, is AgentEntry.ToolResult, is AgentEntry.Pending -> null
+        }
+    }
+
+    fun persistSession() {
+        val id = activeSessionId
+        val messages = transcriptMessages()
+        if (messages.isEmpty()) return
+        AiChatSessionStore.upsert(
+            context = context,
+            session = AiChatSessionStore.Session(
+                id = id,
+                mode = AGENT_SESSION_MODE,
+                title = AiChatSessionStore.deriveTitle(messages),
+                providerId = selectedModel?.providerId?.name.orEmpty(),
+                modelId = selectedModel?.id.orEmpty(),
+                messages = messages,
+                createdAt = sessionCreatedAt,
+                updatedAt = System.currentTimeMillis(),
+            ),
+        )
+        refreshSessions()
+    }
+
+    fun openSession(session: AiChatSessionStore.Session) {
+        stopActiveAgent(runJob, approvals)
+        runJob = null
+        running = false
+        error = null
+        input = ""
+        pendingImage = null
+        activeSessionId = session.id
+        sessionCreatedAt = session.createdAt
+        transcript.clear()
+        transcript.addAll(session.messages.mapNotNull { message ->
+            when (message.role) {
+                "user" -> AgentEntry.User(message.content, message.imageBase64)
+                "assistant" -> AgentEntry.Assistant(message.content)
+                else -> null
+            }
+        })
+        showHistory = false
+    }
+
+    fun startNewSession() {
+        stopActiveAgent(runJob, approvals)
+        runJob = null
+        running = false
+        error = null
+        input = ""
+        pendingImage = null
+        activeSessionId = newAgentSessionId()
+        sessionCreatedAt = System.currentTimeMillis()
+        transcript.clear()
+        approvals.clear()
+        showHistory = false
+    }
+
+    val photoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                pendingImage = withContext(Dispatchers.IO) {
+                    encodeAgentImage(context, uri)
+                }
+            }
+        }
+    }
+
     fun stop() {
         runJob?.cancel()
         runJob = null
@@ -165,9 +295,10 @@ fun AiAgentScreen(onBack: () -> Unit) {
         approvals.clear()
     }
 
-    fun submit(userText: String) {
+    fun submit(userText: String, imageBase64: String?) {
         val text = userText.trim()
-        if (text.isEmpty()) return
+        val image = imageBase64?.takeIf { selectedModel?.let { m -> AiCapability.VISION in m.capabilities } == true }
+        if (text.isEmpty() && image == null) return
         val repo = selectedRepo ?: return
         val branch = selectedBranch ?: return
         val model = selectedModel ?: return
@@ -178,7 +309,9 @@ fun AiAgentScreen(onBack: () -> Unit) {
         }
         error = null
         input = ""
-        transcript += AgentEntry.User(text)
+        pendingImage = null
+        transcript += AgentEntry.User(text, image)
+        persistSession()
         running = true
 
         runJob = scope.launch {
@@ -199,6 +332,7 @@ fun AiAgentScreen(onBack: () -> Unit) {
             } catch (e: Exception) {
                 error = e.message ?: e.javaClass.simpleName
             } finally {
+                persistSession()
                 running = false
                 runJob = null
             }
@@ -228,6 +362,12 @@ fun AiAgentScreen(onBack: () -> Unit) {
                 color = colors.onSurface,
             )
             Spacer(Modifier.weight(1f))
+            IconButton(onClick = { showHistory = true }) {
+                Icon(Icons.Rounded.Chat, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+            }
+            IconButton(onClick = ::startNewSession) {
+                Icon(Icons.Rounded.Add, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+            }
             if (running) {
                 IconButton(onClick = ::stop) {
                     Icon(Icons.Rounded.Stop, null, Modifier.size(20.dp), tint = colors.error)
@@ -235,36 +375,42 @@ fun AiAgentScreen(onBack: () -> Unit) {
             }
         }
 
-        // Pickers row
-        Row(
+        // Pickers: fixed constraints prevent labels from collapsing into one-letter columns.
+        Column(
             Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            AiPickerChip(
-                label = "REPO",
-                value = selectedRepo?.fullName ?: Strings.aiAgentSelectRepo,
-                title = Strings.aiAgentSelectRepo,
-                options = repos.toList(),
-                optionLabel = { it.fullName },
-                optionSubtitle = { it.description.takeIf { d -> d.isNotBlank() } },
-                selected = selectedRepo,
-                onSelect = { selectedRepo = it },
-                enabled = !running,
-            )
-            AiPickerChip(
-                label = "BRANCH",
-                value = selectedBranch ?: "—",
-                title = Strings.aiAgentSelectBranch,
-                options = branches.toList(),
-                optionLabel = { it },
-                selected = selectedBranch,
-                onSelect = { selectedBranch = it },
-                enabled = !running && branches.isNotEmpty(),
-            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AiPickerChip(
+                    label = "REPO",
+                    value = selectedRepo?.fullName ?: Strings.aiAgentSelectRepo,
+                    title = Strings.aiAgentSelectRepo,
+                    options = repos.toList(),
+                    optionLabel = { it.fullName },
+                    optionSubtitle = { it.description.takeIf { d -> d.isNotBlank() } },
+                    selected = selectedRepo,
+                    onSelect = { selectedRepo = it },
+                    enabled = !running,
+                    modifier = Modifier.weight(1f).widthIn(min = 0.dp),
+                )
+                AiPickerChip(
+                    label = "BRANCH",
+                    value = selectedBranch ?: "—",
+                    title = Strings.aiAgentSelectBranch,
+                    options = branches.toList(),
+                    optionLabel = { it },
+                    selected = selectedBranch,
+                    onSelect = { selectedBranch = it },
+                    enabled = !running && branches.isNotEmpty(),
+                    modifier = Modifier.weight(1f).widthIn(min = 0.dp),
+                )
+            }
             AiPickerChip(
                 label = "MODEL",
                 value = selectedModel?.displayName ?: "—",
@@ -274,6 +420,7 @@ fun AiAgentScreen(onBack: () -> Unit) {
                 selected = selectedModel,
                 onSelect = { selectedModel = it },
                 enabled = !running && models.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
             )
         }
 
@@ -360,6 +507,14 @@ fun AiAgentScreen(onBack: () -> Unit) {
             )
         }
 
+        if (pendingImage != null) {
+            AgentAttachmentPreview(
+                base64 = pendingImage.orEmpty(),
+                visionAvailable = selectedModel?.let { AiCapability.VISION in it.capabilities } == true,
+                onRemove = { pendingImage = null },
+            )
+        }
+
         // Input bar
         Row(
             Modifier
@@ -368,6 +523,18 @@ fun AiAgentScreen(onBack: () -> Unit) {
                 .navigationBarsPadding(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(
+                onClick = { photoPicker.launch("image/*") },
+                enabled = !running && selectedModel != null,
+                modifier = Modifier.size(44.dp),
+            ) {
+                Icon(
+                    Icons.Rounded.AddPhotoAlternate,
+                    null,
+                    Modifier.size(22.dp),
+                    tint = if (!running && selectedModel != null) colors.onSurfaceVariant else colors.onSurfaceVariant.copy(alpha = 0.4f),
+                )
+            }
             Box(
                 Modifier
                     .weight(1f)
@@ -394,8 +561,8 @@ fun AiAgentScreen(onBack: () -> Unit) {
             }
             Spacer(Modifier.width(8.dp))
             IconButton(
-                onClick = { submit(input) },
-                enabled = !running && input.isNotBlank()
+                onClick = { submit(input, pendingImage) },
+                enabled = !running && (input.isNotBlank() || pendingImage != null)
                     && selectedRepo != null && selectedBranch != null && selectedModel != null,
                 modifier = Modifier
                     .size(44.dp)
@@ -410,10 +577,26 @@ fun AiAgentScreen(onBack: () -> Unit) {
                 )
             }
         }
+        if (showHistory) {
+            AgentHistorySheet(
+                sessions = sessions,
+                onOpen = ::openSession,
+                onNew = ::startNewSession,
+                onDelete = { session ->
+                    AiChatSessionStore.delete(context, AGENT_SESSION_MODE, session.id)
+                    refreshSessions()
+                    if (session.id == activeSessionId) startNewSession()
+                },
+                onDeleteAll = {
+                    AiChatSessionStore.clear(context, AGENT_SESSION_MODE)
+                    refreshSessions()
+                    startNewSession()
+                },
+                onDismiss = { showHistory = false },
+            )
+        }
     }
 }
-
-// ─── Pieces ───────────────────────────────────────────────────────────────
 
 @Composable
 private fun EmptyAgentState(message: String) {
@@ -433,18 +616,191 @@ private fun EmptyAgentState(message: String) {
 }
 
 @Composable
+private fun AgentAttachmentPreview(base64: String, visionAvailable: Boolean, onRemove: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val bitmap = remember(base64) { decodeAgentBitmap(base64) }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.surfaceVariant.copy(alpha = 0.5f))
+            .border(1.dp, colors.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(10.dp))
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(6.dp)),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                "IMAGE",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.6.sp,
+                color = colors.onSurfaceVariant,
+                fontFamily = FontFamily.Monospace,
+            )
+            Text(
+                if (visionAvailable) "Attached to next agent message" else "Selected model has no vision input",
+                fontSize = 12.sp,
+                color = if (visionAvailable) colors.onSurface else colors.error,
+                maxLines = 2,
+            )
+        }
+        IconButton(onClick = onRemove) {
+            Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = colors.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun AgentMessageImage(base64: String) {
+    val colors = MaterialTheme.colorScheme
+    val bitmap = remember(base64) { decodeAgentBitmap(base64) }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 220.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(colors.surface),
+        )
+    }
+}
+
+@Composable
+private fun AgentHistorySheet(
+    sessions: List<AiChatSessionStore.Session>,
+    onOpen: (AiChatSessionStore.Session) -> Unit,
+    onNew: () -> Unit,
+    onDelete: (AiChatSessionStore.Session) -> Unit,
+    onDeleteAll: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val sdf = remember { SimpleDateFormat("dd.MM.yy HH:mm", Locale.getDefault()) }
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(colors.surface)
+                .border(1.dp, colors.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(18.dp))
+                .padding(vertical = 12.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Agent history", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
+                    Text("${sessions.size} chats", fontSize = 11.sp, color = colors.onSurfaceVariant)
+                }
+                if (sessions.isNotEmpty()) {
+                    IconButton(onClick = onDeleteAll) {
+                        Icon(Icons.Rounded.DeleteSweep, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                    }
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            if (sessions.isEmpty()) {
+                Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
+                    Text("No agent chats yet", fontSize = 13.sp, color = colors.onSurfaceVariant)
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(sessions, key = { it.id }) { session ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(colors.surfaceVariant.copy(alpha = 0.5f))
+                                .clickable { onOpen(session) }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(Icons.Rounded.Chat, null, Modifier.size(18.dp), tint = colors.onSurfaceVariant)
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    session.title,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.onSurface,
+                                    maxLines = 1,
+                                )
+                                Text(
+                                    "${sdf.format(Date(session.updatedAt))} · ${session.messages.size} msgs",
+                                    fontSize = 10.sp,
+                                    color = colors.onSurfaceVariant,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                )
+                            }
+                            IconButton(onClick = { onDelete(session) }, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Rounded.Close, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.primary)
+                    .clickable(onClick = onNew)
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = colors.onPrimary)
+                Spacer(Modifier.width(8.dp))
+                Text("New chat", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = colors.onPrimary)
+            }
+        }
+    }
+}
+
+@Composable
 private fun TranscriptEntry(entry: AgentEntry) {
     val colors = MaterialTheme.colorScheme
     when (entry) {
         is AgentEntry.User -> {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Box(
+                Column(
                     Modifier
+                        .padding(start = 48.dp)
                         .clip(RoundedCornerShape(14.dp))
                         .background(colors.primary)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(entry.text, color = colors.onPrimary, fontSize = 14.sp)
+                    if (entry.imageBase64 != null) {
+                        AgentMessageImage(entry.imageBase64)
+                    }
+                    if (entry.text.isNotBlank()) {
+                        Text(entry.text, color = colors.onPrimary, fontSize = 14.sp)
+                    }
                 }
             }
         }
@@ -664,6 +1020,7 @@ private suspend fun runAgentLoop(
 }
 
 private const val MAX_ITERATIONS = 8
+private const val AGENT_SESSION_MODE = "agent"
 
 // ─── Helpers / data ───────────────────────────────────────────────────────
 
@@ -689,10 +1046,42 @@ private fun repoOwner(repo: GHRepo): String =
 private fun repoName(repo: GHRepo): String =
     repo.fullName.substringAfter('/').ifBlank { repo.name }
 
+private fun newAgentSessionId(): String = "agent_${System.currentTimeMillis()}"
+
+private fun stopActiveAgent(
+    job: Job?,
+    approvals: androidx.compose.runtime.snapshots.SnapshotStateList<PendingApproval>,
+) {
+    job?.cancel()
+    approvals.forEach { it.deferred.complete(false) }
+    approvals.clear()
+}
+
+private fun encodeAgentImage(context: Context, uri: Uri): String? {
+    return runCatching {
+        val source = context.contentResolver.openInputStream(uri)?.use { input ->
+            BitmapFactory.decodeStream(input)
+        } ?: return@runCatching null
+        val maxEdge = 1024
+        val scale = (maxEdge.toFloat() / maxOf(source.width, source.height)).coerceAtMost(1f)
+        val w = (source.width * scale).toInt().coerceAtLeast(1)
+        val h = (source.height * scale).toInt().coerceAtLeast(1)
+        val scaled = if (scale < 1f) Bitmap.createScaledBitmap(source, w, h, true) else source
+        val out = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
+        Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }.getOrNull()
+}
+
+private fun decodeAgentBitmap(base64: String): Bitmap? = runCatching {
+    val bytes = Base64.decode(base64, Base64.DEFAULT)
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+}.getOrNull()
+
 private fun List<AgentEntry>.toAiMessages(): List<AiMessage> =
     mapNotNull {
         when (it) {
-            is AgentEntry.User -> AiMessage(role = "user", content = it.text)
+            is AgentEntry.User -> AiMessage(role = "user", content = it.text, imageBase64 = it.imageBase64)
             is AgentEntry.Assistant ->
                 if (it.text.isBlank()) null else AiMessage(role = "assistant", content = it.text)
             is AgentEntry.ToolCall, is AgentEntry.ToolResult, is AgentEntry.Pending -> null
@@ -700,7 +1089,7 @@ private fun List<AgentEntry>.toAiMessages(): List<AiMessage> =
     }
 
 private fun AgentEntry.stableKey(): String = when (this) {
-    is AgentEntry.User -> "u:${text.hashCode()}:${System.identityHashCode(this)}"
+    is AgentEntry.User -> "u:${text.hashCode()}:${imageBase64?.hashCode() ?: 0}:${System.identityHashCode(this)}"
     is AgentEntry.Assistant -> "a:${text.hashCode()}:${System.identityHashCode(this)}"
     is AgentEntry.ToolCall -> "tc:${call.id}"
     is AgentEntry.ToolResult -> "tr:${result.callId}"
@@ -708,7 +1097,7 @@ private fun AgentEntry.stableKey(): String = when (this) {
 }
 
 private sealed class AgentEntry {
-    data class User(val text: String) : AgentEntry()
+    data class User(val text: String, val imageBase64: String? = null) : AgentEntry()
     data class Assistant(val text: String) : AgentEntry()
     data class ToolCall(val call: AiToolCall) : AgentEntry()
     data class ToolResult(val result: AiToolResult) : AgentEntry()

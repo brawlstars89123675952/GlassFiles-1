@@ -228,6 +228,17 @@ abstract class OpenAiCompatProvider(
                 }
                 o.put("tool_calls", arr)
             }
+            msg.imageBase64 != null -> {
+                val parts = JSONArray()
+                parts.put(JSONObject().put("type", "text").put("text", msg.content.ifBlank { "(image)" }))
+                parts.put(
+                    JSONObject().put("type", "image_url").put(
+                        "image_url",
+                        JSONObject().put("url", "data:image/jpeg;base64,${msg.imageBase64}"),
+                    ),
+                )
+                o.put("content", parts)
+            }
             else -> o.put("content", msg.content)
         }
         return o

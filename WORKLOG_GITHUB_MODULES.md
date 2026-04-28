@@ -1164,3 +1164,29 @@
 ### Проверка
 - Локальная Android compile-проверка не запускалась по просьбе пользователя.
 - После пуша CI выявил один регресс (StatCard) — исправлен отдельным коммитом, второй пуш прошёл.
+
+## 2026-04-28
+
+### AI Agent screen: selector layout, image attachment, chat history
+- Скоуп: `app/src/main/java/com/glassfiles/ui/screens/AiAgentScreen.kt` + минимальная сериализация image input в существующем OpenAI-compatible tool-chat path.
+- Исправлена сломанная верстка верхних selector chips на экране AI Agent:
+  - убран `horizontalScroll` вокруг `Repo / Branch / Model`, который давал детям некорректные narrow constraints;
+  - `Repo` и `Branch` разложены в одну строку через `weight(1f)`;
+  - `Model` вынесен отдельной строкой на `fillMaxWidth()`;
+  - добавлены явные constraints `widthIn(min = 0.dp)`, чтобы chips не схлопывались в вертикальные столбики и label не переносился по буквам.
+- Добавлена отправка изображения в AI Agent:
+  - кнопка выбора фото рядом с input bar через `ActivityResultContracts.GetContent()`;
+  - выбранное изображение downscale до 1024px, JPEG 80%, base64;
+  - preview attachment перед отправкой;
+  - пользовательское сообщение отображает thumbnail изображения в transcript;
+  - imageBase64 передаётся в `AiMessage` для vision-capable моделей.
+- Добавлена история чатов AI Agent:
+  - используется существующий `AiChatSessionStore` с отдельным mode `agent`;
+  - top bar получил кнопки History и New chat;
+  - history dialog показывает сохранённые агентские чаты, открытие, удаление одного чата, очистку всех, создание нового чата;
+  - transcript user/assistant сохраняется с `providerId`, `modelId`, `createdAt/updatedAt`, imageBase64.
+- Логика GitHub tool executor, `GitHubManager`, permissions/gating destructive tool calls не менялись.
+
+### Проверка
+- Серверная/Android сборка не запускалась по прямой просьбе пользователя.
+- Выполнена только статическая проверка `git diff --check`.
