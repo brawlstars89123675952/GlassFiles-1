@@ -9,10 +9,12 @@ import com.glassfiles.data.ai.models.AiMessage
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.net.URL
 
 /**
  * Google AI Studio (Gemini) provider.
@@ -195,6 +197,82 @@ object GoogleProvider : AiProvider {
             throw RuntimeException("${id.displayName} returned no image data")
         }
         results
+    }
+
+    /**
+     * Veo video generation via the Gemini API's long-running operation
+     * pattern.
+     *
+     * 1. `POST /models/{modelId}:predictLongRunning?key=KEY` with body
+     *    `{"instances":[{"prompt":"..."}], "parameters":{"aspectRatio":"16:9","durationSeconds":N,"personGeneration":"allow"}}`.
+     *    Returns `{"name": "models/.../operations/<op_id>"}`.
+     * 2. Poll `GET /<op_name>?key=KEY` every 5s until `done == true`, then
+     *    download `response.generateVideoResponse.generatedSamples[0].video.uri`.
+     *
+     * The signed `video.uri` requires the `?key=KEY` query param to download.
+     */
+    override suspend fun generateVideo(
+        context: Context,
+        modelId: String,
+        prompt: String,
+        apiKey: String,
+        durationSec: Int,
+        aspectRatio: String,
+        onProgress: (String) -> Unit,
+    ): String = withContext(Dispatchers.IO) {
+        val createUrl = "${base(context)}/models/$modelId:predictLongRunning?key=$apiKey"
+        val body = JSONObject()
+            .put("instances", JSONArray().put(JSONObject().put("prompt", prompt)))
+            .put(
+                "parameters",
+                JSONObject()
+                    .put("aspectRatio", aspectRatio)
+                    .put("durationSeconds", durationSec.coerceIn(2, 8))
+                    .put("personGeneration", "allow"),
+            )
+            .toString()
+
+        onProgress("queue")
+        val createConn = Http.postJson(createUrl, body, mapOf("Content-Type" to "application/json"))
+        Http.ensureOk(createConn, id.displayName)
+        val createRaw = createConn.inputStream.bufferedReader().use { it.readText() }
+        createConn.disconnect()
+        val opName = JSONObject(createRaw).optString("name", "")
+        if (opName.isBlank()) throw RuntimeException("${id.displayName}: empty operation name")
+
+        val opUrl = "${base(context)}/$opName?key=$apiKey"
+        val deadline = System.currentTimeMillis() + 15 * 60_000L
+        var videoUri = ""
+        while (System.currentTimeMillis() < deadline) {
+            val pollConn = Http.open(opUrl, "GET")
+            Http.ensureOk(pollConn, id.displayName)
+            val raw = pollConn.inputStream.bufferedReader().use { it.readText() }
+            pollConn.disconnect()
+            val obj = JSONObject(raw)
+            val done = obj.optBoolean("done", false)
+            onProgress(if (done) "ready" else "running")
+            if (done) {
+                val err = obj.optJSONObject("error")
+                if (err != null) {
+                    throw RuntimeException("${id.displayName}: ${err.optString("message", "operation failed")}")
+                }
+                val samples = obj.optJSONObject("response")
+                    ?.optJSONObject("generateVideoResponse")
+                    ?.optJSONArray("generatedSamples")
+                    ?: JSONArray()
+                if (samples.length() == 0) throw RuntimeException("${id.displayName}: no samples in response")
+                videoUri = samples.optJSONObject(0)?.optJSONObject("video")?.optString("uri", "").orEmpty()
+                break
+            }
+            delay(5_000)
+        }
+        if (videoUri.isBlank()) throw RuntimeException("${id.displayName}: video didn't finish in 15min")
+
+        val outDir = File(context.cacheDir, "ai_videos").apply { mkdirs() }
+        val target = File(outDir, "google_${System.currentTimeMillis()}.mp4")
+        val signedUrl = if (videoUri.contains("?")) "$videoUri&key=$apiKey" else "$videoUri?key=$apiKey"
+        URL(signedUrl).openStream().use { input -> target.outputStream().use { input.copyTo(it) } }
+        target.absolutePath
     }
 
     private fun aspectRatioForSize(size: String): String {
