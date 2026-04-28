@@ -106,9 +106,15 @@ object AlibabaProvider : OpenAiCompatProvider(
             )
             .put(
                 "parameters",
-                JSONObject()
-                    .put("size", size.replace("x", "*").replace("X", "*"))
-                    .put("n", n.coerceIn(1, 4)),
+                JSONObject().apply {
+                    // "auto" / blank → omit size; DashScope falls back to the
+                    // model default (1024*1024 for wanx). Otherwise translate
+                    // the standard `WIDTHxHEIGHT` shape into DashScope's `*`.
+                    if (size.isNotBlank() && !size.equals("auto", ignoreCase = true)) {
+                        put("size", size.replace("x", "*").replace("X", "*"))
+                    }
+                    put("n", n.coerceIn(1, 4))
+                },
             )
             .toString()
         val createConn = Http.postJson(

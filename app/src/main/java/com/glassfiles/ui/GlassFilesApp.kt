@@ -56,7 +56,7 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.launch
 import java.io.File
 
-enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_HUB, AI_CHAT, AI_CODING, AI_IMAGE, AI_VIDEO, AI_KEYS, AI_MODELS, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
+enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_HUB, AI_CHAT, AI_CODING, AI_IMAGE, AI_VIDEO, AI_KEYS, AI_MODELS, AI_SETTINGS, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
 
 @Composable
 fun GlassFilesApp(
@@ -267,7 +267,11 @@ fun GlassFilesApp(
                         onVideo = { navigateTo(AppScreen.AI_VIDEO) },
                         onModels = { navigateTo(AppScreen.AI_MODELS) },
                         onKeys = { navigateTo(AppScreen.AI_KEYS) },
+                        onSettings = { navigateTo(AppScreen.AI_SETTINGS) },
                     )
+                }
+                AppScreen.AI_SETTINGS -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
+                    AiSettingsScreen(onBack = { goBack() })
                 }
                 AppScreen.AI_CHAT -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
                     AiChatScreen(onBack = { goBack(); aiInitialPrompt = null; aiInitialImage = null }, initialPrompt = aiInitialPrompt, initialImageBase64 = aiInitialImage)

@@ -40,11 +40,20 @@ internal object OpenAiCompatImageGen {
         n: Int,
         extraHeaders: Map<String, String> = emptyMap(),
     ): List<String> = withContext(Dispatchers.IO) {
+        // "auto" means: let the model pick its own resolution. The OpenAI gpt-image-1
+        // API recognises the literal string, but xAI's `grok-2-image` rejects any
+        // `size` field at all (it always returns 1024x768). Treat auto / blank as
+        // "omit the size field entirely" for non-OpenAI deployments.
         val body = JSONObject()
             .put("model", modelId)
             .put("prompt", prompt)
             .put("n", n.coerceIn(1, 10))
-            .put("size", size)
+            .apply {
+                val isOpenAi = baseUrl.contains("api.openai.com")
+                if (size.isNotBlank() && !(size.equals("auto", true) && !isOpenAi)) {
+                    put("size", size)
+                }
+            }
             .toString()
 
         val conn = Http.postJson(

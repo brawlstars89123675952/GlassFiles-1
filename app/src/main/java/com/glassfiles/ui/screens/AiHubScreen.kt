@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
 
-/** Top-level entry for the AI module. Routes to chat / coding / image / video / models / keys. */
+/** Top-level entry for the AI module. Routes to chat / coding / image / video / models / keys / settings. */
 @Composable
 fun AiHubScreen(
     onBack: () -> Unit,
@@ -49,6 +50,7 @@ fun AiHubScreen(
     onVideo: () -> Unit,
     onModels: () -> Unit,
     onKeys: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
 
@@ -80,6 +82,7 @@ fun AiHubScreen(
                     AiHubItem(Icons.Rounded.Movie, Strings.aiVideoGen, Strings.aiVideoGenSubtitle, soon = false, onVideo),
                     AiHubItem(Icons.Rounded.BubbleChart, Strings.aiModels, Strings.aiModelsSubtitle, soon = false, onModels),
                     AiHubItem(Icons.Rounded.VpnKey, Strings.aiKeys, Strings.aiKeysSubtitle, soon = false, onKeys),
+                    AiHubItem(Icons.Rounded.Tune, Strings.aiSettings, Strings.aiSettingsSubtitle, soon = false, onSettings),
                 ),
             ) { item -> AiHubRow(item) }
         }

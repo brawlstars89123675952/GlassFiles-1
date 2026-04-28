@@ -266,6 +266,24 @@ object Strings {
     val aiVideoShare get() = s("Поделиться", "Share")
     val aiVideoEmpty get() = s("Видео-генерация занимает несколько минут. Введите описание и нажмите «Сгенерировать».", "Video generation takes a few minutes. Enter a prompt and tap “Generate”.")
     val aiVideoCancel get() = s("Отмена", "Cancel")
+
+    // ═══════════════════════════════════
+    // AI · Settings
+    // ═══════════════════════════════════
+    val aiSettings get() = s("Настройки", "Settings")
+    val aiSettingsSubtitle get() = s("Темы кода, шрифт, авто-сохранение", "Code themes, font, auto-save")
+    val aiSettingsSyntaxTheme get() = s("Тема подсветки кода", "Syntax theme")
+    val aiSettingsSyntaxThemeHint get() = s("Применяется только в блоках кода и не зависит от цветовой темы приложения.", "Applied to code blocks only — independent of the app theme.")
+    val aiSettingsCodeFontSize get() = s("Размер шрифта в коде", "Code font size")
+    val aiSettingsChatFontSize get() = s("Размер шрифта в чате", "Chat font size")
+    val aiSettingsAutoSave get() = s("Авто-сохранение в галерею", "Auto-save to gallery")
+    val aiSettingsAutoSaveHint get() = s("Сгенерированные картинки и видео сразу попадают в системную галерею.", "Generated images and videos are saved to the system gallery automatically.")
+    val aiSettingsStreamScroll get() = s("Авто-прокрутка во время стрима", "Auto-scroll while streaming")
+    val aiSettingsClearCache get() = s("Очистить кэш AI", "Clear AI cache")
+    val aiSettingsClearCacheHint get() = s("Удаляет загруженные превью; история и ключи остаются.", "Removes cached previews. History and keys are kept.")
+    val aiSettingsClearCacheDone get() = s("Кэш очищен", "Cache cleared")
+    val aiSettingsExpandCode get() = s("На весь экран", "Expand")
+
     val about get() = s("О приложении", "About")
     val version get() = s("Версия", "Version")
 

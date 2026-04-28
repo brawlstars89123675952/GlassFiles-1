@@ -1,12 +1,11 @@
 package com.glassfiles.ui.screens
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -41,7 +40,6 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Refresh
@@ -71,7 +69,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -81,8 +78,9 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
-import com.glassfiles.data.ai.AiKeyStore
 import com.glassfiles.data.ai.AiChatSessionStore
+import com.glassfiles.data.ai.AiKeyStore
+import com.glassfiles.data.ai.AiSettingsStore
 import com.glassfiles.data.ai.ChatHistoryStore
 import com.glassfiles.data.ai.ModelRegistry
 import com.glassfiles.data.ai.SystemPrompts
@@ -91,9 +89,8 @@ import com.glassfiles.data.ai.models.AiMessage
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import com.glassfiles.data.ai.providers.AiProviders
+import com.glassfiles.ui.components.AiCodeBlock
 import com.glassfiles.ui.components.AiPickerChip
-import com.glassfiles.ui.components.CodeColors
-import com.glassfiles.ui.components.highlightCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
@@ -432,6 +429,7 @@ private fun CodingChatView(
     initialSession: AiChatSessionStore.Session,
     onBack: () -> Unit,
 ) {
+    BackHandler(onBack = onBack)
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
@@ -928,86 +926,25 @@ private fun MessageImage(base64: String) {
 
 @Composable
 private fun renderMessageBody(content: String, textColor: Color, context: Context) {
+    val theme = remember { AiSettingsStore.getSyntaxTheme(context) }
+    val codeFontSize = remember { AiSettingsStore.getCodeFontSize(context) }
+    val chatFontSize = remember { AiSettingsStore.getChatFontSize(context) }
     splitOnFences(content).forEach { part ->
         if (part.isFence) {
-            CodeFence(text = part.text, lang = part.lang, context = context)
+            AiCodeBlock(
+                text = part.text,
+                lang = part.lang,
+                theme = theme,
+                fontSizeSp = codeFontSize,
+                context = context,
+            )
         } else if (part.text.isNotBlank()) {
             Text(
                 part.text,
-                fontSize = 14.sp,
+                fontSize = chatFontSize.sp,
                 color = textColor,
             )
         }
-    }
-}
-
-@Composable
-private fun CodeFence(text: String, lang: String, context: Context) {
-    val colors = MaterialTheme.colorScheme
-    val codeColors = remember(colors) {
-        CodeColors(
-            plain = colors.onSurface,
-            keyword = colors.primary,
-            string = colors.tertiary,
-            number = colors.tertiary,
-            comment = colors.onSurfaceVariant,
-            annotation = colors.primary,
-        )
-    }
-    val highlighted: AnnotatedString = remember(text, lang, codeColors) {
-        highlightCode(text, lang, codeColors)
-    }
-
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
-            .background(colors.surface)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                lang.ifBlank { "code" }.uppercase(),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.6.sp,
-                color = colors.onSurfaceVariant,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier.weight(1f),
-            )
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable {
-                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        cm.setPrimaryClip(ClipData.newPlainText("code", text))
-                    }
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Rounded.ContentCopy,
-                    null,
-                    Modifier.size(12.dp),
-                    tint = colors.primary,
-                )
-                Spacer(Modifier.size(4.dp))
-                Text(
-                    Strings.aiCodingCopy,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.primary,
-                    fontFamily = FontFamily.Monospace,
-                )
-            }
-        }
-        Text(
-            text = highlighted,
-            fontSize = 12.sp,
-            fontFamily = FontFamily.Monospace,
-            color = colors.onSurface,
-        )
     }
 }
 
