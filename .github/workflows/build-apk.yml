@@ -75,7 +75,12 @@ jobs:
       - name: Build Debug APK
         run: chmod +x gradlew && ./gradlew assembleDebug --stacktrace
 
+      # Release build is gated behind workflow_dispatch — Proguard
+      # makes assembleRelease slow, and on PR/push CI we only need
+      # the debug APK. Trigger manually from the Actions tab when you
+      # actually want a release artifact.
       - name: Build Release APK
+        if: github.event_name == 'workflow_dispatch'
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Upload Debug APK
@@ -86,6 +91,7 @@ jobs:
           retention-days: 30
 
       - name: Upload Release APK
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: GlassFiles-release
