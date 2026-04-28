@@ -42,6 +42,15 @@ object AiChatSessionStore {
         val messages: List<Message>,
         val createdAt: Long,
         val updatedAt: Long,
+        /**
+         * Optional context fields. Used by the agent mode to remember the
+         * `owner/name` of the repo and the active branch a chat was scoped
+         * to so reopening the session restores everything (otherwise the
+         * user has to repick the repo, which used to wipe the transcript).
+         * Empty for non-agent modes.
+         */
+        val repoFullName: String = "",
+        val branch: String = "",
     )
 
     fun list(context: Context, mode: String): List<Session> {
@@ -121,6 +130,8 @@ object AiChatSessionStore {
             messages = messages,
             createdAt = obj.optLong("createdAt", 0L),
             updatedAt = obj.optLong("updatedAt", 0L),
+            repoFullName = obj.optString("repoFullName", ""),
+            branch = obj.optString("branch", ""),
         )
     }
 
@@ -144,7 +155,9 @@ object AiChatSessionStore {
                     .put("modelId", s.modelId)
                     .put("messages", msgsArr)
                     .put("createdAt", s.createdAt)
-                    .put("updatedAt", s.updatedAt),
+                    .put("updatedAt", s.updatedAt)
+                    .put("repoFullName", s.repoFullName)
+                    .put("branch", s.branch),
             )
         }
         prefs(context).edit().putString(mode, arr.toString()).apply()

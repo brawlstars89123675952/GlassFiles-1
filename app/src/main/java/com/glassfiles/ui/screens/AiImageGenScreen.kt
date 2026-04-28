@@ -23,9 +23,12 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Share
@@ -57,6 +60,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.glassfiles.data.Strings
@@ -106,6 +110,7 @@ fun AiImageGenScreen(onBack: () -> Unit) {
     var promptExpanded by remember { mutableStateOf(true) }
     var viewerFile by remember { mutableStateOf<File?>(null) }
     var historyLoaded by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
 
     // Restore previous generations from disk so the user can scroll through
     // older outputs after returning to the screen.
@@ -245,7 +250,7 @@ fun AiImageGenScreen(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().background(colors.surface)) {
         // ── Top bar
         Row(
-            Modifier.fillMaxWidth().padding(top = 44.dp, start = 4.dp, end = 16.dp, bottom = 12.dp),
+            Modifier.fillMaxWidth().padding(top = 44.dp, start = 4.dp, end = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
@@ -257,6 +262,15 @@ fun AiImageGenScreen(onBack: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 color = colors.onSurface,
             )
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { showHistory = true }) {
+                Icon(
+                    Icons.Rounded.History,
+                    null,
+                    Modifier.size(20.dp),
+                    tint = colors.onSurfaceVariant,
+                )
+            }
         }
 
         if (configured.isEmpty() || (!modelsLoading && imageModels.isEmpty() && loadError == null)) {
@@ -457,6 +471,140 @@ fun AiImageGenScreen(onBack: () -> Unit) {
     val vf = viewerFile
     if (vf != null) {
         AiImageViewer(file = vf, onDismiss = { viewerFile = null })
+    }
+    if (showHistory) {
+        ImageHistorySheet(
+            items = results.toList(),
+            onOpen = { file ->
+                viewerFile = file
+                showHistory = false
+            },
+            onDelete = { id ->
+                AiAssetHistoryStore.remove(context, AiAssetHistoryStore.MODE_IMAGE, id)
+                results.firstOrNull { it.historyId == id }?.let { item ->
+                    runCatching { item.cacheFile.delete() }
+                    results.remove(item)
+                }
+            },
+            onClearAll = {
+                results.forEach { runCatching { it.cacheFile.delete() } }
+                AiAssetHistoryStore.clear(context, AiAssetHistoryStore.MODE_IMAGE)
+                results.clear()
+                showHistory = false
+            },
+            onDismiss = { showHistory = false },
+        )
+    }
+}
+
+@Composable
+private fun ImageHistorySheet(
+    items: List<ImageResult>,
+    onOpen: (File) -> Unit,
+    onDelete: (Long) -> Unit,
+    onClearAll: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val sdf = remember { java.text.SimpleDateFormat("dd.MM.yy HH:mm", java.util.Locale.getDefault()) }
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(colors.surface)
+                .padding(vertical = 12.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        Strings.aiHistoryImageTitle,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.onSurface,
+                    )
+                    Text(
+                        "${items.size} ${Strings.aiHistoryCount}",
+                        fontSize = 11.sp,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+                if (items.isNotEmpty()) {
+                    IconButton(onClick = onClearAll) {
+                        Icon(Icons.Rounded.DeleteSweep, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                    }
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            if (items.isEmpty()) {
+                Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
+                    Text(Strings.aiHistoryEmpty, fontSize = 13.sp, color = colors.onSurfaceVariant)
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(items, key = { it.historyId }) { item ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(colors.surfaceVariant.copy(alpha = 0.5f))
+                                .clickable { onOpen(item.cacheFile) }
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            AsyncImage(
+                                model = item.cacheFile,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.surface),
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    item.prompt.takeIf { it.isNotBlank() } ?: item.model.displayName,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.onSurface,
+                                    maxLines = 2,
+                                )
+                                Text(
+                                    item.model.displayName,
+                                    fontSize = 11.sp,
+                                    color = colors.onSurfaceVariant,
+                                    maxLines = 1,
+                                )
+                                Text(
+                                    sdf.format(java.util.Date(item.historyId)),
+                                    fontSize = 10.sp,
+                                    color = colors.onSurfaceVariant,
+                                    fontFamily = FontFamily.Monospace,
+                                    maxLines = 1,
+                                )
+                            }
+                            IconButton(
+                                onClick = { onDelete(item.historyId) },
+                                modifier = Modifier.size(28.dp),
+                            ) {
+                                Icon(Icons.Rounded.Close, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

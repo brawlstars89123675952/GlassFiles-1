@@ -72,6 +72,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -112,8 +113,11 @@ import java.util.Locale
  * (`write_file`, `create_branch`, `commit`, `open_pr`) is gated behind a
  * per-call Approve / Reject card.
  *
- * The active repo / branch / model are session-scoped; switching any of
- * them resets the transcript so the model never sees stale context.
+ * The active repo / branch / model are persisted with each session so
+ * reopening a chat restores the full context (transcript + repo + branch
+ * + model). Switching any of them mid-chat is honoured for *future*
+ * messages but never wipes the visible transcript — the user's history
+ * stays put.
  */
 @Composable
 fun AiAgentScreen(onBack: () -> Unit) {
@@ -141,12 +145,17 @@ fun AiAgentScreen(onBack: () -> Unit) {
     var showHistory by remember { mutableStateOf(false) }
 
     val transcript = remember { mutableStateListOf<AgentEntry>() }
-    var input by remember { mutableStateOf("") }
+    var input by remember { mutableStateOf(TextFieldValue("")) }
     var pendingImage by remember { mutableStateOf<String?>(null) }
     var autoApproveReads by remember { mutableStateOf(true) }
     var running by remember { mutableStateOf(false) }
     var runJob by remember { mutableStateOf<Job?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    // ID of the session whose repo / branch / model we still want to
+    // re-apply once the async repo + model lists finish loading. Cleared
+    // once everything that *can* be restored has been.
+    var pendingRestoreSessionId by remember { mutableStateOf<String?>(activeSessionId) }
 
     // Pending approvals: tool calls awaiting user decision. The agent loop
     // suspends on these CompletableDeferred until Approve/Reject flips them.
@@ -168,36 +177,82 @@ fun AiAgentScreen(onBack: () -> Unit) {
                 models.addAll(list)
             } catch (_: Exception) { /* swallow per-provider failures */ }
         }
-        if (selectedModel == null) selectedModel = preferToolUseModel(models)
     }
 
-    // Restore the most recent agent conversation when the screen opens.
+    // Restore the saved transcript synchronously when the screen first
+    // opens. Repo / branch / model selection happens later (see below)
+    // because those lists are populated asynchronously.
     LaunchedEffect(Unit) {
         sessions.firstOrNull { it.id == activeSessionId }?.let { session ->
             sessionCreatedAt = session.createdAt
             transcript.clear()
-            transcript.addAll(session.messages.mapNotNull { message ->
-                when (message.role) {
-                    "user" -> AgentEntry.User(message.content, message.imageBase64)
-                    "assistant" -> AgentEntry.Assistant(message.content)
-                    else -> null
-                }
-            })
+            transcript.addAll(session.messages.toAgentEntries())
+            // Pre-seed the desired branch so the branch-loading effect
+            // can honour it once the repo is picked.
+            if (session.branch.isNotBlank()) selectedBranch = session.branch
         }
     }
 
+    // Re-attempt repo / model restoration whenever the async lists grow
+    // (provider keys may take a beat to enumerate models). We never
+    // overwrite a user's manual pick — only fill in the gaps.
+    LaunchedEffect(repos.size, models.size, pendingRestoreSessionId) {
+        val sessionId = pendingRestoreSessionId ?: return@LaunchedEffect
+        val session = AiChatSessionStore.get(context, AGENT_SESSION_MODE, sessionId)
+        if (session == null) {
+            pendingRestoreSessionId = null
+            return@LaunchedEffect
+        }
+        if (selectedRepo == null && session.repoFullName.isNotBlank()) {
+            repos.firstOrNull { it.fullName == session.repoFullName }
+                ?.let { selectedRepo = it }
+        }
+        if (selectedModel == null) {
+            val saved = if (session.providerId.isNotBlank() && session.modelId.isNotBlank()) {
+                runCatching { AiProviderId.valueOf(session.providerId) }.getOrNull()?.let { pid ->
+                    models.firstOrNull { it.providerId == pid && it.id == session.modelId }
+                }
+            } else null
+            selectedModel = saved ?: preferToolUseModel(models)
+        }
+        // Stop watching once we've done what we can. The pickers happily
+        // honor any manual changes the user makes from here on.
+        val repoDone = session.repoFullName.isBlank() ||
+            selectedRepo?.fullName == session.repoFullName ||
+            (repos.isNotEmpty() && repos.none { it.fullName == session.repoFullName })
+        val modelDone = selectedModel != null ||
+            (models.isEmpty()) // nothing to choose from yet, but we'll be re-invoked when models grows
+        if (repoDone && (modelDone && models.isNotEmpty())) {
+            pendingRestoreSessionId = null
+        }
+    }
+
+    // Reload branches whenever the active repo changes. Crucially this
+    // does NOT wipe the transcript — switching repos in an active chat
+    // is a context change for *future* messages, not a reason to drop
+    // the conversation the user can still see and reference.
     LaunchedEffect(selectedRepo) {
-        branches.clear()
-        selectedBranch = null
-        val repo = selectedRepo ?: return@LaunchedEffect
+        val repo = selectedRepo
+        if (repo == null) {
+            branches.clear()
+            selectedBranch = null
+            return@LaunchedEffect
+        }
+        val previous = selectedBranch
         try {
             val list = GitHubManager.getBranches(context, repoOwner(repo), repoName(repo))
+            branches.clear()
             branches.addAll(list)
-            selectedBranch = repo.defaultBranch.takeIf { it.isNotBlank() && it in list }
+            // Prefer keeping a branch the caller already had (e.g. one we
+            // just restored from the session) when it is valid for the
+            // newly-loaded repo. Otherwise fall back to the default branch.
+            selectedBranch = previous?.takeIf { it in list }
+                ?: repo.defaultBranch.takeIf { it.isNotBlank() && it in list }
                 ?: list.firstOrNull()
-        } catch (_: Exception) {}
-        // Repo / branch change invalidates any prior context.
-        transcript.clear()
+        } catch (_: Exception) {
+            // Network/permission failure — keep whatever was selected so
+            // the input doesn't become stuck disabled.
+        }
         approvals.clear()
     }
 
@@ -236,6 +291,8 @@ fun AiAgentScreen(onBack: () -> Unit) {
                 messages = messages,
                 createdAt = sessionCreatedAt,
                 updatedAt = System.currentTimeMillis(),
+                repoFullName = selectedRepo?.fullName.orEmpty(),
+                branch = selectedBranch.orEmpty(),
             ),
         )
         refreshSessions()
@@ -246,18 +303,20 @@ fun AiAgentScreen(onBack: () -> Unit) {
         runJob = null
         running = false
         error = null
-        input = ""
+        input = TextFieldValue("")
         pendingImage = null
         activeSessionId = session.id
         sessionCreatedAt = session.createdAt
         transcript.clear()
-        transcript.addAll(session.messages.mapNotNull { message ->
-            when (message.role) {
-                "user" -> AgentEntry.User(message.content, message.imageBase64)
-                "assistant" -> AgentEntry.Assistant(message.content)
-                else -> null
-            }
-        })
+        transcript.addAll(session.messages.toAgentEntries())
+        approvals.clear()
+        // Reset selection so the restore effect picks up this session's
+        // repo / branch / model. The branch is pre-seeded so the
+        // branches-loading effect can honour it.
+        selectedRepo = null
+        selectedBranch = session.branch.takeIf { it.isNotBlank() }
+        selectedModel = null
+        pendingRestoreSessionId = session.id
         showHistory = false
     }
 
@@ -266,12 +325,15 @@ fun AiAgentScreen(onBack: () -> Unit) {
         runJob = null
         running = false
         error = null
-        input = ""
+        input = TextFieldValue("")
         pendingImage = null
         activeSessionId = newAgentSessionId()
         sessionCreatedAt = System.currentTimeMillis()
         transcript.clear()
         approvals.clear()
+        // Don't drop repo / branch / model — keep the user's working
+        // context so they can fire off another task in the same repo
+        // without re-picking everything.
         showHistory = false
     }
 
@@ -308,7 +370,7 @@ fun AiAgentScreen(onBack: () -> Unit) {
             return
         }
         error = null
-        input = ""
+        input = TextFieldValue("")
         pendingImage = null
         transcript += AgentEntry.User(text, image)
         persistSession()
@@ -515,7 +577,17 @@ fun AiAgentScreen(onBack: () -> Unit) {
             )
         }
 
-        // Input bar
+        // Input bar.
+        //
+        // The input field stays editable as long as the agent isn't busy:
+        // even if the user hasn't picked repo/branch/model yet they should
+        // be able to draft a message. Send is gated on the full set being
+        // present, the placeholder lives inside `decorationBox` (so it
+        // never overlaps the field's hit-target / IME state), and we use
+        // a `TextFieldValue` so cursor + selection survive recomposition.
+        val canSend = !running &&
+            (input.text.isNotBlank() || pendingImage != null) &&
+            selectedRepo != null && selectedBranch != null && selectedModel != null
         Row(
             Modifier
                 .fillMaxWidth()
@@ -546,34 +618,36 @@ fun AiAgentScreen(onBack: () -> Unit) {
                 BasicTextField(
                     value = input,
                     onValueChange = { input = it },
-                    enabled = !running && selectedRepo != null && selectedBranch != null && selectedModel != null,
+                    enabled = !running,
                     textStyle = TextStyle(color = colors.onSurface, fontSize = 14.sp),
                     cursorBrush = SolidColor(colors.primary),
+                    decorationBox = { inner ->
+                        if (input.text.isEmpty()) {
+                            Text(
+                                Strings.aiAgentInputHint,
+                                color = colors.onSurfaceVariant,
+                                fontSize = 14.sp,
+                            )
+                        }
+                        inner()
+                    },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 22.dp, max = 120.dp),
                 )
-                if (input.isEmpty()) {
-                    Text(
-                        Strings.aiAgentInputHint,
-                        color = colors.onSurfaceVariant,
-                        fontSize = 14.sp,
-                    )
-                }
             }
             Spacer(Modifier.width(8.dp))
             IconButton(
-                onClick = { submit(input, pendingImage) },
-                enabled = !running && (input.isNotBlank() || pendingImage != null)
-                    && selectedRepo != null && selectedBranch != null && selectedModel != null,
+                onClick = { submit(input.text, pendingImage) },
+                enabled = canSend,
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(if (input.isNotBlank() && !running) colors.primary else colors.surfaceVariant),
+                    .background(if (canSend) colors.primary else colors.surfaceVariant),
             ) {
                 Icon(
                     Icons.AutoMirrored.Rounded.Send,
                     null,
                     Modifier.size(18.dp),
-                    tint = if (input.isNotBlank() && !running) colors.onPrimary else colors.onSurfaceVariant,
+                    tint = if (canSend) colors.onPrimary else colors.onSurfaceVariant,
                 )
             }
         }
@@ -703,8 +777,8 @@ private fun AgentHistorySheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Agent history", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
-                    Text("${sessions.size} chats", fontSize = 11.sp, color = colors.onSurfaceVariant)
+                    Text(Strings.aiAgentHistoryTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
+                    Text("${sessions.size} ${Strings.aiHistoryCount}", fontSize = 11.sp, color = colors.onSurfaceVariant)
                 }
                 if (sessions.isNotEmpty()) {
                     IconButton(onClick = onDeleteAll) {
@@ -718,7 +792,7 @@ private fun AgentHistorySheet(
             Spacer(Modifier.height(8.dp))
             if (sessions.isEmpty()) {
                 Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
-                    Text("No agent chats yet", fontSize = 13.sp, color = colors.onSurfaceVariant)
+                    Text(Strings.aiHistoryEmpty, fontSize = 13.sp, color = colors.onSurfaceVariant)
                 }
             } else {
                 LazyColumn(
@@ -744,6 +818,25 @@ private fun AgentHistorySheet(
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = colors.onSurface,
+                                    maxLines = 1,
+                                )
+                                val repoLine = buildString {
+                                    val repo = session.repoFullName.takeIf { it.isNotBlank() }
+                                        ?: Strings.aiAgentHistoryNoRepo
+                                    append(repo)
+                                    if (session.branch.isNotBlank()) {
+                                        append(" · ")
+                                        append(session.branch)
+                                    }
+                                    if (session.modelId.isNotBlank()) {
+                                        append(" · ")
+                                        append(session.modelId)
+                                    }
+                                }
+                                Text(
+                                    repoLine,
+                                    fontSize = 11.sp,
+                                    color = colors.onSurfaceVariant,
                                     maxLines = 1,
                                 )
                                 Text(
@@ -775,7 +868,7 @@ private fun AgentHistorySheet(
             ) {
                 Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = colors.onPrimary)
                 Spacer(Modifier.width(8.dp))
-                Text("New chat", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = colors.onPrimary)
+                Text(Strings.aiAgentHistoryNew, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = colors.onPrimary)
             }
         }
     }
@@ -1085,6 +1178,15 @@ private fun List<AgentEntry>.toAiMessages(): List<AiMessage> =
             is AgentEntry.Assistant ->
                 if (it.text.isBlank()) null else AiMessage(role = "assistant", content = it.text)
             is AgentEntry.ToolCall, is AgentEntry.ToolResult, is AgentEntry.Pending -> null
+        }
+    }
+
+private fun List<AiChatSessionStore.Message>.toAgentEntries(): List<AgentEntry> =
+    mapNotNull { message ->
+        when (message.role) {
+            "user" -> AgentEntry.User(message.content, message.imageBase64)
+            "assistant" -> AgentEntry.Assistant(message.content)
+            else -> null
         }
     }
 
