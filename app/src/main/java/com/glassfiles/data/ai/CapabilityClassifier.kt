@@ -40,9 +40,13 @@ object CapabilityClassifier {
         if (matchesAny(id,
                 "veo", "video-",
                 "wan-video", "wanx-video", "cogvideox",
-                "grok-video",
+                "grok-video", "imagine-video", "grok-imagine-video",
             )
         ) caps += VIDEO_GEN
+
+        // `grok-imagine-video` matches both `imagine` (IMAGE_GEN) and
+        // `imagine-video` (VIDEO_GEN). Video wins.
+        if (VIDEO_GEN in caps) caps -= IMAGE_GEN
 
         // ─── Audio (TTS / STT) ──────────────────────────────────────────────
         if (matchesAny(id, "whisper", "tts-", "tts1", "audio")) caps += AUDIO
