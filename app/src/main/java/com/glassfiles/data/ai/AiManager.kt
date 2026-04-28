@@ -132,8 +132,17 @@ object AiManager {
         // the UI passes the same SharedPreferences — context is implicit there.
         val context = LegacyContextHolder.context
             ?: throw IllegalStateException("AiManager not initialised: call AiManager.init(context) first")
+
+        // The legacy enum carries a per-model `supportsVision` flag. The old code
+        // silently dropped image attachments when sending to non-vision Qwen models;
+        // preserve that behaviour so we don't surface DashScope errors back to the
+        // user when they attach an image to e.g. Qwen-Plus.
+        val safeMessages = if (provider.supportsVision) messages else messages.map { msg ->
+            if (msg.imageBase64 != null) msg.copy(imageBase64 = null) else msg
+        }
+
         return AiProviders.get(providerId)
-            .chat(context, provider.modelId, messages, apiKey, onChunk)
+            .chat(context, provider.modelId, safeMessages, apiKey, onChunk)
     }
 
     /**

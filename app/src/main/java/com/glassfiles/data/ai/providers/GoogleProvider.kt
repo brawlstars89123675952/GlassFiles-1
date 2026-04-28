@@ -28,8 +28,19 @@ object GoogleProvider : AiProvider {
 
     private const val DEFAULT_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
+    /**
+     * Returns the API root WITHOUT a trailing `/models` segment.
+     *
+     * Pre-existing users may have a proxy URL stored as
+     * `https://example.com/v1beta/models` (older builds appended
+     * `/{modelId}:streamGenerateContent` directly to that). We tolerate both
+     * forms by stripping a trailing `/models` and any trailing slashes.
+     */
     private fun base(context: Context): String =
-        AiKeyStore.getGeminiProxy(context).ifBlank { DEFAULT_BASE }
+        AiKeyStore.getGeminiProxy(context)
+            .trimEnd('/')
+            .removeSuffix("/models")
+            .ifBlank { DEFAULT_BASE }
 
     override suspend fun listModels(context: Context, apiKey: String): List<AiModel> = withContext(Dispatchers.IO) {
         // Google uses ?key=<apiKey> rather than Authorization header
