@@ -128,12 +128,20 @@ fun AiAgentScreen(
     initialBranch: String? = null,
     initialPrompt: String? = null,
     onInitialConsumed: () -> Unit = {},
+    /** When true, the screen is rendered inside a bottom sheet:
+     *  - skip status-bar and back-handler wiring (the host owns both),
+     *  - skip the redundant top-bar back arrow. */
+    embedded: Boolean = false,
+    /** When non-null, an X icon is rendered on the top bar that fully
+     * dismisses the screen (vs. [onBack] which only minimises the sheet
+     * inside the bottom-sheet host). */
+    onClose: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
 
-    BackHandler(onBack = onBack)
+    if (!embedded) BackHandler(onBack = onBack)
 
     // ─── State ────────────────────────────────────────────────────────────
     val repos = remember { mutableStateListOf<GHRepo>() }
@@ -460,16 +468,23 @@ fun AiAgentScreen(
         Modifier
             .fillMaxSize()
             .background(colors.surface)
-            .statusBarsPadding()
+            .let { if (embedded) it else it.statusBarsPadding() }
             .imePadding(),
     ) {
         // Top bar
         Row(
-            Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 6.dp),
+            Modifier.fillMaxWidth().padding(
+                start = if (embedded) 16.dp else 4.dp,
+                end = 16.dp,
+                top = 8.dp,
+                bottom = 6.dp,
+            ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = colors.onSurface)
+            if (!embedded) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = colors.onSurface)
+                }
             }
             Text(
                 Strings.aiAgent,
@@ -487,6 +502,11 @@ fun AiAgentScreen(
             if (running) {
                 IconButton(onClick = ::stop) {
                     Icon(Icons.Rounded.Stop, null, Modifier.size(20.dp), tint = colors.error)
+                }
+            }
+            if (onClose != null) {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
                 }
             }
         }

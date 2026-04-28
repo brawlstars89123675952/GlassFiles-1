@@ -7,11 +7,14 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.*
@@ -89,6 +92,11 @@ fun GlassFilesApp(
     var aiAgentInitialRepo by remember { mutableStateOf<String?>(null) }
     var aiAgentInitialBranch by remember { mutableStateOf<String?>(null) }
     var aiAgentInitialPrompt by remember { mutableStateOf<String?>(null) }
+    // Bottom-sheet AI agent (launched from inside GitHub module).
+    // Hidden = not in composition; collapsed = peek bar at the bottom;
+    // expanded = ~85% of the screen with GitHub still mounted behind.
+    var aiSheetVisible by remember { mutableStateOf(false) }
+    var aiSheetExpanded by remember { mutableStateOf(true) }
     var selectedTagName by remember { mutableStateOf("") }
 
     var githubWasOpened by remember { mutableStateOf(false) }
@@ -189,6 +197,12 @@ fun GlassFilesApp(
 
     BackHandler(enabled = true) {
         when {
+            // Expanded AI sheet → collapse to peek; collapsed → dismiss.
+            aiSheetVisible && aiSheetExpanded -> { aiSheetExpanded = false }
+            aiSheetVisible && !aiSheetExpanded -> {
+                aiSheetVisible = false
+                aiAgentInitialRepo = null; aiAgentInitialBranch = null; aiAgentInitialPrompt = null
+            }
             activeScreen == AppScreen.GITHUB && githubWasOpened -> {
                 githubMiniMode = true
                 activeScreen = previousScreen
@@ -205,6 +219,50 @@ fun GlassFilesApp(
         }
     }
 
+    // Single GitHubScreen instance shared between the full-screen Box and
+    // the floating mini-window. movableContentOf lets Compose physically
+    // re-parent the same composition (and therefore preserve every
+    // remember{ ... } block inside GitHubScreen) when the user toggles
+    // mini-mode. Without this, mini ↔ full transitions would unmount
+    // the full screen and remount a fresh one — which is why navigation
+    // would reset to the profile tab on every minimize.
+    val gitHubContent = remember {
+        movableContentOf { compact: Boolean ->
+            GitHubScreen(
+                initialTarget = pendingGitHubTarget,
+                onInitialTargetConsumed = {
+                    pendingGitHubTarget = null
+                    onGitHubNotificationTargetConsumed()
+                },
+                onBack = {
+                    githubMiniMode = true
+                    val prev = previousScreen
+                    activeScreen = prev
+                    previousScreen = AppScreen.MAIN
+                },
+                onMinimize = {
+                    githubMiniMode = true
+                    val prev = previousScreen
+                    activeScreen = prev
+                    previousScreen = AppScreen.MAIN
+                },
+                onClose = { closeGitHubFully() },
+                compact = compact,
+                onOpenAiAgent = { repoFullName, branch, prompt ->
+                    // Show the AI agent as a bottom-sheet overlay on top
+                    // of GitHub — DON'T mini-fy GitHub. The user can
+                    // swipe the sheet down to peek at the GitHub view
+                    // they were working in.
+                    aiAgentInitialRepo = repoFullName
+                    aiAgentInitialBranch = branch
+                    aiAgentInitialPrompt = prompt
+                    aiSheetVisible = true
+                    aiSheetExpanded = true
+                },
+            )
+        }
+    }
+
     Box(Modifier.fillMaxSize().background(SurfaceLight)) {
         if (terminalWasOpened) {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (activeScreen == AppScreen.TERMINAL) 1f else 0f }) {
@@ -212,40 +270,8 @@ fun GlassFilesApp(
             }
         }
 
-        if (githubWasOpened) {
-            if (!githubMiniMode && activeScreen == AppScreen.GITHUB) {
-                Box(Modifier.fillMaxSize()) {
-                    GitHubScreen(
-                        initialTarget = pendingGitHubTarget,
-                        onInitialTargetConsumed = {
-                            pendingGitHubTarget = null
-                            onGitHubNotificationTargetConsumed()
-                        },
-                        onBack = {
-                            githubMiniMode = true
-                            val prev = previousScreen
-                            activeScreen = prev
-                            previousScreen = AppScreen.MAIN
-                        },
-                        onMinimize = {
-                            githubMiniMode = true
-                            val prev = previousScreen
-                            activeScreen = prev
-                            previousScreen = AppScreen.MAIN
-                        },
-                        onClose = { closeGitHubFully() },
-                        onOpenAiAgent = { repoFullName, branch, prompt ->
-                            aiAgentInitialRepo = repoFullName
-                            aiAgentInitialBranch = branch
-                            aiAgentInitialPrompt = prompt
-                            // Mini-fy GitHub so it stays in the background
-                            // bubble; user can swipe back to it from agent.
-                            githubMiniMode = true
-                            navigateTo(AppScreen.AI_AGENT)
-                        }
-                    )
-                }
-            }
+        if (githubWasOpened && !githubMiniMode && activeScreen == AppScreen.GITHUB) {
+            Box(Modifier.fillMaxSize()) { gitHubContent(false) }
         }
 
         AnimatedContent(
@@ -511,12 +537,39 @@ fun GlassFilesApp(
                 onClose = { closeGitHubFully() },
                 onCollapse = { githubBubbleMode = true },
                 winW = ghWinW, winH = ghWinH, winX = ghWinX, winY = ghWinY,
-                onGeometryChange = { w, h, x, y -> ghWinW = w; ghWinH = h; ghWinX = x; ghWinY = y }
+                onGeometryChange = { w, h, x, y -> ghWinW = w; ghWinH = h; ghWinX = x; ghWinY = y },
+                content = { gitHubContent(true) },
             )
         }
 
         if (githubWasOpened && githubBubbleMode) {
             GitHubBubble(onExpand = { githubBubbleMode = false; githubMiniMode = true }, onClose = { closeGitHubFully() })
+        }
+
+        // AI Agent bottom-sheet (overlay on top of activeScreen). Shown
+        // only when launched from inside the GitHub module via the
+        // sparkle icon — opening the agent from the AI hub still uses
+        // the full-screen AI_AGENT route below.
+        if (aiSheetVisible) {
+            AiAgentBottomSheet(
+                expanded = aiSheetExpanded,
+                onExpandedChange = { aiSheetExpanded = it },
+                onClose = {
+                    aiSheetVisible = false
+                    aiSheetExpanded = true
+                    aiAgentInitialRepo = null
+                    aiAgentInitialBranch = null
+                    aiAgentInitialPrompt = null
+                },
+                initialRepoFullName = aiAgentInitialRepo,
+                initialBranch = aiAgentInitialBranch,
+                initialPrompt = aiAgentInitialPrompt,
+                onInitialConsumed = {
+                    aiAgentInitialRepo = null
+                    aiAgentInitialBranch = null
+                    aiAgentInitialPrompt = null
+                },
+            )
         }
 
         if (githubUploadFile != null) {
@@ -548,7 +601,8 @@ private fun GitHubFloatingWindow(
     onClose: () -> Unit,
     onCollapse: () -> Unit,
     winW: Float, winH: Float, winX: Float, winY: Float,
-    onGeometryChange: (Float, Float, Float, Float) -> Unit
+    onGeometryChange: (Float, Float, Float, Float) -> Unit,
+    content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
 
@@ -609,7 +663,7 @@ private fun GitHubFloatingWindow(
                 }
                 Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor))
                 Box(Modifier.fillMaxSize().weight(1f)) {
-                    GitHubScreen(onBack = { onCollapse() }, onMinimize = { onCollapse() }, compact = true)
+                    content()
                 }
             }
             Box(Modifier.align(Alignment.BottomEnd).size(28.dp).pointerInput(Unit) { detectDragGestures { _, d -> windowW = (windowW + d.x).coerceIn(minW, maxW); windowH = (windowH + d.y).coerceIn(minH, maxH); clamp() } }.padding(4.dp), contentAlignment = Alignment.Center) {
@@ -665,6 +719,133 @@ private fun GitHubBubble(onExpand: () -> Unit, onClose: () -> Unit) {
         ) {
             if (avatarUrl != null) coil.compose.AsyncImage(avatarUrl, "GitHub", Modifier.size(52.dp).clip(CircleShape))
             else Icon(Icons.Rounded.Code, null, Modifier.size(24.dp), tint = Blue)
+        }
+    }
+}
+
+/**
+ * AI Agent shown as a bottom sheet *on top of* the GitHub module so the
+ * GitHub view stays mounted (and at full size) behind it.
+ *
+ * Three states from the user's POV:
+ *  - Hidden:    not in composition (controlled by `aiSheetVisible`).
+ *  - Expanded:  ~85 % of screen, dimmed scrim, GitHub still visible at top.
+ *  - Collapsed: thin bar pinned to the bottom, no scrim, GitHub fully visible.
+ *
+ * Drag the handle / bar down → collapse; tap or drag up → expand;
+ * X button → fully dismiss.
+ */
+@Composable
+private fun AiAgentBottomSheet(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onClose: () -> Unit,
+    initialRepoFullName: String?,
+    initialBranch: String?,
+    initialPrompt: String?,
+    onInitialConsumed: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val maxH = maxHeight
+        val collapsedHeight = 56.dp
+        // Leave 64dp peek of the GitHub view at the top so the user
+        // visually sees the sheet is sitting *on top* of GitHub.
+        val expandedHeight = maxH - 64.dp
+        val targetHeight = if (expanded) expandedHeight else collapsedHeight
+        val animatedHeight by animateDpAsState(
+            targetValue = targetHeight,
+            animationSpec = tween(durationMillis = 220),
+            label = "ai-sheet-height",
+        )
+
+        // Scrim — only when expanded; tap to collapse (NOT close).
+        if (expanded) {
+            val scrimInteraction = remember { MutableInteractionSource() }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(colors.scrim.copy(alpha = 0.32f))
+                    .clickable(
+                        interactionSource = scrimInteraction,
+                        indication = null,
+                    ) { onExpandedChange(false) },
+            )
+        }
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(animatedHeight),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            color = colors.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 12.dp,
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                // Drag-handle row: drag down → collapse, drag up → expand,
+                // tap → toggle.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(28.dp)
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures { _, dy ->
+                                if (dy > 4f) onExpandedChange(false)
+                                else if (dy < -4f) onExpandedChange(true)
+                            }
+                        }
+                        .clickable { onExpandedChange(!expanded) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 36.dp, height = 4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(colors.outlineVariant),
+                    )
+                }
+                if (expanded) {
+                    // The agent supplies its own top bar with title +
+                    // history/new/stop buttons; we hand it `onClose` so
+                    // an X icon appears next to those, and `onBack`
+                    // collapses the sheet (matching the drag-down UX).
+                    AiAgentScreen(
+                        onBack = { onExpandedChange(false) },
+                        initialRepoFullName = initialRepoFullName,
+                        initialBranch = initialBranch,
+                        initialPrompt = initialPrompt,
+                        onInitialConsumed = onInitialConsumed,
+                        embedded = true,
+                        onClose = onClose,
+                    )
+                } else {
+                    // Collapsed peek bar: tap or drag up to re-open.
+                    Row(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(start = 16.dp, end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp), tint = colors.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            Strings.aiAgent,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.onSurface,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { onExpandedChange(true) }) {
+                            Icon(Icons.Rounded.KeyboardArrowUp, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                        }
+                        IconButton(onClick = onClose) {
+                            Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
         }
     }
 }
