@@ -56,7 +56,7 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.launch
 import java.io.File
 
-enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_CHAT, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
+enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_HUB, AI_CHAT, AI_KEYS, AI_MODELS, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
 
 @Composable
 fun GlassFilesApp(
@@ -258,8 +258,25 @@ fun GlassFilesApp(
                 }
                 AppScreen.TRASH -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { TrashScreen(trashManager, onBack = { goBack() }) }
                 AppScreen.STORAGE -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { StorageAnalyzerScreen(onBack = { goBack() }) }
+                AppScreen.AI_HUB -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
+                    AiHubScreen(
+                        onBack = { goBack() },
+                        onChat = { navigateTo(AppScreen.AI_CHAT) },
+                        onCoding = { /* PR-3 */ },
+                        onImage = { /* PR-4 */ },
+                        onVideo = { /* PR-5 */ },
+                        onModels = { navigateTo(AppScreen.AI_MODELS) },
+                        onKeys = { navigateTo(AppScreen.AI_KEYS) },
+                    )
+                }
                 AppScreen.AI_CHAT -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
                     AiChatScreen(onBack = { goBack(); aiInitialPrompt = null; aiInitialImage = null }, initialPrompt = aiInitialPrompt, initialImageBase64 = aiInitialImage)
+                }
+                AppScreen.AI_KEYS -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
+                    AiKeysScreen(onBack = { goBack() })
+                }
+                AppScreen.AI_MODELS -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
+                    AiModelsScreen(onBack = { goBack() })
                 }
                 AppScreen.SETTINGS -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { SettingsScreen(settings = settings, onBack = { goBack() }) }
                 AppScreen.DUPLICATES -> Box(Modifier.fillMaxSize().background(SurfaceLight)) { DuplicatesScreen(onBack = { goBack() }) }
@@ -424,7 +441,7 @@ fun GlassFilesApp(
 
                     AnimatedVisibility(folderStack.isEmpty(), enter = fadeIn(tween(300)) + scaleIn(tween(300)), exit = fadeOut(tween(200)) + scaleOut(tween(200)), modifier = Modifier.fillMaxSize()) {
                         Box(Modifier.fillMaxSize()) {
-                            Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 148.dp).clickable { navigateTo(AppScreen.AI_CHAT) }) {
+                            Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 148.dp).clickable { navigateTo(AppScreen.AI_HUB) }) {
                                 GlassFab(backdrop, Icons.Rounded.AutoAwesome, iconTint = Color.White, tintColor = Color(0x66238636))
                             }
                             Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 96.dp).clickable { terminalWasOpened = true; navigateTo(AppScreen.TERMINAL) }) {
