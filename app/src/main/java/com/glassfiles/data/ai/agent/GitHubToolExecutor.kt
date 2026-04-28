@@ -21,6 +21,24 @@ class GitHubToolExecutor(
     private val owner: String,
     private val repo: String,
     private val branch: String,
+    /**
+     * Cost-policy accumulator for the active task. Tools consult it to
+     * cap individual file sizes, count files touched, and short-circuit
+     * once the running total exceeds the configured budget. May be
+     * `null` in unit tests / legacy call sites — in that case all caps
+     * are skipped, exactly matching the pre-cost-policy behaviour.
+     */
+    private val estimate: com.glassfiles.data.ai.cost.AiContextEstimate? = null,
+    /**
+     * Per-(repo, provider) "trust" flag set by the expensive-action
+     * warning dialog (PR-COST-B). When false, secret-file reads /
+     * skiplist overrides return an explicit refusal instead of the
+     * file contents. The agent loop then includes that refusal in the
+     * tool result so the model can ask the user to approve.
+     *
+     * Defaults to false — UI must opt into reading secrets.
+     */
+    private val approvedSecretReads: Boolean = false,
 ) {
     /**
      * In-memory cache of file contents for the current session. Keyed by
@@ -110,18 +128,34 @@ class GitHubToolExecutor(
         val items: List<GHContent> =
             GitHubManager.getRepoContents(context, owner, repo, cleaned, branch)
         if (items.isEmpty()) return "(empty directory)"
+        // Skiplist filter: hide build / cache / vendor folders so the
+        // agent doesn't waste a turn trying to read .git or node_modules.
+        // The skipped count is surfaced as a one-line note so the model
+        // knows they exist (in case the user explicitly asks).
+        val (kept, skipped) = items.partition {
+            !com.glassfiles.data.ai.cost.AiCostPolicy.isInSkipFolder(it.path)
+        }
         return buildString {
-            items.forEach {
+            kept.forEach {
                 val tag = if (it.type == "dir") "[dir] " else "      "
                 appendLine("$tag${it.path}")
+            }
+            if (skipped.isNotEmpty()) {
+                appendLine()
+                appendLine("[cost-policy: ${skipped.size} item(s) hidden — build/cache/vendor folders. Ask the user if you need them.]")
             }
         }.trimEnd()
     }
 
     private suspend fun readFile(context: Context, path: String): String {
         val cleaned = path.trim().trim('/')
+        // Cost-policy refusals — secret files and skipped folders are
+        // returned as explicit refusals so the agent can ask the user
+        // to opt in, rather than silently fetching them.
+        guardCostPolicy(cleaned)?.let { return it }
         val text = fetchFileContent(context, cleaned)
-        return if (text.isBlank()) "(empty file)" else text
+        if (text.isBlank()) return "(empty file)"
+        return capFileToBudget(text)
     }
 
     /**
@@ -147,6 +181,7 @@ class GitHubToolExecutor(
         if (startLine < 1) throw IllegalArgumentException("start_line must be >= 1, got $startLine")
         if (endLine < startLine) throw IllegalArgumentException("end_line ($endLine) must be >= start_line ($startLine)")
         val cleaned = path.trim().trim('/')
+        guardCostPolicy(cleaned)?.let { return it }
         val text = fetchFileContent(context, cleaned)
         if (text.isBlank()) return "(empty file)"
         val lines = text.split('\n')
@@ -211,7 +246,7 @@ class GitHubToolExecutor(
                     }
                 }
             }
-        }.trimEnd()
+        }.trimEnd().let { capDiffToBudget(it) }
     }
 
     private suspend fun listPulls(context: Context, state: String): String {
@@ -338,8 +373,10 @@ class GitHubToolExecutor(
                         // Logs come back gigantic — keep only the tail
                         // (where the error usually lives) so the model
                         // gets actionable context without burning the
-                        // whole turn budget.
-                        val tail = raw.takeLast(2000)
+                        // whole turn budget. Per-task line cap is set
+                        // by the active cost mode.
+                        val maxLines = estimate?.limits?.maxLogLines ?: 250
+                        val tail = raw.lineSequence().toList().takeLast(maxLines).joinToString("\n")
                         appendLine("--- ${j.name} (id=${j.id})")
                         appendLine(if (tail.isBlank()) "(no logs)" else tail)
                     }
@@ -517,4 +554,62 @@ class GitHubToolExecutor(
 
     private fun capped(s: String, max: Int = 6_000): String =
         if (s.length <= max) s else s.take(max) + "\n\n[truncated, ${s.length - max} chars omitted]"
+
+    /**
+     * Cost-policy gate for any path that the agent wants to read.
+     * Returns a non-null refusal string if the read is blocked by
+     * policy; null otherwise. The two refusal cases are:
+     *
+     *  1. Path lies in [com.glassfiles.data.ai.cost.AiCostPolicy.SKIP_FOLDERS]
+     *     (build / cache / vendor) — almost certainly machine-generated
+     *     and a waste of tokens. The agent should ask the user before
+     *     overriding.
+     *  2. Path matches a [com.glassfiles.data.ai.cost.AiCostPolicy.SECRET_FILE_PATTERNS]
+     *     entry. This is a hard refusal even in MaxQuality mode unless
+     *     [approvedSecretReads] is true (set by the warning dialog
+     *     after explicit user confirmation).
+     *
+     * Both refusals also bump the per-task file counter so a malicious
+     * model cannot just retry endlessly to waste credits.
+     */
+    private fun guardCostPolicy(cleanedPath: String): String? {
+        if (com.glassfiles.data.ai.cost.AiCostPolicy.isSecretFile(cleanedPath) && !approvedSecretReads) {
+            estimate?.bumpFile()
+            return "[cost-policy: \"$cleanedPath\" looks like a secret/credentials file. " +
+                "Skipped to protect the user. Ask the user to approve reading this file before retrying.]"
+        }
+        if (com.glassfiles.data.ai.cost.AiCostPolicy.isInSkipFolder(cleanedPath)) {
+            estimate?.bumpFile()
+            return "[cost-policy: \"$cleanedPath\" is inside a build/cache/vendor folder. " +
+                "Skipped to save context. Ask the user if this file is really needed.]"
+        }
+        if (estimate?.filesExhausted == true) {
+            return "[cost-policy: per-task file cap (${estimate.limits.maxFilesPerTask}) reached. " +
+                "Stop reading new files and answer the user with what you already have.]"
+        }
+        estimate?.bumpFile()
+        return null
+    }
+
+    /**
+     * Truncates a single file's contents to [com.glassfiles.data.ai.cost.AiAgentLimits.maxFileSizeBytes].
+     * Falls back to the legacy 6 kB cap when no [estimate] is wired
+     * (legacy call sites / tests).
+     */
+    private fun capFileToBudget(text: String): String {
+        val est = estimate ?: return capped(text)
+        val (out, _) = est.fitFileToBudget(text)
+        return out
+    }
+
+    /**
+     * Truncates a diff blob to [com.glassfiles.data.ai.cost.AiAgentLimits.maxDiffChars].
+     * Used by `compare_refs` so a runaway-diff PR doesn't blow the
+     * context budget.
+     */
+    private fun capDiffToBudget(text: String): String {
+        val cap = estimate?.limits?.maxDiffChars ?: return text
+        return if (text.length <= cap) text
+        else text.take(cap) + "\n[…cost-policy: diff truncated, ${text.length - cap} chars withheld]"
+    }
 }

@@ -454,7 +454,20 @@ fun AiAgentScreen(
         running = true
 
         runJob = scope.launch {
-            val executor = GitHubToolExecutor(repoOwner(repo), repoName(repo), branch)
+            // Cost-policy estimate for this task. Limits come from the
+            // user's selected mode (Eco / Balanced / MaxQuality). The
+            // executor uses it to cap individual file sizes / log lines /
+            // diff sizes; the agent loop uses it to cap total iterations
+            // and total context chars.
+            val costMode = com.glassfiles.data.ai.cost.AiCostModeStore.getMode(context)
+            val limits = com.glassfiles.data.ai.cost.AiCostPolicy.limitsFor(costMode)
+            val estimate = com.glassfiles.data.ai.cost.AiContextEstimate(limits)
+            val executor = GitHubToolExecutor(
+                owner = repoOwner(repo),
+                repo = repoName(repo),
+                branch = branch,
+                estimate = estimate,
+            )
             val provider = AiProviders.get(model.providerId)
             // Filter destructive tools out of the schema sent to the model
             // when the active repo is read-only — without it, the model
@@ -488,6 +501,7 @@ fun AiAgentScreen(
                     autoApproveReads = autoApproveReads,
                     context = context,
                     fallbackCandidates = fallbacks,
+                    estimate = estimate,
                     onFallback = { newModel ->
                         // Reflect the swap in the UI so the user
                         // immediately sees which model is now in
@@ -1861,13 +1875,52 @@ private suspend fun runAgentLoop(
     context: android.content.Context,
     fallbackCandidates: List<FallbackCandidate>,
     onFallback: (AiModel) -> Unit,
+    /**
+     * Cost-policy accumulator for this task. The loop:
+     *  - bumps [com.glassfiles.data.ai.cost.AiContextEstimate.toolCallsExecuted]
+     *    once per tool call (regardless of approval)
+     *  - bumps [com.glassfiles.data.ai.cost.AiContextEstimate.writeProposals]
+     *    once per non-readOnly tool call submitted for approval
+     *  - approximates input/output context size by char count of every
+     *    AiMessage that flows through, then stops the loop early when
+     *    [com.glassfiles.data.ai.cost.AiContextEstimate.contextExhausted]
+     *    or [com.glassfiles.data.ai.cost.AiContextEstimate.toolCallsExhausted]
+     *    fire. When `null`, behaviour matches pre-cost-policy code.
+     */
+    estimate: com.glassfiles.data.ai.cost.AiContextEstimate? = null,
 ) {
     var messages = seedMessages
     var provider = initialProvider
     var modelId = initialModelId
     var apiKey = initialApiKey
     val remainingFallbacks = ArrayDeque(fallbackCandidates)
-    repeat(MAX_ITERATIONS) {
+    // Seed the cost estimate with the initial conversation so a long
+    // pre-existing chat doesn't get a fresh "0 / N" budget when the
+    // user resumes it.
+    estimate?.addInput(seedMessages.sumOf { it.content.length })
+    val maxIterations = estimate?.limits?.maxToolCalls ?: MAX_ITERATIONS
+    repeat(maxIterations) {
+        // Cost-policy backstops. If the user's selected mode says
+        // "you've burned enough already" we drop a final assistant
+        // message and bail. The model has no way to override this
+        // — it's enforced client-side.
+        if (estimate?.contextExhausted == true) {
+            transcript += AgentEntry.Assistant(
+                text = "[cost-policy: context budget reached " +
+                    "(${estimate.totalChars} / ${estimate.limits.maxTotalContextChars} chars). " +
+                    "Stopping to protect your token budget. Increase the cost mode in settings " +
+                    "or start a new task to continue.]",
+            )
+            return
+        }
+        if (estimate?.writeProposalsExhausted == true) {
+            transcript += AgentEntry.Assistant(
+                text = "[cost-policy: too many write proposals in this task " +
+                    "(${estimate.writeProposals} / ${estimate.limits.maxWriteProposals}). " +
+                    "Stopping to avoid runaway edits.]",
+            )
+            return
+        }
         // Compact older turns when the rolling transcript grows past the
         // soft limit — without this the next provider call eventually
         // 4xx's on the model's context window. We keep the most recent
@@ -1931,6 +1984,8 @@ private suspend fun runAgentLoop(
         for (call in turn.toolCalls) {
             transcript += AgentEntry.ToolCall(call)
             val tool = AgentTools.byName(call.name)
+            estimate?.bumpToolCall()
+            if (tool?.readOnly == false) estimate?.bumpWriteProposal()
             val approved = if (tool?.readOnly == true && autoApproveReads) {
                 true
             } else {
@@ -1945,15 +2000,45 @@ private suspend fun runAgentLoop(
             } else {
                 executor.execute(context, call)
             }
-            transcript += AgentEntry.ToolResult(result)
+            // Accumulate the size of the tool result against the
+            // per-task context budget. We cap each individual result
+            // so a single mis-tooled call cannot blow the budget on
+            // its own — the next iteration's [contextExhausted] check
+            // catches the cumulative case.
+            val (capped, _) = estimate?.fitToBudget(result.output)
+                ?: (result.output to false)
+            estimate?.addInput(capped.length)
+            transcript += AgentEntry.ToolResult(
+                if (capped === result.output) result
+                else AiToolResult(
+                    callId = result.callId,
+                    name = result.name,
+                    output = capped,
+                    isError = result.isError,
+                ),
+            )
             results += AiMessage(
                 role = "tool",
-                content = result.output,
+                content = capped,
                 toolCallId = result.callId,
                 toolName = result.name,
             )
         }
+        // Approximate the assistant text against the running total too,
+        // so the loop stops fairly even when the model just monologues.
+        estimate?.addOutput(turn.assistantText.length)
         messages = messages + assistantMsg + results
+        // Loop-end backstop on the iteration cap. Called here in
+        // addition to the `repeat` count so a small estimate cap (eg
+        // Eco's 15) wins even when [MAX_ITERATIONS] would still allow.
+        if (estimate?.toolCallsExhausted == true) {
+            transcript += AgentEntry.Assistant(
+                text = "[cost-policy: per-task tool-call cap reached " +
+                    "(${estimate.toolCallsExecuted} / ${estimate.limits.maxToolCalls}). " +
+                    "Stopping. Switch to a higher cost mode if you need more iterations.]",
+            )
+            return
+        }
     }
 }
 
