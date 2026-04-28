@@ -346,6 +346,14 @@ object Strings {
         "Выбери репозиторий и ветку, чтобы инструменты заработали.",
         "Pick a repo and branch to enable the tools.",
     )
+    val aiAgentHistorySearchHint get() = s("Поиск по истории…", "Search history…")
+    val aiHistorySearchEmpty get() = s("Ничего не найдено", "No matches")
+    val aiAgentCostLabel get() = s("Стоимость", "Cost")
+    val aiAgentTokensLabel get() = s("ток.", "tok")
+    val aiAgentFallbackToast get() = s(
+        "Провайдер недоступен — переключился на {model}.",
+        "Provider unavailable — falling back to {model}.",
+    )
 
     val about get() = s("О приложении", "About")
     val version get() = s("Версия", "Version")

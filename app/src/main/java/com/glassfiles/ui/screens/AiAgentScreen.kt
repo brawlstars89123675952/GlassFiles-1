@@ -46,6 +46,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Checkbox
@@ -180,6 +181,10 @@ fun AiAgentScreen(
     var running by remember { mutableStateOf(false) }
     var runJob by remember { mutableStateOf<Job?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Banner text shown when the active provider 429/5xx'd and we
+    // automatically swapped to a different tool-use model. Cleared on
+    // the next successful send.
+    var fallbackNotice by remember { mutableStateOf<String?>(null) }
     // Per-session "I've seen the warning" flag for private repos. Re-shown
     // each time the user opens a different private repo.
     var privateRepoDismissed by remember { mutableStateOf<String?>(null) }
@@ -441,6 +446,7 @@ fun AiAgentScreen(
             return
         }
         error = null
+        fallbackNotice = null
         input = TextFieldValue("")
         pendingImage = null
         transcript += AgentEntry.User(text, image)
@@ -459,18 +465,38 @@ fun AiAgentScreen(
             } else {
                 AgentTools.ALL.filter { it.readOnly }
             }
+            // Build the ordered fallback list: every other tool-use
+            // capable model the user has a key for, ranked by the same
+            // heuristic that picked `selectedModel` originally. We
+            // deliberately exclude models without tools support since
+            // the agent loop cannot survive on a non-tool model.
+            val fallbacks = buildFallbackCandidates(
+                context = context,
+                allModels = models,
+                exclude = model,
+            )
             try {
                 runAgentLoop(
                     seedMessages = transcript.toAiMessages(),
-                    provider = provider,
-                    modelId = model.id,
-                    apiKey = key,
+                    initialProvider = provider,
+                    initialModelId = model.id,
+                    initialApiKey = key,
                     tools = tools,
                     executor = executor,
                     transcript = transcript,
                     approvals = approvals,
                     autoApproveReads = autoApproveReads,
                     context = context,
+                    fallbackCandidates = fallbacks,
+                    onFallback = { newModel ->
+                        // Reflect the swap in the UI so the user
+                        // immediately sees which model is now in
+                        // charge — and so cost / token meter switches
+                        // to the new pricing rate.
+                        selectedModel = newModel
+                        fallbackNotice = Strings.aiAgentFallbackToast
+                            .replace("{model}", newModel.displayName)
+                    },
                 )
             } catch (e: Exception) {
                 error = e.message ?: e.javaClass.simpleName
@@ -511,6 +537,20 @@ fun AiAgentScreen(
                 fontWeight = FontWeight.Bold,
                 color = colors.onSurface,
             )
+            // Cost / token meter — derived from the transcript so it
+            // updates as new turns land. No live tracking inside
+            // runAgentLoop is needed; the rate table provides USD
+            // estimates only when we know the model's pricing.
+            val costRate = remember(selectedModel?.uniqueKey) {
+                selectedModel?.let { com.glassfiles.data.ai.ModelPricing.rateFor(it) }
+            }
+            val sessionStats by remember(selectedModel?.uniqueKey) {
+                derivedStateOf { computeSessionStats(transcript, costRate) }
+            }
+            if (sessionStats.totalChars > 0) {
+                Spacer(Modifier.width(8.dp))
+                CostMeter(stats = sessionStats)
+            }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { showHistory = true }) {
                 Icon(Icons.Rounded.Chat, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
@@ -710,6 +750,39 @@ fun AiAgentScreen(
                 color = colors.error,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
             )
+        }
+        fallbackNotice?.let { notice ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(colors.tertiaryContainer.copy(alpha = 0.6f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.Warning,
+                    null,
+                    Modifier.size(16.dp),
+                    tint = colors.onTertiaryContainer,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    notice,
+                    fontSize = 12.sp,
+                    color = colors.onTertiaryContainer,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { fallbackNotice = null }, modifier = Modifier.size(20.dp)) {
+                    Icon(
+                        Icons.Rounded.Close,
+                        null,
+                        Modifier.size(14.dp),
+                        tint = colors.onTertiaryContainer,
+                    )
+                }
+            }
         }
 
         if (pendingImage != null) {
@@ -957,6 +1030,25 @@ private fun AgentHistorySheet(
 ) {
     val colors = MaterialTheme.colorScheme
     val sdf = remember { SimpleDateFormat("dd.MM.yy HH:mm", Locale.getDefault()) }
+    var query by remember { mutableStateOf("") }
+    // Filter on title / repo / branch / model / first user message. Each
+    // session is matched once per token (whitespace-split), so the user
+    // can type multiple keywords ("kotlin main") and progressively narrow
+    // the list. Empty query short-circuits to the full list.
+    val filteredSessions = remember(sessions, query) {
+        val tokens = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (tokens.isEmpty()) sessions
+        else sessions.filter { session ->
+            val haystack = buildString {
+                appendLine(session.title)
+                appendLine(session.repoFullName)
+                appendLine(session.branch)
+                appendLine(session.modelId)
+                session.messages.take(6).forEach { appendLine(it.content.take(400)) }
+            }.lowercase()
+            tokens.all { haystack.contains(it) }
+        }
+    }
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
@@ -972,7 +1064,12 @@ private fun AgentHistorySheet(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(Strings.aiAgentHistoryTitle, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
-                    Text("${sessions.size} ${Strings.aiHistoryCount}", fontSize = 11.sp, color = colors.onSurfaceVariant)
+                    val counter = if (query.isBlank()) {
+                        "${sessions.size} ${Strings.aiHistoryCount}"
+                    } else {
+                        "${filteredSessions.size}/${sessions.size} ${Strings.aiHistoryCount}"
+                    }
+                    Text(counter, fontSize = 11.sp, color = colors.onSurfaceVariant)
                 }
                 if (sessions.isNotEmpty()) {
                     IconButton(onClick = onDeleteAll) {
@@ -983,10 +1080,22 @@ private fun AgentHistorySheet(
                     Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
                 }
             }
+            if (sessions.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                HistorySearchField(
+                    query = query,
+                    onQueryChange = { query = it },
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+            }
             Spacer(Modifier.height(8.dp))
             if (sessions.isEmpty()) {
                 Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
                     Text(Strings.aiHistoryEmpty, fontSize = 13.sp, color = colors.onSurfaceVariant)
+                }
+            } else if (filteredSessions.isEmpty()) {
+                Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
+                    Text(Strings.aiHistorySearchEmpty, fontSize = 13.sp, color = colors.onSurfaceVariant)
                 }
             } else {
                 LazyColumn(
@@ -994,7 +1103,7 @@ private fun AgentHistorySheet(
                     contentPadding = PaddingValues(horizontal = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    items(sessions, key = { it.id }) { session ->
+                    items(filteredSessions, key = { it.id }) { session ->
                         Row(
                             Modifier
                                 .fillMaxWidth()
@@ -1063,6 +1172,132 @@ private fun AgentHistorySheet(
                 Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = colors.onPrimary)
                 Spacer(Modifier.width(8.dp))
                 Text(Strings.aiAgentHistoryNew, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = colors.onPrimary)
+            }
+        }
+    }
+}
+
+/** Per-session usage rollup — derived from the transcript. */
+private data class SessionStats(
+    val inputChars: Int,
+    val outputChars: Int,
+    val totalChars: Int,
+    val tokens: Int,
+    val costUsd: Double?,
+)
+
+private fun computeSessionStats(
+    transcript: List<AgentEntry>,
+    rate: com.glassfiles.data.ai.ModelPricing.Rate?,
+): SessionStats {
+    // Input = what the model has to ingest each turn — the user's
+    // prompts plus every tool result we feed back to it. Output = what
+    // it generated for us (assistant text and tool-call JSON args).
+    var input = 0
+    var output = 0
+    transcript.forEach { entry ->
+        when (entry) {
+            is AgentEntry.User -> input += entry.text.length + (entry.imageBase64?.length ?: 0) / 8
+            is AgentEntry.Assistant -> output += entry.text.length
+            is AgentEntry.ToolCall -> output += entry.call.argsJson.length
+            is AgentEntry.ToolResult -> input += entry.result.output.length
+            is AgentEntry.Pending -> Unit
+        }
+    }
+    val total = input + output
+    val tokens = com.glassfiles.data.ai.ModelPricing.estimateTokens(total)
+    val cost = rate?.let { com.glassfiles.data.ai.ModelPricing.estimateCostUsd(it, input, output) }
+    return SessionStats(input, output, total, tokens, cost)
+}
+
+@Composable
+private fun CostMeter(stats: SessionStats) {
+    val colors = MaterialTheme.colorScheme
+    val tokenLabel = when {
+        stats.tokens >= 1000 -> "%.1fk".format(stats.tokens / 1000.0)
+        else -> stats.tokens.toString()
+    }
+    val costLabel = stats.costUsd?.let { c ->
+        when {
+            c < 0.01 -> "<\$0.01"
+            c < 1.0 -> "\$%.3f".format(c)
+            else -> "\$%.2f".format(c)
+        }
+    }
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(colors.surfaceVariant.copy(alpha = 0.5f))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (costLabel != null) {
+            Text(
+                costLabel,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.onSurface,
+                fontFamily = FontFamily.Monospace,
+            )
+            Spacer(Modifier.width(6.dp))
+            Box(
+                Modifier
+                    .size(width = 1.dp, height = 10.dp)
+                    .background(colors.outlineVariant.copy(alpha = 0.6f))
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            "$tokenLabel ${Strings.aiAgentTokensLabel}",
+            fontSize = 11.sp,
+            color = colors.onSurfaceVariant,
+            fontFamily = FontFamily.Monospace,
+        )
+    }
+}
+
+@Composable
+private fun HistorySearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(colors.surfaceVariant.copy(alpha = 0.5f))
+            .border(1.dp, colors.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Search, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.weight(1f)) {
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                textStyle = TextStyle(color = colors.onSurface, fontSize = 13.sp),
+                cursorBrush = SolidColor(colors.primary),
+                decorationBox = { inner ->
+                    if (query.isEmpty()) {
+                        Text(
+                            Strings.aiAgentHistorySearchHint,
+                            color = colors.onSurfaceVariant,
+                            fontSize = 13.sp,
+                        )
+                    }
+                    inner()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (query.isNotEmpty()) {
+            Spacer(Modifier.width(6.dp))
+            IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(20.dp)) {
+                Icon(Icons.Rounded.Close, null, Modifier.size(14.dp), tint = colors.onSurfaceVariant)
             }
         }
     }
@@ -1615,17 +1850,23 @@ private fun ToolResultCard(entry: AgentEntry.ToolResult) {
 
 private suspend fun runAgentLoop(
     seedMessages: List<AiMessage>,
-    provider: com.glassfiles.data.ai.providers.AiProvider,
-    modelId: String,
-    apiKey: String,
+    initialProvider: com.glassfiles.data.ai.providers.AiProvider,
+    initialModelId: String,
+    initialApiKey: String,
     tools: List<com.glassfiles.data.ai.agent.AiTool>,
     executor: GitHubToolExecutor,
     transcript: androidx.compose.runtime.snapshots.SnapshotStateList<AgentEntry>,
     approvals: androidx.compose.runtime.snapshots.SnapshotStateList<PendingApproval>,
     autoApproveReads: Boolean,
     context: android.content.Context,
+    fallbackCandidates: List<FallbackCandidate>,
+    onFallback: (AiModel) -> Unit,
 ) {
     var messages = seedMessages
+    var provider = initialProvider
+    var modelId = initialModelId
+    var apiKey = initialApiKey
+    val remainingFallbacks = ArrayDeque(fallbackCandidates)
     repeat(MAX_ITERATIONS) {
         // Compact older turns when the rolling transcript grows past the
         // soft limit — without this the next provider call eventually
@@ -1641,20 +1882,22 @@ private suspend fun runAgentLoop(
         val streamingIndex = transcript.lastIndex
 
         val turn = try {
-            provider.chatWithToolsStreaming(
+            callWithFallback(
                 context = context,
-                modelId = modelId,
-                messages = messages,
                 tools = tools,
-                apiKey = apiKey,
-                onTextDelta = { delta ->
-                    if (streamingIndex in transcript.indices) {
-                        val current = transcript[streamingIndex] as? AgentEntry.Assistant
-                        if (current != null) {
-                            transcript[streamingIndex] = current.copy(text = current.text + delta)
-                        }
-                    }
+                messages = messages,
+                streamingIndex = streamingIndex,
+                transcript = transcript,
+                remainingFallbacks = remainingFallbacks,
+                onFallback = { model, newProvider, newModelId, newKey ->
+                    provider = newProvider
+                    modelId = newModelId
+                    apiKey = newKey
+                    onFallback(model)
                 },
+                provider = provider,
+                modelId = modelId,
+                apiKey = apiKey,
             )
         } catch (e: Exception) {
             // Drop the empty placeholder before rethrowing so the run-job
@@ -1776,6 +2019,128 @@ private suspend fun compactIfNeeded(
 }
 
 // ─── Helpers / data ───────────────────────────────────────────────────────
+
+/** One fallback target — model + already-resolved provider/key pair. */
+private data class FallbackCandidate(
+    val model: AiModel,
+    val provider: com.glassfiles.data.ai.providers.AiProvider,
+    val apiKey: String,
+)
+
+/**
+ * Build the ordered fallback list used by [runAgentLoop] when the
+ * active provider returns 429 / 5xx. We keep only models the user has
+ * a key for, sort them with the same heuristic the initial picker
+ * uses, and exclude the currently-selected model so we don't bounce
+ * back to the failing one.
+ */
+private fun buildFallbackCandidates(
+    context: android.content.Context,
+    allModels: List<AiModel>,
+    exclude: AiModel,
+): List<FallbackCandidate> {
+    val rank: (AiModel) -> Int = { m ->
+        val id = m.id.lowercase()
+        when {
+            id.contains("gpt-4.1") || id.contains("gpt-4o") -> 0
+            id.contains("claude-3.5") || id.contains("claude-sonnet") || id.contains("claude-opus") -> 1
+            id.contains("gpt-4") -> 2
+            id.contains("o1") || id.contains("o3") -> 3
+            id.contains("claude") -> 4
+            id.contains("grok") -> 5
+            else -> 9
+        }
+    }
+    return allModels
+        .asSequence()
+        .filter { it.uniqueKey != exclude.uniqueKey }
+        .sortedBy(rank)
+        .mapNotNull { m ->
+            val key = AiKeyStore.getKey(context, m.providerId)
+            if (key.isBlank()) null
+            else FallbackCandidate(m, AiProviders.get(m.providerId), key)
+        }
+        .toList()
+}
+
+/** Heuristic: is this an HTTP error worth retrying on a different provider? */
+private fun isFallbackEligibleError(t: Throwable): Boolean {
+    val msg = t.message ?: return false
+    // Provider HTTP errors are formatted as "<Name> HTTP <code>: <detail>"
+    // by [Http.ensureOk] — we look for 429 (rate-limited) and 5xx
+    // (server-side outage). Network-layer IOException without a code
+    // also qualifies since the user's intent is "try something else".
+    return msg.contains("HTTP 429") ||
+        msg.contains("HTTP 500") ||
+        msg.contains("HTTP 502") ||
+        msg.contains("HTTP 503") ||
+        msg.contains("HTTP 504") ||
+        msg.contains("HTTP 529")
+}
+
+/**
+ * Wrap one [AiProvider.chatWithToolsStreaming] call with provider
+ * fallback. On a 429/5xx-style failure we drop to the next
+ * [FallbackCandidate], notify the screen, and try again. The
+ * [streamingIndex] entry is reset between attempts so the user sees
+ * the new model start fresh instead of the previous half-streamed
+ * text.
+ */
+private suspend fun callWithFallback(
+    context: android.content.Context,
+    tools: List<com.glassfiles.data.ai.agent.AiTool>,
+    messages: List<AiMessage>,
+    streamingIndex: Int,
+    transcript: androidx.compose.runtime.snapshots.SnapshotStateList<AgentEntry>,
+    remainingFallbacks: ArrayDeque<FallbackCandidate>,
+    onFallback: (
+        AiModel,
+        com.glassfiles.data.ai.providers.AiProvider,
+        String,
+        String,
+    ) -> Unit,
+    provider: com.glassfiles.data.ai.providers.AiProvider,
+    modelId: String,
+    apiKey: String,
+): com.glassfiles.data.ai.providers.AiToolTurn {
+    var p = provider
+    var id = modelId
+    var k = apiKey
+    while (true) {
+        try {
+            return p.chatWithToolsStreaming(
+                context = context,
+                modelId = id,
+                messages = messages,
+                tools = tools,
+                apiKey = k,
+                onTextDelta = { delta ->
+                    if (streamingIndex in transcript.indices) {
+                        val current = transcript[streamingIndex] as? AgentEntry.Assistant
+                        if (current != null) {
+                            transcript[streamingIndex] = current.copy(text = current.text + delta)
+                        }
+                    }
+                },
+            )
+        } catch (e: Exception) {
+            if (!isFallbackEligibleError(e) || remainingFallbacks.isEmpty()) throw e
+            val next = remainingFallbacks.removeFirst()
+            // Reset the streamed placeholder so the new model's text
+            // doesn't append to whatever the failed attempt produced.
+            if (streamingIndex in transcript.indices) {
+                val current = transcript[streamingIndex] as? AgentEntry.Assistant
+                if (current != null) {
+                    transcript[streamingIndex] = current.copy(text = "")
+                }
+            }
+            p = next.provider
+            id = next.model.id
+            k = next.apiKey
+            onFallback(next.model, p, id, k)
+        }
+    }
+}
 
 private fun preferToolUseModel(models: List<AiModel>): AiModel? {
     val rank: (AiModel) -> Int = { m ->
