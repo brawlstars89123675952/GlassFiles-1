@@ -405,6 +405,70 @@ object AgentTools {
         readOnly = true,
     )
 
+    /**
+     * Posts a comment on an existing pull request. Write tool — gated
+     * by the same approve/reject card as `write_file`. The comment
+     * body is shown to the user verbatim before the call goes out.
+     */
+    val COMMENT_PR = AiTool(
+        name = "comment_pr",
+        description = "Post a comment on an existing pull request in the active repository.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("number", obj {
+                    put("type", "integer")
+                    put("description", "PR number.")
+                })
+                put("body", obj {
+                    put("type", "string")
+                    put("description", "Comment body in markdown.")
+                })
+            })
+            put("required", arr("number", "body"))
+        },
+        readOnly = false,
+    )
+
+    /** Posts a comment on an existing issue. Write tool. */
+    val COMMENT_ISSUE = AiTool(
+        name = "comment_issue",
+        description = "Post a comment on an existing issue in the active repository.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("number", obj {
+                    put("type", "integer")
+                    put("description", "Issue number.")
+                })
+                put("body", obj {
+                    put("type", "string")
+                    put("description", "Comment body in markdown.")
+                })
+            })
+            put("required", arr("number", "body"))
+        },
+        readOnly = false,
+    )
+
+    /** Creates a new issue. Write tool. */
+    val CREATE_ISSUE = AiTool(
+        name = "create_issue",
+        description = "Create a new issue in the active repository.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("title", obj { put("type", "string") })
+                put("body", obj {
+                    put("type", "string")
+                    put("description", "Issue body in markdown.")
+                })
+            })
+            put("required", arr("title"))
+        },
+        readOnly = false,
+    )
+
     /** All tools, in canonical order. */
     val ALL: List<AiTool> = listOf(
         LIST_DIR, READ_FILE, READ_FILE_RANGE, SEARCH_REPO,
@@ -413,6 +477,7 @@ object AgentTools {
         LIST_ISSUES, READ_ISSUE,
         READ_CHECK_RUNS, READ_WORKFLOW_RUN,
         EDIT_FILE, WRITE_FILE, CREATE_BRANCH, COMMIT, OPEN_PR,
+        COMMENT_PR, COMMENT_ISSUE, CREATE_ISSUE,
     )
 
     fun byName(name: String): AiTool? = ALL.firstOrNull { it.name == name }
