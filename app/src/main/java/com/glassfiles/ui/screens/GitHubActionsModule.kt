@@ -2017,7 +2017,7 @@ internal fun WorkflowRunDetailScreen(
                         if (firstFailed != null) {
                             append("Failed job: ").append(firstFailed.name).append('\n')
                         }
-                        r?.headBranch?.takeIf { it.isNotBlank() }?.let {
+                        r?.branch?.takeIf { it.isNotBlank() }?.let {
                             append("Branch: ").append(it).append('\n')
                         }
                         r?.htmlUrl?.takeIf { it.isNotBlank() }?.let {
