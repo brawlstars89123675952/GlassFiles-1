@@ -538,6 +538,53 @@ fun AiAgentScreen(
                 persistSession()
                 running = false
                 runJob = null
+                // Local-only usage record. We never store prompt /
+                // file contents — only counters and labels. See
+                // AiUsageRecord kdoc for the privacy contract.
+                runCatching {
+                    val readToolNames = setOf(
+                        com.glassfiles.data.ai.agent.AgentTools.LIST_DIR.name,
+                        com.glassfiles.data.ai.agent.AgentTools.READ_FILE.name,
+                        com.glassfiles.data.ai.agent.AgentTools.READ_FILE_RANGE.name,
+                        com.glassfiles.data.ai.agent.AgentTools.SEARCH_REPO.name,
+                        com.glassfiles.data.ai.agent.AgentTools.LIST_BRANCHES.name,
+                        com.glassfiles.data.ai.agent.AgentTools.COMPARE_REFS.name,
+                        com.glassfiles.data.ai.agent.AgentTools.LIST_PULLS.name,
+                        com.glassfiles.data.ai.agent.AgentTools.READ_PR.name,
+                        com.glassfiles.data.ai.agent.AgentTools.LIST_ISSUES.name,
+                        com.glassfiles.data.ai.agent.AgentTools.READ_ISSUE.name,
+                        com.glassfiles.data.ai.agent.AgentTools.READ_CHECK_RUNS.name,
+                        com.glassfiles.data.ai.agent.AgentTools.READ_WORKFLOW_RUN.name,
+                    )
+                    val writeToolNames = setOf(
+                        com.glassfiles.data.ai.agent.AgentTools.EDIT_FILE.name,
+                        com.glassfiles.data.ai.agent.AgentTools.WRITE_FILE.name,
+                        com.glassfiles.data.ai.agent.AgentTools.COMMIT.name,
+                        com.glassfiles.data.ai.agent.AgentTools.OPEN_PR.name,
+                    )
+                    val toolCalls = transcript.filterIsInstance<AgentEntry.ToolCall>()
+                    val readCalls = toolCalls.count { it.call.name in readToolNames }
+                    val writeCalls = toolCalls.count { it.call.name in writeToolNames }
+                    com.glassfiles.data.ai.usage.AiUsageStore.append(
+                        context,
+                        com.glassfiles.data.ai.usage.AiUsageRecord(
+                            providerId = model.providerId.name,
+                            modelId = model.id,
+                            mode = com.glassfiles.data.ai.usage.AiUsageMode.GITHUB_AGENT,
+                            estimatedInputChars = estimate.totalChars,
+                            estimatedOutputChars = 0,
+                            toolCallsCount = estimate.toolCallsExecuted,
+                            filesReadCount = readCalls,
+                            filesWrittenCount = writeCalls,
+                            writeProposalsCount = estimate.writeProposals,
+                            repoName = repo.fullName,
+                            branchName = branch,
+                            isPrivateRepo = repo.isPrivate,
+                            costMode = costMode.name,
+                            estimated = true,
+                        ),
+                    )
+                }
             }
         }
     }

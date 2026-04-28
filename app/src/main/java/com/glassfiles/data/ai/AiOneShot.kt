@@ -5,6 +5,9 @@ import com.glassfiles.data.ai.models.AiCapability
 import com.glassfiles.data.ai.models.AiMessage
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.providers.AiProviders
+import com.glassfiles.data.ai.usage.AiUsageMode
+import com.glassfiles.data.ai.usage.AiUsageRecord
+import com.glassfiles.data.ai.usage.AiUsageStore
 
 /**
  * Convenience wrapper around a single non-streaming, non-tool-use chat
@@ -76,6 +79,7 @@ object AiOneShot {
             add(AiMessage(role = "user", content = userPrompt))
         }
         val out = StringBuilder()
+        val inputChars = messages.sumOf { it.content.length }
         provider.chat(
             context = context,
             modelId = model.id,
@@ -83,6 +87,24 @@ object AiOneShot {
             apiKey = key,
             onChunk = { out.append(it) },
         )
-        return out.toString().trim()
+        val text = out.toString().trim()
+        // Best-effort local usage record. Provider chat() doesn't
+        // surface real token usage from the streaming API yet, so
+        // we mark this as estimated. Flip [estimated] to false once
+        // a provider returns its own input/output token counts.
+        runCatching {
+            AiUsageStore.append(
+                context,
+                AiUsageRecord(
+                    providerId = model.providerId.name,
+                    modelId = model.id,
+                    mode = AiUsageMode.CODING,
+                    estimatedInputChars = inputChars,
+                    estimatedOutputChars = text.length,
+                    estimated = true,
+                ),
+            )
+        }
+        return text
     }
 }

@@ -415,6 +415,43 @@ object Strings {
     val aiCostWarningContinueOnce get() = s("Продолжить один раз", "Continue once")
     val aiCostWarningContinueRemember get() = s("Продолжить и запомнить", "Continue and remember")
 
+    // ─── Local AI usage tracking (PR-COST-C) ───────────────────────
+    val aiUsageTitle get() = s("AI Usage", "AI Usage")
+    val aiUsageSubtitle get() = s(
+        "Локальная статистика по запросам, токенам и тулам.",
+        "Local stats: requests, tokens, tool calls.",
+    )
+    val aiUsageWindowToday get() = s("Сегодня", "Today")
+    val aiUsageWindowWeek get() = s("Неделя", "Week")
+    val aiUsageWindowMonth get() = s("Месяц", "Month")
+    val aiUsageEmpty get() = s(
+        "Пока нет записей. Запусти задачу в AI Agent или сгенерируй картинку — здесь появится статистика.",
+        "No records yet. Run a task in AI Agent or generate an image — stats will show up here.",
+    )
+    val aiUsageRecords get() = s("Запросов", "Requests")
+    val aiUsageTokens get() = s("Токенов", "Tokens")
+    val aiUsageTokensEstimateOnly get() = s("оценочно", "estimate only")
+    val aiUsageChars get() = s("Символов", "Chars")
+    val aiUsageToolCalls get() = s("Тул-коллов", "Tool calls")
+    val aiUsageFilesRead get() = s("Файлов прочитано", "Files read")
+    val aiUsageFilesWritten get() = s("Файлов записано", "Files written")
+    val aiUsageEstimated get() = s("Оценочные", "Estimated")
+    val aiUsageEstimatedFmt get() = s("{n} из {total}", "{n} of {total}")
+    val aiUsageByProvider get() = s("ПО ПРОВАЙДЕРАМ", "BY PROVIDER")
+    val aiUsageByModel get() = s("ПО МОДЕЛЯМ", "BY MODEL")
+    val aiUsageByMode get() = s("ПО РЕЖИМАМ", "BY MODE")
+    val aiUsageBucketSubtitle get() = s("{n} запросов · {chars} симв.", "{n} requests · {chars} chars")
+    val aiUsageDisclaimer get() = s(
+        "Локальная оценка. Реальный счёт у провайдера может отличаться.",
+        "Local estimate only. Final billing may differ from the provider dashboard.",
+    )
+    val aiUsageClearTitle get() = s("Очистить локальную статистику?", "Clear local usage stats?")
+    val aiUsageClearBody get() = s(
+        "Будут удалены все записи об использовании AI с этого устройства. Действие нельзя отменить.",
+        "All AI usage records on this device will be removed. This cannot be undone.",
+    )
+    val aiUsageClearConfirm get() = s("Очистить", "Clear")
+
     val about get() = s("О приложении", "About")
     val version get() = s("Версия", "Version")
 

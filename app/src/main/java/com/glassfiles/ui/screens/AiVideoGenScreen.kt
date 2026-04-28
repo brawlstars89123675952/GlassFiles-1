@@ -242,6 +242,19 @@ fun AiVideoGenScreen(onBack: () -> Unit) {
             } finally {
                 generating = false
                 status = ""
+                runCatching {
+                    com.glassfiles.data.ai.usage.AiUsageStore.append(
+                        context,
+                        com.glassfiles.data.ai.usage.AiUsageRecord(
+                            providerId = model.providerId.name,
+                            modelId = model.id,
+                            mode = com.glassfiles.data.ai.usage.AiUsageMode.VIDEO,
+                            estimatedInputChars = text.length,
+                            estimatedOutputChars = 0,
+                            estimated = true,
+                        ),
+                    )
+                }
                 generationJob = null
             }
         }
