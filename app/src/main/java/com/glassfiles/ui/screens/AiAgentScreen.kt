@@ -768,209 +768,71 @@ fun AiAgentScreen(
         runTaskInternal(text, image)
     }
 
-    // ─── UI ───────────────────────────────────────────────────────────────
+    // ─── UI (terminal mode) ────────────────────────────────────────────────
+    // Terminal-mode local state. These flags only drive the agent-screen
+    // chrome; they are intentionally NOT persisted to the cost / chat
+    // store because they are pure presentation toggles.
+    var showSettings by remember { mutableStateOf(false) }
+    var instantRender by remember { mutableStateOf(false) }
+    val terminalColors = com.glassfiles.ui.screens.ai.terminal.AgentTerminalDarkColors
+
+    com.glassfiles.ui.screens.ai.terminal.AgentTerminalSurface(colors = terminalColors) {
     Column(
         Modifier
             .fillMaxSize()
-            .background(colors.surface)
             .let { if (embedded) it else it.statusBarsPadding() }
             .imePadding(),
     ) {
-        // Top bar
-        Row(
-            Modifier.fillMaxWidth().padding(
-                start = if (embedded) 16.dp else 4.dp,
-                end = 16.dp,
-                top = 8.dp,
-                bottom = 6.dp,
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (!embedded) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = colors.onSurface)
-                }
-            }
-            Text(
-                Strings.aiAgent,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.onSurface,
-            )
-            // Cost / token meter — derived from the transcript so it
-            // updates as new turns land. No live tracking inside
-            // runAgentLoop is needed; the rate table provides USD
-            // estimates only when we know the model's pricing.
-            val costRate = remember(selectedModel?.uniqueKey) {
-                selectedModel?.let { com.glassfiles.data.ai.ModelPricing.rateFor(it) }
-            }
-            val sessionStats by remember(selectedModel?.uniqueKey) {
-                derivedStateOf { computeSessionStats(transcript, costRate) }
-            }
-            if (sessionStats.totalChars > 0) {
-                Spacer(Modifier.width(8.dp))
-                CostMeter(stats = sessionStats)
-            }
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = { showHistory = true }) {
-                Icon(Icons.Rounded.Chat, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
-            }
-            IconButton(onClick = ::startNewSession) {
-                Icon(Icons.Rounded.Add, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
-            }
-            // Per-repo settings — system prompt override etc. Disabled
-            // until a repo is picked because the override is keyed by
-            // repo full-name.
-            IconButton(
-                onClick = { showSystemPrompt = true },
-                enabled = selectedRepo != null,
-            ) {
-                Icon(Icons.Rounded.Tune, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
-            }
-            if (running) {
-                IconButton(onClick = ::stop) {
-                    Icon(Icons.Rounded.Stop, null, Modifier.size(20.dp), tint = colors.error)
-                }
-            }
-            if (onClose != null) {
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
-                }
-            }
+        // Topbar — terminal-style. Cost/token meter is derived from the
+        // transcript so it updates per-turn; no streaming hooks needed
+        // beyond the existing computeSessionStats helper.
+        val costRate = remember(selectedModel?.uniqueKey) {
+            selectedModel?.let { com.glassfiles.data.ai.ModelPricing.rateFor(it) }
         }
-
-        // Pickers: fixed constraints prevent labels from collapsing into one-letter columns.
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AiPickerChip(
-                    label = "REPO",
-                    value = selectedRepo?.fullName ?: Strings.aiAgentSelectRepo,
-                    title = Strings.aiAgentSelectRepo,
-                    options = repos.toList(),
-                    optionLabel = { it.fullName },
-                    optionSubtitle = { it.description.takeIf { d -> d.isNotBlank() } },
-                    selected = selectedRepo,
-                    onSelect = { selectedRepo = it },
-                    enabled = !running,
-                    modifier = Modifier.weight(1f).widthIn(min = 0.dp),
-                )
-                AiPickerChip(
-                    label = "BRANCH",
-                    value = selectedBranch ?: "—",
-                    title = Strings.aiAgentSelectBranch,
-                    options = branches.toList(),
-                    optionLabel = { it },
-                    selected = selectedBranch,
-                    onSelect = { selectedBranch = it },
-                    enabled = !running && branches.isNotEmpty(),
-                    modifier = Modifier.weight(1f).widthIn(min = 0.dp),
-                )
-            }
-            AiPickerChip(
-                label = "MODEL",
-                value = selectedModel?.displayName ?: "—",
-                title = Strings.aiAgentSelectModel,
-                options = models.toList(),
-                optionLabel = { "${it.providerId.displayName} · ${it.displayName}" },
-                selected = selectedModel,
-                onSelect = { picked ->
-                    selectedModel = picked
-                    // Per-repo last-model. Tied to the active repo so
-                    // re-opening the same repo re-picks the same
-                    // model without prompting the user.
-                    selectedRepo?.fullName?.let { repoFull ->
-                        com.glassfiles.data.ai.AiAgentPrefs.setLastModel(
-                            context,
-                            repoFull,
-                            picked.uniqueKey,
-                        )
-                    }
-                },
-                enabled = !running && models.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-            )
+        val sessionStats by remember(selectedModel?.uniqueKey) {
+            derivedStateOf { computeSessionStats(transcript, costRate) }
         }
-
-        // Cost-mode selector. Three FilterChip-style buttons that map
-        // to AiCostMode. Selection is persisted immediately so a
-        // subsequent task pulls the new mode from AiCostModeStore.
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                Text(Strings.aiCostMode, fontSize = 13.sp, color = colors.onSurface)
-                Text(
-                    when (costMode) {
-                        com.glassfiles.data.ai.cost.AiCostMode.Eco -> Strings.aiCostModeEcoHint
-                        com.glassfiles.data.ai.cost.AiCostMode.Balanced -> Strings.aiCostModeBalancedHint
-                        com.glassfiles.data.ai.cost.AiCostMode.MaxQuality -> Strings.aiCostModeMaxHint
-                    },
-                    fontSize = 10.sp,
-                    color = colors.onSurfaceVariant,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(
-                    com.glassfiles.data.ai.cost.AiCostMode.Eco to Strings.aiCostModeEco,
-                    com.glassfiles.data.ai.cost.AiCostMode.Balanced to Strings.aiCostModeBalanced,
-                    com.glassfiles.data.ai.cost.AiCostMode.MaxQuality to Strings.aiCostModeMax,
-                ).forEach { (mode, label) ->
-                    val selected = mode == costMode
-                    FilterChip(
-                        selected = selected,
-                        onClick = {
-                            if (!running) {
-                                costMode = mode
-                                com.glassfiles.data.ai.cost.AiCostModeStore.setMode(context, mode)
-                            }
-                        },
-                        label = { Text(label, fontSize = 11.sp) },
-                        enabled = !running,
-                    )
+        val costLabel = if (sessionStats.totalChars > 0) {
+            sessionStats.costUsd?.let { c ->
+                when {
+                    c < 0.01 -> "<\$0.01"
+                    c < 1.0 -> String.format(Locale.US, "\$%.3f", c)
+                    else -> String.format(Locale.US, "\$%.2f", c)
                 }
+            } ?: "\$0.00"
+        } else null
+        val tokenLabel = if (sessionStats.totalChars > 0) {
+            val t = sessionStats.tokens
+            when {
+                t >= 1000 -> String.format(Locale.US, "%.1fk tok", t / 1000.0)
+                else -> "$t tok"
             }
-        }
+        } else null
+        val subtitle = listOfNotNull(
+            selectedRepo?.fullName,
+            selectedBranch?.takeIf { it.isNotBlank() }
+                ?.let { "@$it" }
+        ).joinToString("").ifBlank { null }
+        com.glassfiles.ui.screens.ai.terminal.AgentTopBar(
+            title = Strings.aiAgent,
+            subtitle = subtitle,
+            cost = costLabel,
+            tokens = tokenLabel,
+            embedded = embedded,
+            running = running,
+            onBack = onBack,
+            onSettings = { showSettings = true },
+            onNewChat = ::startNewSession,
+            onSystemPrompt = {
+                if (selectedRepo != null) showSystemPrompt = true else showSettings = true
+            },
+            onStop = ::stop,
+            onClose = onClose,
+        )
 
-        // Auto-approve switch
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(Strings.aiAgentAutoApprove, fontSize = 13.sp, color = colors.onSurface)
-                Text(
-                    Strings.aiAgentAutoApproveHint,
-                    fontSize = 10.sp,
-                    color = colors.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = autoApproveReads,
-                onCheckedChange = { autoApproveReads = it },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = colors.onPrimary,
-                    checkedTrackColor = colors.primary,
-                ),
-            )
-        }
-
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.4f)))
-
-        // Transcript
+        // Transcript — repo / branch / model / mode / toggles all live
+        // in the settings bottom-sheet now (opened via the topbar gear
+        // icon), so the chat takes the full screen height.
         val listState = rememberLazyListState()
         val entries by remember { derivedStateOf { transcript.toList() + approvals.map { AgentEntry.Pending(it) } } }
         LaunchedEffect(entries.size) {
@@ -978,26 +840,35 @@ fun AiAgentScreen(
         }
 
         if (selectedRepo == null && repos.isEmpty() && !GitHubManager.isLoggedIn(context)) {
-            EmptyAgentState(message = Strings.aiAgentNoRepos)
+            TerminalEmptyState(
+                message = Strings.aiAgentNoRepos,
+                modifier = Modifier.weight(1f),
+            )
         } else if (models.isEmpty()) {
-            EmptyAgentState(message = Strings.aiAgentNoModels)
+            TerminalEmptyState(
+                message = Strings.aiAgentNoModels,
+                modifier = Modifier.weight(1f),
+            )
         } else {
+            // Pair tool calls with their results so the row can render
+            // an accurate status glyph; the result entry is then
+            // suppressed below so it doesn't appear twice.
+            val toolResults = remember(entries) {
+                entries.mapNotNull { (it as? AgentEntry.ToolResult)?.result }
+                    .associateBy { it.callId }
+            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // Banners — only render when the corresponding condition
-                // is live. Each is its own `item` so they can collapse/
-                // appear independently without disturbing scroll position.
                 val repo = selectedRepo
                 if (repo != null && repo.isPrivate && privateRepoDismissed != repo.fullName) {
                     item("banner-private") {
-                        AgentBanner(
-                            icon = Icons.Rounded.Lock,
-                            tint = colors.tertiary,
+                        TerminalBanner(
                             text = Strings.aiAgentPrivateRepoWarning,
+                            tone = TerminalBannerTone.WARNING,
                             actionLabel = Strings.aiAgentPrivateRepoDismiss,
                             onAction = { privateRepoDismissed = repo.fullName },
                         )
@@ -1005,29 +876,26 @@ fun AiAgentScreen(
                 }
                 if (repo != null && !repo.canWrite()) {
                     item("banner-readonly") {
-                        AgentBanner(
-                            icon = Icons.Rounded.Warning,
-                            tint = colors.error,
+                        TerminalBanner(
                             text = Strings.aiAgentReadOnlyWarning,
+                            tone = TerminalBannerTone.ERROR,
                         )
                     }
                 }
                 if (selectedModel != null && activeApiKey.isBlank()) {
                     item("banner-no-key") {
-                        AgentBanner(
-                            icon = Icons.Rounded.Warning,
-                            tint = colors.error,
+                        TerminalBanner(
                             title = Strings.aiAgentNoApiKeyTitle,
                             text = Strings.aiAgentNoApiKeySubtitle,
+                            tone = TerminalBannerTone.ERROR,
                         )
                     }
                 }
                 if (selectedRepo == null || selectedBranch.isNullOrBlank()) {
                     item("banner-pick-repo") {
-                        AgentBanner(
-                            icon = Icons.Rounded.Build,
-                            tint = colors.onSurfaceVariant,
+                        TerminalBanner(
                             text = Strings.aiAgentPickRepoHint,
+                            tone = TerminalBannerTone.INFO,
                         )
                     }
                 }
@@ -1035,32 +903,44 @@ fun AiAgentScreen(
                     item {
                         Text(
                             Strings.aiAgentEmptyChat,
-                            fontSize = 13.sp,
-                            color = colors.onSurfaceVariant,
+                            color = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors.textMuted,
+                            fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                            fontSize = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.type.message,
                             modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
                         )
                     }
                 }
+                val lastAssistantId = (entries.lastOrNull { it is AgentEntry.Assistant } as? AgentEntry.Assistant)?.id
                 entries.forEach { entry ->
+                    if (entry is AgentEntry.ToolResult) return@forEach
                     item(key = entry.stableKey()) {
-                        TranscriptEntry(
+                        TerminalTranscriptEntry(
                             entry = entry,
-                            activeRepoFullName = selectedRepo?.fullName,
-                            activeBranch = selectedBranch,
-                            activeDefaultBranch = selectedRepo?.defaultBranch,
+                            context = context,
+                            toolResults = toolResults,
+                            isLastAssistant = (entry is AgentEntry.Assistant) && entry.id == lastAssistantId,
+                            running = running,
+                            instantRender = instantRender,
                         )
                     }
                 }
                 if (running && approvals.isEmpty()) {
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(
-                                Modifier.size(14.dp),
-                                strokeWidth = 2.dp,
-                                color = colors.primary,
+                            Text(
+                                "$ ",
+                                color = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors.accentDim,
+                                fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                                fontSize = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.type.toolCall,
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text(Strings.aiAgentRunning, fontSize = 12.sp, color = colors.onSurfaceVariant)
+                            Text(
+                                Strings.aiAgentRunning,
+                                color = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors.textSecondary,
+                                fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                                fontSize = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.type.toolCall,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            com.glassfiles.ui.screens.ai.terminal.AgentBlinkingCursor()
                         }
                     }
                 }
@@ -1068,90 +948,57 @@ fun AiAgentScreen(
         }
 
         if (error != null) {
-            Text(
-                error.orEmpty(),
-                fontSize = 12.sp,
-                color = colors.error,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            TerminalBanner(
+                text = error.orEmpty(),
+                tone = TerminalBannerTone.ERROR,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
             )
         }
         fallbackNotice?.let { notice ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(colors.tertiaryContainer.copy(alpha = 0.6f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    Icons.Rounded.Warning,
-                    null,
-                    Modifier.size(16.dp),
-                    tint = colors.onTertiaryContainer,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    notice,
-                    fontSize = 12.sp,
-                    color = colors.onTertiaryContainer,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = { fallbackNotice = null }, modifier = Modifier.size(20.dp)) {
-                    Icon(
-                        Icons.Rounded.Close,
-                        null,
-                        Modifier.size(14.dp),
-                        tint = colors.onTertiaryContainer,
-                    )
-                }
-            }
+            TerminalBanner(
+                text = notice,
+                tone = TerminalBannerTone.WARNING,
+                actionLabel = "x",
+                onAction = { fallbackNotice = null },
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+            )
         }
         // D2 — resume banner. Surfaced when the previous run for this
         // session was killed without a clean finish. Tapping Resume
         // re-issues the same prompt; Discard wipes the pointer.
-        // Hidden while a run is already in flight (don't compete with
-        // streaming UI).
         pendingResume?.takeIf { !running }?.let { pending ->
-            Row(
+            Column(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(colors.secondaryContainer.copy(alpha = 0.6f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(
-                    Strings.aiAgentResumeBannerText,
-                    fontSize = 12.sp,
-                    color = colors.onSecondaryContainer,
-                    modifier = Modifier.weight(1f),
+                TerminalBanner(
+                    text = Strings.aiAgentResumeBannerText,
+                    tone = TerminalBannerTone.INFO,
                 )
-                Spacer(Modifier.width(8.dp))
-                TextButton(onClick = {
-                    val resume = pending
-                    pendingResume = null
-                    com.glassfiles.data.ai.AiAgentResumeStore
-                        .clear(context, activeSessionId)
-                    submit(resume.prompt, resume.imageBase64)
-                }) {
-                    Text(
-                        Strings.aiAgentResumeBannerAction,
-                        color = colors.primary,
-                        fontSize = 12.sp,
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.glassfiles.ui.screens.ai.terminal.AgentTextButton(
+                        label = "[ resume ]",
+                        color = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors.accent,
+                        enabled = true,
+                        onClick = {
+                            val resume = pending
+                            pendingResume = null
+                            com.glassfiles.data.ai.AiAgentResumeStore
+                                .clear(context, activeSessionId)
+                            submit(resume.prompt, resume.imageBase64)
+                        },
                     )
-                }
-                TextButton(onClick = {
-                    pendingResume = null
-                    com.glassfiles.data.ai.AiAgentResumeStore
-                        .clear(context, activeSessionId)
-                }) {
-                    Text(
-                        Strings.aiAgentResumeBannerDiscard,
-                        color = colors.onSurfaceVariant,
-                        fontSize = 12.sp,
+                    com.glassfiles.ui.screens.ai.terminal.AgentTextButton(
+                        label = "[ discard ]",
+                        color = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors.textSecondary,
+                        enabled = true,
+                        onClick = {
+                            pendingResume = null
+                            com.glassfiles.data.ai.AiAgentResumeStore
+                                .clear(context, activeSessionId)
+                        },
                     )
                 }
             }
@@ -1165,81 +1012,24 @@ fun AiAgentScreen(
             )
         }
 
-        // Input bar.
-        //
-        // The input field stays editable as long as the agent isn't busy:
-        // even if the user hasn't picked repo/branch/model yet they should
-        // be able to draft a message. Send is gated on the full set being
-        // present, the placeholder lives inside `decorationBox` (so it
-        // never overlaps the field's hit-target / IME state), and we use
-        // a `TextFieldValue` so cursor + selection survive recomposition.
+        // Input bar — terminal-style. Mirrors the legacy gating: send
+        // requires repo / branch / model / api-key all set; the field
+        // stays editable so the user can draft text while picking
+        // their context in the settings sheet.
         val canSend = !running &&
             (input.text.isNotBlank() || pendingImage != null) &&
             selectedRepo != null && selectedBranch != null && selectedModel != null &&
             activeApiKey.isNotBlank()
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .navigationBarsPadding(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(
-                onClick = { photoPicker.launch("image/*") },
-                enabled = !running && selectedModel != null,
-                modifier = Modifier.size(44.dp),
-            ) {
-                Icon(
-                    Icons.Rounded.AddPhotoAlternate,
-                    null,
-                    Modifier.size(22.dp),
-                    tint = if (!running && selectedModel != null) colors.onSurfaceVariant else colors.onSurfaceVariant.copy(alpha = 0.4f),
-                )
-            }
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surfaceVariant.copy(alpha = 0.5f))
-                    .border(1.dp, colors.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            ) {
-                BasicTextField(
-                    value = input,
-                    onValueChange = { input = it },
-                    enabled = !running,
-                    textStyle = TextStyle(color = colors.onSurface, fontSize = 14.sp),
-                    cursorBrush = SolidColor(colors.primary),
-                    decorationBox = { inner ->
-                        if (input.text.isEmpty()) {
-                            Text(
-                                Strings.aiAgentInputHint,
-                                color = colors.onSurfaceVariant,
-                                fontSize = 14.sp,
-                            )
-                        }
-                        inner()
-                    },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 22.dp, max = 120.dp),
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            IconButton(
-                onClick = { submit(input.text, pendingImage) },
-                enabled = canSend,
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(if (canSend) colors.primary else colors.surfaceVariant),
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.Send,
-                    null,
-                    Modifier.size(18.dp),
-                    tint = if (canSend) colors.onPrimary else colors.onSurfaceVariant,
-                )
-            }
-        }
+        com.glassfiles.ui.screens.ai.terminal.AgentInput(
+            value = input,
+            onValueChange = { input = it },
+            onSend = { submit(input.text, pendingImage) },
+            onPickImage = { photoPicker.launch("image/*") },
+            canSend = canSend,
+            enabled = !running,
+            placeholder = Strings.aiAgentInputHint,
+            modifier = Modifier.navigationBarsPadding(),
+        )
         if (showHistory) {
             AgentHistorySheet(
                 sessions = sessions,
@@ -1323,6 +1113,395 @@ fun AiAgentScreen(
                 onDismiss = { showSystemPrompt = false },
             )
         }
+
+        // Agent settings — repo / branch / model / mode / toggles /
+        // export / clear. Mounted alongside the warning + system-prompt
+        // dialogs so the gear icon in the topbar always surfaces it.
+        if (showSettings) {
+            val terminalSettingsState = remember(
+                selectedRepo, selectedBranch, selectedModel, costMode, autoApproveReads, instantRender,
+            ) {
+                com.glassfiles.ui.screens.ai.terminal.AgentSettingsState(
+                    repoLabel = selectedRepo?.fullName ?: "—",
+                    branchLabel = selectedBranch ?: "—",
+                    modelLabel = selectedModel?.let { "${it.providerId.displayName} \u00B7 ${it.displayName}" } ?: "—",
+                    mode = when (costMode) {
+                        com.glassfiles.data.ai.cost.AiCostMode.Eco -> com.glassfiles.ui.screens.ai.terminal.AgentMode.ECO
+                        com.glassfiles.data.ai.cost.AiCostMode.Balanced -> com.glassfiles.ui.screens.ai.terminal.AgentMode.BALANCED
+                        com.glassfiles.data.ai.cost.AiCostMode.MaxQuality -> com.glassfiles.ui.screens.ai.terminal.AgentMode.MAX_QUALITY
+                    },
+                    modeHint = when (costMode) {
+                        com.glassfiles.data.ai.cost.AiCostMode.Eco -> Strings.aiCostModeEcoHint
+                        com.glassfiles.data.ai.cost.AiCostMode.Balanced -> Strings.aiCostModeBalancedHint
+                        com.glassfiles.data.ai.cost.AiCostMode.MaxQuality -> Strings.aiCostModeMaxHint
+                    },
+                    autoApproveReads = autoApproveReads,
+                    instantRender = instantRender,
+                )
+            }
+            val repoOptions = com.glassfiles.ui.screens.ai.terminal.AgentSettingsOptions(
+                items = repos.toList().map {
+                    com.glassfiles.ui.screens.ai.terminal.RepoDisplay(
+                        key = it.fullName,
+                        title = it.fullName,
+                        subtitle = it.description.takeIf { d -> d.isNotBlank() },
+                    )
+                },
+                selected = selectedRepo?.fullName?.let { full ->
+                    com.glassfiles.ui.screens.ai.terminal.RepoDisplay(full, full, null)
+                },
+                label = { it.title },
+                subtitle = { it.subtitle },
+                enabled = !running,
+            )
+            val branchOptions = com.glassfiles.ui.screens.ai.terminal.AgentSettingsOptions(
+                items = branches.toList(),
+                selected = selectedBranch,
+                label = { it },
+                enabled = !running && branches.isNotEmpty(),
+            )
+            val modelOptions = com.glassfiles.ui.screens.ai.terminal.AgentSettingsOptions(
+                items = models.toList().map {
+                    com.glassfiles.ui.screens.ai.terminal.ModelDisplay(
+                        key = it.uniqueKey,
+                        title = "${it.providerId.displayName} \u00B7 ${it.displayName}",
+                        subtitle = null,
+                    )
+                },
+                selected = selectedModel?.uniqueKey?.let { k ->
+                    com.glassfiles.ui.screens.ai.terminal.ModelDisplay(k, k, null)
+                },
+                label = { it.title },
+                subtitle = { it.subtitle },
+                enabled = !running && models.isNotEmpty(),
+            )
+            com.glassfiles.ui.screens.ai.terminal.AgentSettingsBottomSheet(
+                state = terminalSettingsState,
+                repos = repoOptions,
+                branches = branchOptions,
+                models = modelOptions,
+                onRepoSelected = { picked ->
+                    repos.firstOrNull { it.fullName == picked.key }?.let { selectedRepo = it }
+                },
+                onBranchSelected = { selectedBranch = it },
+                onModelSelected = { picked ->
+                    val match = models.firstOrNull { it.uniqueKey == picked.key } ?: return@AgentSettingsBottomSheet
+                    selectedModel = match
+                    selectedRepo?.fullName?.let { repoFull ->
+                        com.glassfiles.data.ai.AiAgentPrefs.setLastModel(
+                            context,
+                            repoFull,
+                            match.uniqueKey,
+                        )
+                    }
+                },
+                onModeChange = { mode ->
+                    if (running) return@AgentSettingsBottomSheet
+                    val cm = when (mode) {
+                        com.glassfiles.ui.screens.ai.terminal.AgentMode.ECO -> com.glassfiles.data.ai.cost.AiCostMode.Eco
+                        com.glassfiles.ui.screens.ai.terminal.AgentMode.BALANCED -> com.glassfiles.data.ai.cost.AiCostMode.Balanced
+                        com.glassfiles.ui.screens.ai.terminal.AgentMode.MAX_QUALITY -> com.glassfiles.data.ai.cost.AiCostMode.MaxQuality
+                    }
+                    costMode = cm
+                    com.glassfiles.data.ai.cost.AiCostModeStore.setMode(context, cm)
+                },
+                onAutoApproveChange = { autoApproveReads = it },
+                onInstantRenderChange = { instantRender = it },
+                onClearChat = {
+                    showSettings = false
+                    startNewSession()
+                },
+                onExportChat = {
+                    val text = buildAgentExport(transcript.toList())
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("agent-chat", text))
+                    showSettings = false
+                },
+                onDismiss = { showSettings = false },
+            )
+        }
+    }
+    } // end AgentTerminalSurface
+}
+
+// ─── Terminal-mode renderers ─────────────────────────────────────────────────
+
+private enum class TerminalBannerTone { INFO, WARNING, ERROR }
+
+@Composable
+private fun TerminalBanner(
+    text: String,
+    tone: TerminalBannerTone,
+    title: String? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    val colors = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors
+    val border = when (tone) {
+        TerminalBannerTone.INFO -> colors.border
+        TerminalBannerTone.WARNING -> colors.warning
+        TerminalBannerTone.ERROR -> colors.error
+    }
+    val tint = when (tone) {
+        TerminalBannerTone.INFO -> colors.textSecondary
+        TerminalBannerTone.WARNING -> colors.warning
+        TerminalBannerTone.ERROR -> colors.error
+    }
+    val glyph = when (tone) {
+        TerminalBannerTone.INFO -> "i"
+        TerminalBannerTone.WARNING -> "!"
+        TerminalBannerTone.ERROR -> "!"
+    }
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(colors.surface)
+            .border(1.dp, border, RoundedCornerShape(6.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = "[$glyph]",
+            color = tint,
+            fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+            fontWeight = FontWeight.Bold,
+            fontSize = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.type.toolCall,
+        )
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            if (!title.isNullOrBlank()) {
+                Text(
+                    text = title,
+                    color = colors.textPrimary,
+                    fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.type.toolCall,
+                )
+            }
+            Text(
+                text = text,
+                color = colors.textSecondary,
+                fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                fontSize = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.type.toolCall,
+            )
+        }
+        if (!actionLabel.isNullOrBlank() && onAction != null) {
+            Spacer(Modifier.width(8.dp))
+            com.glassfiles.ui.screens.ai.terminal.AgentTextButton(
+                label = "[ $actionLabel ]",
+                color = tint,
+                enabled = true,
+                onClick = onAction,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TerminalEmptyState(message: String, modifier: Modifier = Modifier) {
+    val colors = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors
+    Box(
+        modifier.fillMaxWidth().padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = message,
+            color = colors.textMuted,
+            fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+            fontSize = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.type.message,
+        )
+    }
+}
+
+/**
+ * Renders a single [AgentEntry] in the new terminal style. ToolResult
+ * entries are skipped here — their owning ToolCall picks up the
+ * matching result from [toolResults] and renders the status glyph
+ * inline.
+ */
+@Composable
+private fun TerminalTranscriptEntry(
+    entry: AgentEntry,
+    context: Context,
+    toolResults: Map<String, AiToolResult>,
+    isLastAssistant: Boolean,
+    running: Boolean,
+    instantRender: Boolean,
+) {
+    when (entry) {
+        is AgentEntry.User -> {
+            com.glassfiles.ui.screens.ai.terminal.AgentMessageRow(
+                role = com.glassfiles.ui.screens.ai.terminal.AgentRole.USER,
+            ) {
+                com.glassfiles.ui.screens.ai.terminal.AgentMessageText(text = entry.text)
+                if (entry.imageBase64 != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "[image attached]",
+                        color = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors.textMuted,
+                        fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                        fontSize = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.type.label,
+                    )
+                }
+            }
+        }
+        is AgentEntry.Assistant -> {
+            val streaming = isLastAssistant && running && !instantRender
+            com.glassfiles.ui.screens.ai.terminal.AgentMessageRow(
+                role = com.glassfiles.ui.screens.ai.terminal.AgentRole.ASSISTANT,
+                streaming = streaming,
+            ) {
+                TerminalAssistantBody(text = entry.text, context = context)
+            }
+        }
+        is AgentEntry.ToolCall -> {
+            val result = toolResults[entry.call.id]
+            val status = when {
+                result == null -> com.glassfiles.ui.screens.ai.terminal.AgentToolStatus.RUNNING
+                result.isError -> com.glassfiles.ui.screens.ai.terminal.AgentToolStatus.ERROR
+                else -> com.glassfiles.ui.screens.ai.terminal.AgentToolStatus.SUCCESS
+            }
+            val statusLine = when {
+                result == null -> "running…"
+                result.isError -> result.output.lineSequence().firstOrNull()
+                    ?.takeIf { it.isNotBlank() } ?: "error"
+                else -> {
+                    val firstLine = result.output.lineSequence().firstOrNull().orEmpty()
+                    val total = result.output.length
+                    if (firstLine.isBlank()) "ok" else firstLine.take(120)
+                        .let { if (total > 120) "$it… (${total}b)" else it }
+                }
+            }
+            com.glassfiles.ui.screens.ai.terminal.AgentToolCallRow(
+                call = entry.call,
+                status = status,
+                statusLine = statusLine,
+                result = result,
+            )
+        }
+        is AgentEntry.ToolResult -> Unit // paired into ToolCall above
+        is AgentEntry.Pending -> {
+            val pending = entry.pending
+            val name = pending.call.name
+            val destructive = name in DESTRUCTIVE_TOOLS
+            val fields = buildList {
+                add("call" to name)
+                runCatching {
+                    val obj = org.json.JSONObject(pending.call.argsJson)
+                    obj.keys().forEachRemaining { k ->
+                        val v = obj.opt(k)
+                        if (v != null && v != org.json.JSONObject.NULL) {
+                            add(k to v.toString().take(120))
+                        }
+                    }
+                }
+            }
+            com.glassfiles.ui.screens.ai.terminal.AgentMessageRow(
+                role = com.glassfiles.ui.screens.ai.terminal.AgentRole.SYSTEM,
+            ) {
+                com.glassfiles.ui.screens.ai.terminal.AgentApprovalBlock(
+                    tool = name,
+                    fields = fields.drop(1),
+                    destructive = destructive,
+                    onApprove = { pending.deferred.complete(true) },
+                    onReject = { pending.deferred.complete(false) },
+                )
+            }
+        }
+    }
+}
+
+private val DESTRUCTIVE_TOOLS = setOf(
+    "write_file", "create_branch", "commit", "open_pr", "delete_file",
+    "commit_changes", "create_pull_request",
+)
+
+/**
+ * Splits assistant text into plain segments and triple-backtick code
+ * fences. Each fence is rendered with the terminal code block; plain
+ * text is rendered as monospace.
+ */
+@Composable
+private fun TerminalAssistantBody(text: String, context: Context) {
+    val cleaned = com.glassfiles.ui.screens.ai.terminal.cleanAgentText(text)
+    val segments = remember(cleaned) { splitCodeFences(cleaned) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        segments.forEach { seg ->
+            when (seg) {
+                is TerminalSegment.Plain -> {
+                    if (seg.text.isNotBlank()) {
+                        com.glassfiles.ui.screens.ai.terminal.AgentMessageText(text = seg.text)
+                    }
+                }
+                is TerminalSegment.Code -> {
+                    com.glassfiles.ui.screens.ai.terminal.AgentTerminalCodeBlock(
+                        text = seg.text,
+                        lang = seg.lang,
+                        filePath = null,
+                        context = context,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private sealed class TerminalSegment {
+    data class Plain(val text: String) : TerminalSegment()
+    data class Code(val text: String, val lang: String) : TerminalSegment()
+}
+
+private fun splitCodeFences(input: String): List<TerminalSegment> {
+    if (!input.contains("```")) return listOf(TerminalSegment.Plain(input))
+    val out = mutableListOf<TerminalSegment>()
+    var i = 0
+    while (i < input.length) {
+        val open = input.indexOf("```", i)
+        if (open < 0) {
+            out += TerminalSegment.Plain(input.substring(i))
+            break
+        }
+        if (open > i) out += TerminalSegment.Plain(input.substring(i, open).trimEnd('\n'))
+        val nl = input.indexOf('\n', open + 3)
+        val langStart = open + 3
+        val (lang, contentStart) = if (nl < 0) {
+            "" to (open + 3)
+        } else {
+            input.substring(langStart, nl).trim() to (nl + 1)
+        }
+        val close = input.indexOf("```", contentStart)
+        if (close < 0) {
+            out += TerminalSegment.Code(input.substring(contentStart), lang)
+            break
+        }
+        out += TerminalSegment.Code(input.substring(contentStart, close).trimEnd('\n'), lang)
+        i = close + 3
+        if (i < input.length && input[i] == '\n') i++
+    }
+    return out
+}
+
+private fun buildAgentExport(entries: List<AgentEntry>): String = buildString {
+    entries.forEach { entry ->
+        when (entry) {
+            is AgentEntry.User -> {
+                appendLine("> ${entry.text}")
+            }
+            is AgentEntry.Assistant -> {
+                appendLine("\u25A0 ${entry.text}")
+            }
+            is AgentEntry.ToolCall -> {
+                appendLine("\$ ${entry.call.name}(${entry.call.argsJson})")
+            }
+            is AgentEntry.ToolResult -> {
+                val mark = if (entry.result.isError) "x" else "+"
+                appendLine("  [$mark] ${entry.result.output.lineSequence().firstOrNull().orEmpty()}")
+            }
+            is AgentEntry.Pending -> Unit
+        }
+        appendLine()
     }
 }
 
