@@ -24,6 +24,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -397,3 +402,119 @@ fun AiModuleScreenScaffold(
         }
     }
 }
+
+private val AiModuleSpinnerFrames = listOf(
+    "\u280B", "\u2819", "\u2839", "\u2838", "\u283C",
+    "\u2834", "\u2826", "\u2827", "\u2807", "\u280F",
+)
+
+/**
+ * Braille-cell spinner rendered in [JetBrainsMono]. Cycles one frame
+ * every 80 ms. Optionally renders a trailing mono label like
+ * `loading runs…`.
+ */
+@Composable
+fun AiModuleSpinner(
+    label: String? = null,
+    modifier: Modifier = Modifier,
+) {
+    var index by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(80L)
+            index = (index + 1) % AiModuleSpinnerFrames.size
+        }
+    }
+    val colors = AiModuleTheme.colors
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = AiModuleSpinnerFrames[index],
+            color = colors.accent,
+            fontFamily = JetBrainsMono,
+            fontSize = AiModuleTheme.type.label,
+        )
+        if (!label.isNullOrBlank()) {
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                color = colors.textMuted,
+                fontFamily = JetBrainsMono,
+                fontSize = AiModuleTheme.type.label,
+            )
+        }
+    }
+}
+
+private enum class AiModuleButtonKind { PRIMARY, SECONDARY, DESTRUCTIVE }
+
+@Composable
+private fun AiModuleButtonImpl(
+    label: String,
+    onClick: () -> Unit,
+    kind: AiModuleButtonKind,
+    modifier: Modifier,
+    enabled: Boolean,
+) {
+    val colors = AiModuleTheme.colors
+    val (bg, fg, borderColor) = when {
+        !enabled -> Triple(colors.surface, colors.textMuted, colors.border)
+        kind == AiModuleButtonKind.PRIMARY -> Triple(colors.accent, colors.background, colors.accent)
+        kind == AiModuleButtonKind.SECONDARY -> Triple(Color.Transparent, colors.accent, colors.accent)
+        else /* DESTRUCTIVE */ -> Triple(Color.Transparent, colors.error, colors.error)
+    }
+    val shape = RoundedCornerShape(6.dp)
+    Box(
+        modifier
+            .heightIn(min = 36.dp)
+            .clip(shape)
+            .background(bg)
+            .border(1.dp, borderColor, shape)
+            .let { if (enabled) it.clickable(onClick = onClick) else it }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = fg,
+            fontFamily = JetBrainsMono,
+            fontSize = AiModuleTheme.type.label,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+/**
+ * Filled accent button. Use for the single primary action of a screen
+ * (e.g. `[ ⏵ run workflow → ]`, `[ view full logs → ]`).
+ */
+@Composable
+fun AiModulePrimaryButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) = AiModuleButtonImpl(label, onClick, AiModuleButtonKind.PRIMARY, modifier, enabled)
+
+/**
+ * Outlined accent button. Use for the second-tier action that lives next
+ * to a primary one (e.g. `[ refresh ]`, `[ rerun → ]`).
+ */
+@Composable
+fun AiModuleSecondaryButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) = AiModuleButtonImpl(label, onClick, AiModuleButtonKind.SECONDARY, modifier, enabled)
+
+/**
+ * Outlined error-colored button for destructive actions
+ * (e.g. `[ cancel ]`, `[ delete logs ]`).
+ */
+@Composable
+fun AiModuleDestructiveButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) = AiModuleButtonImpl(label, onClick, AiModuleButtonKind.DESTRUCTIVE, modifier, enabled)
