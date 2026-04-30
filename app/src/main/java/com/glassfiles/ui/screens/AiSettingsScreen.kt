@@ -61,7 +61,7 @@ import java.io.File
 fun AiSettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val colors = AgentTerminal.colors
+    val colors = AgentTerminalDarkColors
 
     BackHandler(onBack = onBack)
 
