@@ -178,6 +178,53 @@ internal fun releaseAssetIcon(name: String): ImageVector {
     }
 }
 
+/**
+ * Terminal-style empty placeholder for GitHub screens. Replaces the
+ * earlier glass-card spinner / muted text combo with a mono `<icon>
+ * title / subtitle` block that matches the AI module aesthetic
+ * (no card chrome, just two centered lines on the page background).
+ */
+@Composable
+internal fun GitHubMonoEmpty(
+    title: String,
+    subtitle: String? = null,
+    leadingGlyph: String = "·",
+) {
+    val palette = AiModuleTheme.colors
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 24.dp),
+        ) {
+            Text(
+                text = leadingGlyph,
+                color = palette.textMuted,
+                fontFamily = JetBrainsMono,
+                fontSize = 22.sp,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = title,
+                color = palette.textSecondary,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    color = palette.textMuted,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+    }
+}
+
 // ═══════════════════════════════════
 // GitHub Actions Tab
 // ═══════════════════════════════════
