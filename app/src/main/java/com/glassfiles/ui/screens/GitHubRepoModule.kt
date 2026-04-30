@@ -354,13 +354,17 @@ internal fun RepoDetailScreen(
         LaunchedEffect(safeEditingFile.path, selectedBranch) {
             fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, safeEditingFile.path, selectedBranch)
         }
-        Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-            GHTopBar(safeEditingFile.name, subtitle = "Loading editor", onBack = {
-                editingFile = null
-                fileContent = null
-            })
+        Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+            AiModulePageBar(
+                title = "> ${safeEditingFile.name}",
+                subtitle = "loading editor",
+                onBack = {
+                    editingFile = null
+                    fileContent = null
+                },
+            )
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
         }
         return
@@ -386,15 +390,19 @@ internal fun RepoDetailScreen(
         val isMd = ext in listOf("md", "markdown")
         val cachedLines = remember(safeFileContent) { safeFileContent.lines() }
         Column(Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
-            GHTopBar(safeOpenedFile.name, onBack = {
-                fileContent = null
-                openedFile = null
-            }) {
+            AiModulePageBar(
+                title = "> ${safeOpenedFile.name}",
+                onBack = {
+                    fileContent = null
+                    openedFile = null
+                },
+                trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = {
                     val clip = android.content.ClipData.newPlainText("code", safeFileContent)
                     (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
                     Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
-                }) { Icon(Icons.Rounded.ContentCopy, null, Modifier.size(20.dp), tint = Blue) }
+                }) { Icon(Icons.Rounded.ContentCopy, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent) }
                 IconButton(onClick = {
                     scope.launch {
                         val dest = File(
@@ -406,11 +414,13 @@ internal fun RepoDetailScreen(
                         )
                         Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                     }
-                }) { Icon(Icons.Rounded.Download, null, Modifier.size(20.dp), tint = Blue) }
+                }) { Icon(Icons.Rounded.Download, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent) }
                 IconButton(onClick = {
                     editingFile = safeOpenedFile
-                }) { Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = colors.primary) }
-            }
+                }) { Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent) }
+                }
+                },
+            )
             Row(Modifier.fillMaxWidth().background(Color(0xFF161B22)).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("${cachedLines.size} lines", fontSize = 11.sp, color = Color(0xFF8B949E))
                 Text("${safeFileContent.length} chars", fontSize = 11.sp, color = Color(0xFF8B949E))
@@ -636,7 +646,7 @@ internal fun RepoDetailScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Box(
-                    Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(horizontal = 12.dp, vertical = 10.dp)
+                    Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.background).padding(horizontal = 12.dp, vertical = 10.dp)
                 ) {
                     if (repoQuery.isEmpty()) {
                         Text(
@@ -647,30 +657,30 @@ internal fun RepoDetailScreen(
                                 RepoTab.PULLS -> "Filter pull requests"
                                 else -> ""
                             },
-                            color = TextTertiary,
+                            color = AiModuleTheme.colors.textMuted,
                             fontSize = 13.sp
                         )
                     }
                     BasicTextField(
                         value = repoQuery,
                         onValueChange = { repoQuery = it },
-                        textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 13.sp),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
                 if (repoQuery.isNotBlank()) {
                     Box(
-                        Modifier.clip(RoundedCornerShape(8.dp)).background(SurfaceLight).clickable { repoQuery = "" }.padding(horizontal = 10.dp, vertical = 8.dp),
+                        Modifier.clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.background).clickable { repoQuery = "" }.padding(horizontal = 10.dp, vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.Close, null, Modifier.size(16.dp), tint = TextSecondary)
+                        Icon(Icons.Rounded.Close, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textSecondary)
                     }
                 }
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.10f)))
-        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
         else when (selectedTab) {
             RepoTab.FILES -> FilesTab(filteredContents, listState = filesListState, canWrite = canWrite, onDirClick = { currentPath = it.path }, onFileClick = { scope.launch { openedFile = it; fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, it.path, selectedBranch) } }, onEdit = { openedFile = null; fileContent = null; editingFile = it }, onDelete = { deleteTarget = it }, onDownload = { scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${it.name}"); val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, it.path, dest, selectedBranch); Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show() } })
             RepoTab.COMMITS -> CommitsTab(filteredCommits, commitsHasMore, { scope.launch { commitsPage++; val r = GitHubManager.getCommits(context, repo.owner, repo.name, commitsPage); if (r.size < 30) commitsHasMore = false; commits = commits + r } }, listState = commitsListState) { selectedCommitSha = it.sha }
@@ -713,14 +723,14 @@ internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWr
     var expanded by remember { mutableStateOf<String?>(null) }
     LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 16.dp)) { items(contents) { item -> Column {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(12.dp)).clickable { if (item.type == "dir") onDirClick(item) else expanded = if (expanded == item.path) null else item.path }.padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background((if (item.type == "dir") FolderBlue else fileTint(item.name)).copy(alpha = if (item.type == "dir") 0.14f else 0.10f)), contentAlignment = Alignment.Center) {
-                Icon(if (item.type == "dir") Icons.Rounded.Folder else fileIcon(item.name), null, Modifier.size(if (item.type == "dir") 21.dp else 18.dp), tint = if (item.type == "dir") FolderBlue else fileTint(item.name))
+            Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background((if (item.type == "dir") AiModuleTheme.colors.accent else fileTint(item.name)).copy(alpha = if (item.type == "dir") 0.14f else 0.10f)), contentAlignment = Alignment.Center) {
+                Icon(if (item.type == "dir") Icons.Rounded.Folder else fileIcon(item.name), null, Modifier.size(if (item.type == "dir") 21.dp else 18.dp), tint = if (item.type == "dir") AiModuleTheme.colors.accent else fileTint(item.name))
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(item.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(item.path.substringBeforeLast("/", "").ifBlank { if (item.type == "dir") "folder" else "file" }, fontSize = 10.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.path.substringBeforeLast("/", "").ifBlank { if (item.type == "dir") "folder" else "file" }, fontSize = 10.sp, color = AiModuleTheme.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (item.type != "dir" && item.size > 0) Text(ghFmtSize(item.size), fontSize = 11.sp, color = TextTertiary, fontFamily = FontFamily.Monospace)
+            if (item.type != "dir" && item.size > 0) Text(ghFmtSize(item.size), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, fontFamily = FontFamily.Monospace)
         }
         AnimatedVisibility(expanded == item.path && item.type != "dir") { Row(Modifier.fillMaxWidth().padding(start = 50.dp, end = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip(Icons.Rounded.Visibility, "View") { onFileClick(item) }
@@ -728,11 +738,11 @@ internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWr
             Chip(Icons.Rounded.Download, Strings.ghDownloadFile) { onDownload(item) }
             if (canWrite) Chip(Icons.Rounded.Delete, Strings.ghDeleteFile, Color(0xFFFF3B30)) { onDelete(item) }
         } }
-        Box(Modifier.fillMaxWidth().padding(start = 50.dp).height(0.5.dp).background(SeparatorColor))
+        Box(Modifier.fillMaxWidth().padding(start = 50.dp).height(0.5.dp).background(AiModuleTheme.colors.border))
     } } }
 }
 
-@Composable internal fun Chip(icon: ImageVector, label: String, tint: Color? = null, onClick: () -> Unit) { val chipTint = tint ?: MaterialTheme.colorScheme.primary; Row(Modifier.clip(RoundedCornerShape(6.dp)).background(chipTint.copy(0.08f)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(icon, null, Modifier.size(12.dp), tint = chipTint); Text(label, fontSize = 10.sp, color = chipTint, fontWeight = FontWeight.Medium) } }
+@Composable internal fun Chip(icon: ImageVector, label: String, tint: Color? = null, onClick: () -> Unit) { val chipTint = tint ?: AiModuleTheme.colors.accent; Row(Modifier.clip(RoundedCornerShape(6.dp)).background(chipTint.copy(0.08f)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(icon, null, Modifier.size(12.dp), tint = chipTint); Text(label, fontSize = 10.sp, color = chipTint, fontWeight = FontWeight.Medium) } }
 
 private fun fileIcon(name: String): ImageVector = when (name.substringAfterLast(".", "").lowercase()) {
     "kt", "java", "js", "ts", "tsx", "jsx", "py", "rb", "go", "rs", "swift", "c", "cpp", "h", "html", "css", "json", "xml", "yml", "yaml" -> Icons.Rounded.Code
@@ -748,9 +758,9 @@ private fun fileTint(name: String): Color = when (name.substringAfterLast(".", "
     "java" -> Color(0xFFB07219)
     "js", "jsx" -> Color(0xFFF1E05A)
     "ts", "tsx" -> Color(0xFF3178C6)
-    "md", "markdown" -> MaterialTheme.colorScheme.primary
-    "png", "jpg", "jpeg", "gif", "webp", "svg" -> MaterialTheme.colorScheme.primary
-    else -> TextSecondary
+    "md", "markdown" -> AiModuleTheme.colors.accent
+    "png", "jpg", "jpeg", "gif", "webp", "svg" -> AiModuleTheme.colors.accent
+    else -> AiModuleTheme.colors.textSecondary
 }
 
 @Composable
@@ -760,16 +770,16 @@ internal fun CommitsTab(commits: List<GHCommit>, hasMore: Boolean, onLoadMore: (
         if (c.avatarUrl.isNotBlank()) AsyncImage(c.avatarUrl, c.author, Modifier.size(34.dp).clip(CircleShape))
         else Box(Modifier.size(34.dp).clip(CircleShape).background(colors.primary.copy(0.12f)), contentAlignment = Alignment.Center) { Text(c.sha.take(2).uppercase(), fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = colors.primary, letterSpacing = 0.6.sp) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(c.message.lines().firstOrNull().orEmpty(), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
+            Text(c.message.lines().firstOrNull().orEmpty(), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 Text(c.author.ifBlank { "unknown" }, fontSize = 11.sp, color = colors.primary, fontWeight = FontWeight.Medium)
-                Text(c.sha.take(7), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = TextTertiary, letterSpacing = 0.5.sp)
-                Text(c.date.take(10), fontSize = 11.sp, color = TextTertiary)
+                Text(c.sha.take(7), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = AiModuleTheme.colors.textMuted, letterSpacing = 0.5.sp)
+                Text(c.date.take(10), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
         }
-        Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+        Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textMuted)
     }
-}; if (hasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF21262D)).clickable { onLoadMore() }.padding(12.dp), contentAlignment = Alignment.Center) { Text("Load more", color = Blue, fontSize = 14.sp, fontWeight = FontWeight.Medium) } } } }
+}; if (hasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF21262D)).clickable { onLoadMore() }.padding(12.dp), contentAlignment = Alignment.Center) { Text("Load more", color = AiModuleTheme.colors.accent, fontSize = 14.sp, fontWeight = FontWeight.Medium) } } } }
 
 @Composable
 internal fun IssuesTab(issues: List<GHIssue>, hasMore: Boolean, onLoadMore: () -> Unit, listState: LazyListState, onClick: (GHIssue) -> Unit) { LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 16.dp)) { items(issues) { issue ->
@@ -793,7 +803,7 @@ internal fun IssuesTab(issues: List<GHIssue>, hasMore: Boolean, onLoadMore: () -
             Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
         }
     }
-}; if (hasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).clickable { onLoadMore() }.padding(12.dp), contentAlignment = Alignment.Center) { Text("Load more", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp, fontWeight = FontWeight.Medium) } } } }
+}; if (hasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.surface).clickable { onLoadMore() }.padding(12.dp), contentAlignment = Alignment.Center) { Text("Load more", color = AiModuleTheme.colors.accent, fontSize = 14.sp, fontWeight = FontWeight.Medium) } } } }
 
 @Composable
 internal fun PullsTab(
@@ -939,39 +949,41 @@ private fun PullRequestDetailScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Pull request #$pullNumber",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> pr #$pullNumber",
             subtitle = repo.name,
             onBack = onBack,
-            actions = {
-                IconButton(onClick = { scope.launch { refreshPull() } }) {
-                    Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
-                }
-                if (currentHtmlUrl.isNotBlank()) {
-                    IconButton(onClick = {
-                        try {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentHtmlUrl)))
-                        } catch (_: Exception) {
-                            Toast.makeText(context, Strings.error, Toast.LENGTH_SHORT).show()
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { scope.launch { refreshPull() } }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                    }
+                    if (currentHtmlUrl.isNotBlank()) {
+                        IconButton(onClick = {
+                            try {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentHtmlUrl)))
+                            } catch (_: Exception) {
+                                Toast.makeText(context, Strings.error, Toast.LENGTH_SHORT).show()
+                            }
+                        }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
                         }
-                    }) {
-                        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(20.dp), tint = Blue)
                     }
                 }
-            }
+            },
         )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
             return@Column
         }
 
         if (current == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Failed to load pull request", color = TextTertiary, fontSize = 14.sp)
+                Text("Failed to load pull request", color = AiModuleTheme.colors.textMuted, fontSize = 14.sp)
             }
             return@Column
         }
@@ -982,23 +994,23 @@ private fun PullRequestDetailScreen(
                     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Icon(Icons.Rounded.CallMerge, null, Modifier.size(22.dp), tint = pullStateColor(current))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Text(current.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary, lineHeight = 20.sp)
+                            Text(current.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary, lineHeight = 20.sp)
                             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 PullBadge(pullStateLabel(current), pullStateColor(current))
-                                if (current.draft) PullBadge("Draft", TextTertiary)
-                                PullBadge("${current.head} -> ${current.base}", Blue)
+                                if (current.draft) PullBadge("Draft", AiModuleTheme.colors.textMuted)
+                                PullBadge("${current.head} -> ${current.base}", AiModuleTheme.colors.accent)
                             }
-                            Text("Opened by ${current.author}", fontSize = 11.sp, color = TextSecondary)
+                            Text("Opened by ${current.author}", fontSize = 11.sp, color = AiModuleTheme.colors.textSecondary)
                         }
                     }
                     if (current.body.isNotBlank()) {
                         Spacer(Modifier.height(10.dp))
-                        Text(current.body, fontSize = 12.sp, color = TextSecondary, maxLines = 8, overflow = TextOverflow.Ellipsis)
+                        Text(current.body, fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 8, overflow = TextOverflow.Ellipsis)
                     }
                     if (current.requestedReviewers.isNotEmpty()) {
                         Spacer(Modifier.height(10.dp))
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            current.requestedReviewers.forEach { reviewer -> PullBadge("review: $reviewer", TextSecondary) }
+                            current.requestedReviewers.forEach { reviewer -> PullBadge("review: $reviewer", AiModuleTheme.colors.textSecondary) }
                         }
                     }
                 }
@@ -1006,12 +1018,12 @@ private fun PullRequestDetailScreen(
 
             item {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PullMetric("${current.commits.takeIf { it > 0 } ?: "?"}", "commits", Blue)
-                    PullMetric("${current.changedFiles.takeIf { it > 0 } ?: files.size}", "files", TextSecondary)
+                    PullMetric("${current.commits.takeIf { it > 0 } ?: "?"}", "commits", AiModuleTheme.colors.accent)
+                    PullMetric("${current.changedFiles.takeIf { it > 0 } ?: files.size}", "files", AiModuleTheme.colors.textSecondary)
                     PullMetric("+${current.additions.takeIf { it > 0 } ?: files.sumOf { f -> f.additions }}", "added", Color(0xFF34C759))
                     PullMetric("-${current.deletions.takeIf { it > 0 } ?: files.sumOf { f -> f.deletions }}", "deleted", Color(0xFFFF3B30))
-                    PullMetric("${comments.size}", "review comments", TextSecondary)
-                    PullMetric("${reviews.size}", "reviews", TextSecondary)
+                    PullMetric("${comments.size}", "review comments", AiModuleTheme.colors.textSecondary)
+                    PullMetric("${reviews.size}", "reviews", AiModuleTheme.colors.textSecondary)
                 }
             }
 
@@ -1025,7 +1037,7 @@ private fun PullRequestDetailScreen(
                     Chip(
                         Icons.Rounded.AutoAwesome,
                         if (aiSummaryLoading) Strings.aiSummaryLoading else Strings.aiSummary,
-                        Blue,
+                        AiModuleTheme.colors.accent,
                     ) {
                         if (aiSummaryLoading) return@Chip
                         aiSummaryShown = true
@@ -1047,12 +1059,12 @@ private fun PullRequestDetailScreen(
                             }
                         }
                     }
-                    if (canWrite) Chip(Icons.Rounded.Edit, "Edit", TextSecondary) { showEdit = true }
-                    Chip(Icons.Rounded.Article, "Files", Blue) { onOpenFiles(pullNumber) }
-                    if (canWrite) Chip(Icons.Rounded.RateReview, "Review", Blue) { showReview = true }
-                    if (canWrite) Chip(Icons.Rounded.Group, "Reviewers", Blue) { showReviewers = true }
-                    Chip(Icons.Rounded.History, "Reviews", TextSecondary) { showReviews = true }
-                    Chip(Icons.Rounded.FactCheck, "Checks", Blue) { showChecks = true }
+                    if (canWrite) Chip(Icons.Rounded.Edit, "Edit", AiModuleTheme.colors.textSecondary) { showEdit = true }
+                    Chip(Icons.Rounded.Article, "Files", AiModuleTheme.colors.accent) { onOpenFiles(pullNumber) }
+                    if (canWrite) Chip(Icons.Rounded.RateReview, "Review", AiModuleTheme.colors.accent) { showReview = true }
+                    if (canWrite) Chip(Icons.Rounded.Group, "Reviewers", AiModuleTheme.colors.accent) { showReviewers = true }
+                    Chip(Icons.Rounded.History, "Reviews", AiModuleTheme.colors.textSecondary) { showReviews = true }
+                    Chip(Icons.Rounded.FactCheck, "Checks", AiModuleTheme.colors.accent) { showChecks = true }
                     if (canWrite && current.state == "open" && !current.merged && !current.draft) {
                         Chip(Icons.Rounded.CallMerge, if (merging) "Merging..." else Strings.ghMerge, Color(0xFF34C759)) {
                             if (!merging) showMerge = true
@@ -1062,17 +1074,17 @@ private fun PullRequestDetailScreen(
             }
 
             item {
-                Text("Changed files", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text("Changed files", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
             }
             if (files.isEmpty()) {
-                item { Text("No files loaded", fontSize = 13.sp, color = TextTertiary) }
+                item { Text("No files loaded", fontSize = 13.sp, color = AiModuleTheme.colors.textMuted) }
             } else {
                 items(files.take(12)) { file ->
                     PullFileSummaryRow(file)
                 }
                 if (files.size > 12) {
                     item {
-                        Text("+${files.size - 12} more files", fontSize = 11.sp, color = TextTertiary)
+                        Text("+${files.size - 12} more files", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                     }
                 }
             }
@@ -1295,7 +1307,7 @@ private fun PullMetric(value: String, label: String, color: Color) {
         horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Text(value, fontSize = 15.sp, color = color, fontWeight = FontWeight.Light, fontFamily = FontFamily.Monospace)
-        Text(label.uppercase(), fontSize = 9.sp, color = TextSecondary, fontWeight = FontWeight.Medium, letterSpacing = 0.6.sp)
+        Text(label.uppercase(), fontSize = 9.sp, color = AiModuleTheme.colors.textSecondary, fontWeight = FontWeight.Medium, letterSpacing = 0.6.sp)
     }
 }
 
@@ -1308,16 +1320,16 @@ private fun PullMergeabilityCard(pr: GHPullRequest, checks: List<GHCheckRun>) {
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Rounded.Verified, null, Modifier.size(18.dp), tint = mergeColor)
-            Text(pullMergeText(pr), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
+            Text(pullMergeText(pr), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f))
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PullBadge("$successChecks successful", Color(0xFF34C759))
-            if (activeChecks > 0) PullBadge("$activeChecks active", Blue)
+            if (activeChecks > 0) PullBadge("$activeChecks active", AiModuleTheme.colors.accent)
             if (failedChecks > 0) PullBadge("$failedChecks failed", Color(0xFFFF3B30))
-            if (checks.isEmpty()) PullBadge("No checks", TextTertiary)
+            if (checks.isEmpty()) PullBadge("No checks", AiModuleTheme.colors.textMuted)
         }
         if (pr.mergeableState.isNotBlank()) {
-            Text("Merge state: ${pr.mergeableState}", fontSize = 11.sp, color = TextTertiary)
+            Text("Merge state: ${pr.mergeableState}", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
         }
     }
 }
@@ -1336,7 +1348,7 @@ private fun PullFileSummaryRow(file: GHPullFile) {
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(color))
-        Text(file.filename, fontSize = 12.sp, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(file.filename, fontSize = 12.sp, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Text("+${file.additions}", fontSize = 11.sp, color = Color(0xFF34C759))
         Text("-${file.deletions}", fontSize = 11.sp, color = Color(0xFFFF3B30))
     }
@@ -1351,7 +1363,7 @@ private fun pullStateLabel(pr: GHPullRequest): String = when {
 
 @Composable
 private fun pullStateColor(pr: GHPullRequest): Color = when {
-    pr.draft -> MaterialTheme.colorScheme.outline
+    pr.draft -> AiModuleTheme.colors.border
     pr.merged -> GitHubMergedPurple
     pr.state == "open" -> GitHubSuccessGreen
     else -> GitHubErrorRed
@@ -1359,10 +1371,10 @@ private fun pullStateColor(pr: GHPullRequest): Color = when {
 
 @Composable
 private fun pullMergeColor(pr: GHPullRequest): Color = when {
-    pr.draft -> MaterialTheme.colorScheme.onSurfaceVariant
+    pr.draft -> AiModuleTheme.colors.textSecondary
     pr.mergeable == true && pr.mergeableState in listOf("clean", "has_hooks", "unstable") -> GitHubSuccessGreen
     pr.mergeable == false || pr.mergeableState in listOf("dirty", "blocked") -> GitHubErrorRed
-    else -> MaterialTheme.colorScheme.primary
+    else -> AiModuleTheme.colors.accent
 }
 
 private fun pullMergeText(pr: GHPullRequest): String = when {
@@ -1502,7 +1514,7 @@ private fun ReadmeTab(readme: String?, blocks: List<ReadmeRenderBlock>?, error: 
                 if (visibleCount < safeBlocks.size) {
                     item {
                         TextButton(onClick = { visibleCount += 250 }) {
-                            Text("Expand more README content (${safeBlocks.size - visibleCount} hidden)", color = MaterialTheme.colorScheme.primary)
+                            Text("Expand more README content (${safeBlocks.size - visibleCount} hidden)", color = AiModuleTheme.colors.accent)
                         }
                     }
                 }
@@ -1526,7 +1538,7 @@ internal fun GitHubMarkdownDocument(
     }
     val safeBlocks = blocks
     if (safeBlocks == null) {
-        Text("Rendering markdown...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Rendering markdown...", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
     } else {
         Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             safeBlocks.let { if (maxBlocks == null) it else it.take(maxBlocks) }.forEach { block ->
@@ -1543,10 +1555,10 @@ internal fun ReadmeBlockView(block: ReadmeRenderBlock, imageLoader: ImageLoader)
         is ReadmeRenderBlock.Paragraph -> ReadmeText(block.text)
         is ReadmeRenderBlock.Bullet -> ReadmeBullet(block.text, block.ordered, block.checked, block.level)
         is ReadmeRenderBlock.Quote -> Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.width(3.dp).heightIn(min = 20.dp).background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(2.dp)))
+            Box(Modifier.width(3.dp).heightIn(min = 20.dp).background(AiModuleTheme.colors.border, RoundedCornerShape(2.dp)))
             ReadmeText(block.text, modifier = Modifier.weight(1f))
         }
-        is ReadmeRenderBlock.Rule -> Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(0.8.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)))
+        is ReadmeRenderBlock.Rule -> Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(0.8.dp).background(AiModuleTheme.colors.border.copy(alpha = 0.45f)))
         is ReadmeRenderBlock.Image -> ReadmeImage(block, imageLoader)
         is ReadmeRenderBlock.ImageRow -> ReadmeImageRow(block.images, imageLoader)
         is ReadmeRenderBlock.Code -> ReadmeCodeBlock(block)
@@ -1588,15 +1600,15 @@ private fun ReadmeHeading(block: ReadmeRenderBlock.Heading) {
 private fun ReadmeErrorCard(message: String, raw: String, repo: GHRepo, onViewRaw: (() -> Unit)? = null, onRetry: (() -> Unit)? = null) {
     val context = LocalContext.current
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surfaceElevated).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(message, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-        Text("README rendering was stopped to keep the app responsive.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(message, fontSize = 14.sp, color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.SemiBold)
+        Text("README rendering was stopped to keep the app responsive.", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            if (onRetry != null) Chip(Icons.Rounded.Refresh, "Retry", MaterialTheme.colorScheme.primary, onRetry)
-            if (raw.isNotBlank() && onViewRaw != null) Chip(Icons.Rounded.Article, "View raw", MaterialTheme.colorScheme.primary, onViewRaw)
-            Chip(Icons.Rounded.OpenInNew, "Open in browser", MaterialTheme.colorScheme.primary) { context.openReadmeUrl(readmeBrowserUrl(repo)) }
+            if (onRetry != null) Chip(Icons.Rounded.Refresh, "Retry", AiModuleTheme.colors.accent, onRetry)
+            if (raw.isNotBlank() && onViewRaw != null) Chip(Icons.Rounded.Article, "View raw", AiModuleTheme.colors.accent, onViewRaw)
+            Chip(Icons.Rounded.OpenInNew, "Open in browser", AiModuleTheme.colors.accent) { context.openReadmeUrl(readmeBrowserUrl(repo)) }
         }
     }
 }
@@ -1604,17 +1616,17 @@ private fun ReadmeErrorCard(message: String, raw: String, repo: GHRepo, onViewRa
 @Composable
 private fun ReadmeRawBlock(markdown: String) {
     val preview = remember(markdown) { markdown.lineSequence().take(500).joinToString("\n") { it.take(README_MAX_LINE_CHARS) } }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.surfaceElevated).padding(10.dp)) {
         Text(
             preview,
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = AiModuleTheme.colors.textPrimary,
             lineHeight = 15.sp
         )
         if (markdown.lines().size > 500) {
             Spacer(Modifier.height(8.dp))
-            Text("Raw preview truncated to first 500 lines.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Raw preview truncated to first 500 lines.", fontSize = 11.sp, color = AiModuleTheme.colors.textSecondary)
         }
     }
 }
@@ -1629,7 +1641,7 @@ private fun ReadmeText(text: String, modifier: Modifier = Modifier) {
         ClickableText(
             text = annotated,
             modifier = modifier,
-            style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 20.sp),
+            style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, lineHeight = 20.sp),
             onClick = { offset ->
                 annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item?.let { context.openReadmeUrl(it) }
             }
@@ -1643,15 +1655,15 @@ private fun ReadmeText(text: String, modifier: Modifier = Modifier) {
                             segment.text,
                             fontSize = 12.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 4.dp, vertical = 2.dp)
+                            color = AiModuleTheme.colors.textPrimary,
+                            modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(AiModuleTheme.colors.surfaceElevated).padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
                     is ReadmeInlineSegment.Text -> {
                         val annotated = readmeInlineAnnotated(segment.text)
                         ClickableText(
                             text = annotated,
-                            style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 20.sp),
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, lineHeight = 20.sp),
                             onClick = { offset ->
                                 annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.item?.let { context.openReadmeUrl(it) }
                             }
@@ -1697,7 +1709,7 @@ private fun ReadmeBullet(text: String, ordered: Boolean = false, checked: Boolea
             false -> "□"
             null -> if (ordered) "1." else "•"
         }
-        Text(marker, fontSize = 13.sp, color = if (checked == true) GitHubSuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold, modifier = Modifier.widthIn(min = 14.dp))
+        Text(marker, fontSize = 13.sp, color = if (checked == true) GitHubSuccessGreen else AiModuleTheme.colors.textSecondary, fontWeight = FontWeight.SemiBold, modifier = Modifier.widthIn(min = 14.dp))
         ReadmeText(text, modifier = Modifier.weight(1f))
     }
 }
@@ -1730,7 +1742,7 @@ private fun ReadmeImage(block: ReadmeRenderBlock.Image, imageLoader: ImageLoader
         return
     }
     val context = LocalContext.current
-    val placeholder = ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
+    val placeholder = ColorPainter(AiModuleTheme.colors.surfaceElevated)
     var failed by remember(block.url) { mutableStateOf(false) }
     var loaded by remember(block.url) { mutableStateOf(false) }
     val animatedGif = remember(block.url) { block.url.substringBefore('?').endsWith(".gif", ignoreCase = true) }
@@ -1841,7 +1853,7 @@ private fun ReadmeCodeBlock(block: ReadmeRenderBlock.Code) {
         if (expanded || allLines.size <= README_MAX_CODE_LINES) allLines else allLines.take(120)
     }
     val totalLines = remember(block.code) { block.code.lines().size }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant).border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.surfaceElevated).border(0.5.dp, AiModuleTheme.colors.border, RoundedCornerShape(10.dp))) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("${block.language.ifBlank { "code" }} · $totalLines lines", fontSize = 11.sp, color = colors.onSurfaceVariant, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
             IconButton(modifier = Modifier.size(30.dp), onClick = {
@@ -1854,9 +1866,9 @@ private fun ReadmeCodeBlock(block: ReadmeRenderBlock.Code) {
         }
         Column(Modifier.horizontalScroll(rememberScrollState()).padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             lines.forEach { line ->
-                Text(line.take(README_MAX_LINE_CHARS).ifEmpty { " " }, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface, lineHeight = 17.sp)
+                Text(line.take(README_MAX_LINE_CHARS).ifEmpty { " " }, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = AiModuleTheme.colors.textPrimary, lineHeight = 17.sp)
             }
-            if (!expanded && totalLines > README_MAX_CODE_LINES) TextButton(onClick = { expanded = true }) { Text("Expand large code block", color = MaterialTheme.colorScheme.primary) }
+            if (!expanded && totalLines > README_MAX_CODE_LINES) TextButton(onClick = { expanded = true }) { Text("Expand large code block", color = AiModuleTheme.colors.accent) }
         }
     }
 }
@@ -1903,12 +1915,12 @@ private fun ReadmeTable(rows: List<List<String>>) {
 private fun ReadmeLinkCard(text: String, url: String) {
     val context = LocalContext.current
     Row(
-        Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable { context.openReadmeUrl(url) }.padding(horizontal = 10.dp, vertical = 7.dp),
+        Modifier.clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.surfaceElevated).clickable { context.openReadmeUrl(url) }.padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-        Text(text.ifBlank { url }, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.accent)
+        Text(text.ifBlank { url }, fontSize = 13.sp, color = AiModuleTheme.colors.accent, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -2456,17 +2468,22 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
         refreshIssueDetail(showLoader = true)
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar("#$issueNumber", subtitle = detail?.title, onBack = onBack) {
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> #$issueNumber",
+            subtitle = detail?.title,
+            onBack = onBack,
+            trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
             if (detail != null) {
                 IconButton(onClick = { showReactions = true }) {
-                    Icon(Icons.Rounded.EmojiEmotions, null, Modifier.size(20.dp), tint = Blue)
+                    Icon(Icons.Rounded.EmojiEmotions, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent)
                 }
                 IconButton(onClick = { showTimeline = true }) {
-                    Icon(Icons.Rounded.Timeline, null, Modifier.size(20.dp), tint = Blue)
+                    Icon(Icons.Rounded.Timeline, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent)
                 }
                 IconButton(onClick = { showMetaDialog = true }) {
-                    Icon(Icons.Rounded.Tune, null, Modifier.size(20.dp), tint = Blue)
+                    Icon(Icons.Rounded.Tune, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent)
                 }
                 if (repo.canWrite()) {
                     IconButton(onClick = { showLockDialog = true }) {
@@ -2498,11 +2515,13 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
                     }
                 }
             }
-        }
+            }
+            },
+        )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
         } else {
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2523,12 +2542,12 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
                         IssueBodyCard(issue.body)
                     }
                     item {
-                        Text("${comments.size} comments", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Text("${comments.size} comments", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
                     }
                 }
                 if (comments.isEmpty()) item {
                     Box(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(16.dp)) {
-                        Text(Strings.ghNoComments, fontSize = 13.sp, color = TextTertiary)
+                        Text(Strings.ghNoComments, fontSize = 13.sp, color = AiModuleTheme.colors.textMuted)
                     }
                 }
                 items(comments) { c ->
@@ -2541,15 +2560,15 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
                 }
             }
             Column(
-                Modifier.fillMaxWidth().background(SurfaceWhite).padding(horizontal = 12.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().background(AiModuleTheme.colors.surface).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { previewComment = false }) {
-                        Text("Write", fontSize = 12.sp, color = if (!previewComment) Blue else TextSecondary)
+                        Text("Write", fontSize = 12.sp, color = if (!previewComment) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
                     }
                     TextButton(onClick = { previewComment = true }) {
-                        Text("Preview", fontSize = 12.sp, color = if (previewComment) Blue else TextSecondary)
+                        Text("Preview", fontSize = 12.sp, color = if (previewComment) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
                     }
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = {
@@ -2566,21 +2585,21 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
                             Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                         }
                     }, enabled = !sending && newComment.isNotBlank()) {
-                        Icon(Icons.Rounded.Send, null, Modifier.size(20.dp), tint = if (sending || newComment.isBlank()) TextTertiary else Blue)
+                        Icon(Icons.Rounded.Send, null, Modifier.size(20.dp), tint = if (sending || newComment.isBlank()) AiModuleTheme.colors.textMuted else AiModuleTheme.colors.accent)
                     }
                 }
                 if (previewComment) {
-                    Box(Modifier.fillMaxWidth().heightIn(min = 82.dp, max = 180.dp).clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(12.dp).verticalScroll(rememberScrollState())) {
-                        if (newComment.isBlank()) Text(Strings.ghAddComment, color = TextTertiary, fontSize = 14.sp)
+                    Box(Modifier.fillMaxWidth().heightIn(min = 82.dp, max = 180.dp).clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.background).padding(12.dp).verticalScroll(rememberScrollState())) {
+                        if (newComment.isBlank()) Text(Strings.ghAddComment, color = AiModuleTheme.colors.textMuted, fontSize = 14.sp)
                         else IssueMarkdownBlock(newComment)
                     }
                 } else {
-                    Box(Modifier.fillMaxWidth().heightIn(min = 82.dp, max = 180.dp).clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(horizontal = 12.dp, vertical = 10.dp)) {
-                        if (newComment.isEmpty()) Text(Strings.ghAddComment, color = TextTertiary, fontSize = 14.sp)
+                    Box(Modifier.fillMaxWidth().heightIn(min = 82.dp, max = 180.dp).clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.background).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                        if (newComment.isEmpty()) Text(Strings.ghAddComment, color = AiModuleTheme.colors.textMuted, fontSize = 14.sp)
                         BasicTextField(
                             newComment,
                             { newComment = it },
-                            textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 14.sp, lineHeight = 19.sp),
+                            textStyle = androidx.compose.ui.text.TextStyle(color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp, lineHeight = 19.sp),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -2653,9 +2672,9 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
     deleteCommentTarget?.let { comment ->
         AlertDialog(
             onDismissRequest = { deleteCommentTarget = null },
-            containerColor = SurfaceWhite,
-            title = { Text("Delete comment", fontWeight = FontWeight.Bold, color = TextPrimary) },
-            text = { Text(comment.body.lineSequence().firstOrNull().orEmpty().take(160), color = TextSecondary, fontSize = 13.sp) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Delete comment", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
+            text = { Text(comment.body.lineSequence().firstOrNull().orEmpty().take(160), color = AiModuleTheme.colors.textSecondary, fontSize = 13.sp) },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
@@ -2666,7 +2685,7 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
                     }
                 }) { Text("Delete", color = Color(0xFFFF3B30)) }
             },
-            dismissButton = { TextButton(onClick = { deleteCommentTarget = null }) { Text(Strings.cancel, color = TextSecondary) } }
+            dismissButton = { TextButton(onClick = { deleteCommentTarget = null }) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
         )
     }
 }
@@ -2684,18 +2703,18 @@ private fun IssueHeaderCard(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
             AsyncImage(detail.avatarUrl, null, Modifier.size(34.dp).clip(CircleShape))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(detail.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary, lineHeight = 20.sp)
+                Text(detail.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary, lineHeight = 20.sp)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     PullBadge(if (detail.state == "open") Strings.ghOpen else Strings.ghClosed, if (detail.state == "open") Color(0xFF34C759) else Color(0xFF8E8E93))
-                    Text(detail.author, fontSize = 11.sp, color = Blue, fontWeight = FontWeight.Medium)
-                    Text(detail.createdAt.take(10), fontSize = 11.sp, color = TextTertiary)
+                    Text(detail.author, fontSize = 11.sp, color = AiModuleTheme.colors.accent, fontWeight = FontWeight.Medium)
+                    Text(detail.createdAt.take(10), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                 }
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip(Icons.Rounded.Label, "Meta", Blue, onMeta)
-            Chip(Icons.Rounded.EmojiEmotions, "Reactions ${reactions.size}", Blue, onReactions)
-            Chip(Icons.Rounded.Timeline, "Timeline", Blue, onTimeline)
+            Chip(Icons.Rounded.Label, "Meta", AiModuleTheme.colors.accent, onMeta)
+            Chip(Icons.Rounded.EmojiEmotions, "Reactions ${reactions.size}", AiModuleTheme.colors.accent, onReactions)
+            Chip(Icons.Rounded.Timeline, "Timeline", AiModuleTheme.colors.accent, onTimeline)
             if (detail.locked) PullBadge("Locked ${detail.activeLockReason}".trim(), Color(0xFFFF9500))
         }
         if (reactions.isNotEmpty()) {
@@ -2708,23 +2727,23 @@ private fun IssueHeaderCard(
 private fun IssueMetaCard(detail: GHIssueDetail, onEdit: () -> Unit) {
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Metadata", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
-            TextButton(onClick = onEdit) { Text("Edit", fontSize = 12.sp, color = Blue) }
+            Text("Metadata", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f))
+            TextButton(onClick = onEdit) { Text("Edit", fontSize = 12.sp, color = AiModuleTheme.colors.accent) }
         }
         if (detail.labels.isEmpty() && detail.assignee.isBlank() && detail.milestoneTitle.isBlank()) {
-            Text("No labels, assignee, or milestone", fontSize = 12.sp, color = TextTertiary)
+            Text("No labels, assignee, or milestone", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
             return@Column
         }
         if (detail.labels.isNotEmpty()) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 detail.labels.forEach { label ->
-                    Text(label, fontSize = 11.sp, color = Blue, modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(Blue.copy(0.1f)).padding(horizontal = 7.dp, vertical = 3.dp))
+                    Text(label, fontSize = 11.sp, color = AiModuleTheme.colors.accent, modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(AiModuleTheme.colors.accent.copy(0.1f)).padding(horizontal = 7.dp, vertical = 3.dp))
                 }
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (detail.assignee.isNotBlank()) PullBadge("Assignee: ${detail.assignee}", TextSecondary)
-            if (detail.milestoneTitle.isNotBlank()) PullBadge("Milestone: ${detail.milestoneTitle}", TextSecondary)
+            if (detail.assignee.isNotBlank()) PullBadge("Assignee: ${detail.assignee}", AiModuleTheme.colors.textSecondary)
+            if (detail.milestoneTitle.isNotBlank()) PullBadge("Milestone: ${detail.milestoneTitle}", AiModuleTheme.colors.textSecondary)
         }
     }
 }
@@ -2732,9 +2751,9 @@ private fun IssueMetaCard(detail: GHIssueDetail, onEdit: () -> Unit) {
 @Composable
 private fun IssueBodyCard(body: String) {
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Description", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+        Text("Description", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
         if (body.isBlank()) {
-            Text("No description provided.", fontSize = 13.sp, color = TextTertiary)
+            Text("No description provided.", fontSize = 13.sp, color = AiModuleTheme.colors.textMuted)
         } else {
             IssueMarkdownBlock(body)
         }
@@ -2747,14 +2766,14 @@ private fun IssueCommentCard(comment: GHComment, onReactions: () -> Unit, onEdit
         AsyncImage(comment.avatarUrl, null, Modifier.size(28.dp).clip(CircleShape))
         Column(Modifier.weight(1f).ghGlassCard(14.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(comment.author, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Blue)
-                Text(comment.createdAt.take(10), fontSize = 10.sp, color = TextTertiary)
+                Text(comment.author, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.accent)
+                Text(comment.createdAt.take(10), fontSize = 10.sp, color = AiModuleTheme.colors.textMuted)
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onReactions, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Rounded.EmojiEmotions, null, Modifier.size(16.dp), tint = TextSecondary)
+                    Icon(Icons.Rounded.EmojiEmotions, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textSecondary)
                 }
                 IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = TextSecondary)
+                    Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textSecondary)
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                     Icon(Icons.Rounded.Delete, null, Modifier.size(16.dp), tint = Color(0xFFFF3B30))
@@ -2771,12 +2790,12 @@ private fun IssueReactionSummary(reactions: List<GHReaction>) {
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         reactions.groupBy { it.content }.forEach { (content, items) ->
             Row(
-                Modifier.clip(RoundedCornerShape(8.dp)).background(SurfaceLight).padding(horizontal = 8.dp, vertical = 4.dp),
+                Modifier.clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.background).padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(emojiMap[content] ?: content, fontSize = 14.sp)
-                Text("${items.size}", fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
+                Text("${items.size}", fontSize = 11.sp, color = AiModuleTheme.colors.textSecondary, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -2789,20 +2808,20 @@ private fun IssueMarkdownBlock(text: String) {
             val line = raw.trimEnd()
             val trimmed = line.trimStart()
             when {
-                trimmed.startsWith("### ") -> Text(trimmed.removePrefix("### "), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.padding(top = 4.dp))
-                trimmed.startsWith("## ") -> Text(trimmed.removePrefix("## "), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.padding(top = 5.dp))
-                trimmed.startsWith("# ") -> Text(trimmed.removePrefix("# "), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.padding(top = 6.dp))
+                trimmed.startsWith("### ") -> Text(trimmed.removePrefix("### "), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.padding(top = 4.dp))
+                trimmed.startsWith("## ") -> Text(trimmed.removePrefix("## "), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.padding(top = 5.dp))
+                trimmed.startsWith("# ") -> Text(trimmed.removePrefix("# "), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.padding(top = 6.dp))
                 trimmed.startsWith("- ") || trimmed.startsWith("* ") -> Row {
-                    Text("• ", fontSize = 13.sp, color = TextSecondary)
-                    Text(trimmed.drop(2), fontSize = 13.sp, color = TextPrimary, lineHeight = 18.sp)
+                    Text("• ", fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary)
+                    Text(trimmed.drop(2), fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, lineHeight = 18.sp)
                 }
                 trimmed.startsWith("> ") -> Row(Modifier.padding(vertical = 2.dp)) {
-                    Box(Modifier.width(3.dp).height(18.dp).background(SeparatorColor))
-                    Text(trimmed.drop(2), fontSize = 13.sp, color = TextSecondary, modifier = Modifier.padding(start = 8.dp))
+                    Box(Modifier.width(3.dp).height(18.dp).background(AiModuleTheme.colors.border))
+                    Text(trimmed.drop(2), fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary, modifier = Modifier.padding(start = 8.dp))
                 }
-                trimmed.startsWith("```") -> Box(Modifier.fillMaxWidth().height(1.dp).background(SeparatorColor))
+                trimmed.startsWith("```") -> Box(Modifier.fillMaxWidth().height(1.dp).background(AiModuleTheme.colors.border))
                 trimmed.isBlank() -> Spacer(Modifier.height(5.dp))
-                else -> Text(trimmed, fontSize = 13.sp, color = TextPrimary, lineHeight = 19.sp)
+                else -> Text(trimmed, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, lineHeight = 19.sp)
             }
         }
     }
@@ -2817,23 +2836,23 @@ private fun IssueLockDialog(repo: GHRepo, detail: GHIssueDetail, onDismiss: () -
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text(if (detail.locked) "Unlock issue" else "Lock issue", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text(if (detail.locked) "Unlock issue" else "Lock issue", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(detail.title, fontSize = 13.sp, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(detail.title, fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (!detail.locked) {
-                    Text("Reason", fontSize = 12.sp, color = TextSecondary)
+                    Text("Reason", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("resolved", "off-topic", "too heated", "spam").forEach { value ->
                             val selected = reason == value
                             Box(
                                 Modifier.clip(RoundedCornerShape(6.dp))
-                                    .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+                                    .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background)
                                     .clickable { reason = value }
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Text(value, fontSize = 12.sp, color = if (selected) Blue else TextSecondary)
+                                Text(value, fontSize = 12.sp, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
                             }
                         }
                     }
@@ -2860,13 +2879,13 @@ private fun IssueLockDialog(repo: GHRepo, detail: GHIssueDetail, onDismiss: () -
                 }
             ) {
                 if (saving) {
-                    CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.size(14.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
                 } else {
                     Text(if (detail.locked) "Unlock" else "Lock", color = if (detail.locked) Color(0xFF34C759) else Color(0xFFFF9500))
                 }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -2879,8 +2898,8 @@ private fun IssueCommentEditDialog(repo: GHRepo, comment: GHComment, onDismiss: 
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Edit comment", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Edit comment", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             OutlinedTextField(
                 value = body,
@@ -2905,13 +2924,13 @@ private fun IssueCommentEditDialog(repo: GHRepo, comment: GHComment, onDismiss: 
                 }
             ) {
                 if (saving) {
-                    CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.size(14.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
                 } else {
-                    Text("Save", color = Blue)
+                    Text("Save", color = AiModuleTheme.colors.accent)
                 }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -2949,64 +2968,64 @@ private fun IssueMetaDialog(repo: GHRepo, detail: GHIssueDetail, onDismiss: () -
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Issue metadata", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Issue metadata", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             if (loading) {
                 Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Labels", fontSize = 12.sp, color = TextSecondary)
+                    Text("Labels", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         labels.forEach { label ->
                             val selected = label.name in selectedLabels
                             Box(
                                 Modifier.clip(RoundedCornerShape(6.dp))
-                                    .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+                                    .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background)
                                     .clickable {
                                         if (selected) selectedLabels.remove(label.name) else selectedLabels.add(label.name)
                                     }
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Text(label.name, fontSize = 12.sp, color = if (selected) Blue else TextSecondary)
+                                Text(label.name, fontSize = 12.sp, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
                             }
                         }
                     }
 
-                    Text("Assignee", fontSize = 12.sp, color = TextSecondary)
+                    Text("Assignee", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (selectedAssignee.isBlank()) Blue.copy(0.15f) else SurfaceLight).clickable { selectedAssignee = "" }.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                            Text("None", fontSize = 12.sp, color = if (selectedAssignee.isBlank()) Blue else TextSecondary)
+                        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (selectedAssignee.isBlank()) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background).clickable { selectedAssignee = "" }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                            Text("None", fontSize = 12.sp, color = if (selectedAssignee.isBlank()) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
                         }
                         assignees.forEach { user ->
                             val selected = selectedAssignee == user.login
                             Box(
                                 Modifier.clip(RoundedCornerShape(6.dp))
-                                    .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+                                    .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background)
                                     .clickable { selectedAssignee = user.login }
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Text(user.login, fontSize = 12.sp, color = if (selected) Blue else TextSecondary)
+                                Text(user.login, fontSize = 12.sp, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
                             }
                         }
                     }
 
-                    Text("Milestone", fontSize = 12.sp, color = TextSecondary)
+                    Text("Milestone", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (selectedMilestone.isBlank()) Blue.copy(0.15f) else SurfaceLight).clickable { selectedMilestone = "" }.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                            Text("None", fontSize = 12.sp, color = if (selectedMilestone.isBlank()) Blue else TextSecondary)
+                        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (selectedMilestone.isBlank()) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background).clickable { selectedMilestone = "" }.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                            Text("None", fontSize = 12.sp, color = if (selectedMilestone.isBlank()) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
                         }
                         milestones.forEach { milestone ->
                             val selected = selectedMilestone == milestone.title
                             Box(
                                 Modifier.clip(RoundedCornerShape(6.dp))
-                                    .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+                                    .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background)
                                     .clickable { selectedMilestone = milestone.title }
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Text(milestone.title, fontSize = 12.sp, color = if (selected) Blue else TextSecondary)
+                                Text(milestone.title, fontSize = 12.sp, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
                             }
                         }
                     }
@@ -3036,9 +3055,9 @@ private fun IssueMetaDialog(repo: GHRepo, detail: GHIssueDetail, onDismiss: () -
                     }
                 },
                 enabled = !loading && !saving
-            ) { Text("Save", color = Blue) }
+            ) { Text("Save", color = AiModuleTheme.colors.accent) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -3054,8 +3073,8 @@ private fun PullEditDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Uni
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Edit PR #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Edit PR #${pr.number}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -3066,11 +3085,11 @@ private fun PullEditDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Uni
                         val selected = state == value
                         Box(
                             Modifier.clip(RoundedCornerShape(6.dp))
-                                .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+                                .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background)
                                 .clickable { state = value }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text(label, fontSize = 12.sp, color = if (selected) Blue else TextSecondary)
+                            Text(label, fontSize = 12.sp, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
                         }
                     }
                 }
@@ -3099,11 +3118,11 @@ private fun PullEditDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Uni
                     }
                 }
             ) {
-                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
-                else Text("Save", color = Blue)
+                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
+                else Text("Save", color = AiModuleTheme.colors.accent)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -3117,16 +3136,16 @@ private fun PullReviewersDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Reviewers #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Reviewers #${pr.number}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (pr.requestedReviewers.isNotEmpty()) {
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        pr.requestedReviewers.forEach { reviewer -> PullBadge(reviewer, TextSecondary) }
+                        pr.requestedReviewers.forEach { reviewer -> PullBadge(reviewer, AiModuleTheme.colors.textSecondary) }
                     }
                 } else {
-                    Text("No requested reviewers", fontSize = 12.sp, color = TextTertiary)
+                    Text("No requested reviewers", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
                 }
                 OutlinedTextField(
                     value = reviewersRaw,
@@ -3135,7 +3154,7 @@ private fun PullReviewersDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text("Request adds reviewers; remove removes the typed usernames.", fontSize = 11.sp, color = TextTertiary)
+                Text("Request adds reviewers; remove removes the typed usernames.", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
         },
         confirmButton = {
@@ -3164,12 +3183,12 @@ private fun PullReviewersDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -
                         }
                     }
                 ) {
-                    if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
-                    else Text("Request", color = Blue)
+                    if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
+                    else Text("Request", color = AiModuleTheme.colors.accent)
                 }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -3190,11 +3209,11 @@ private fun PullReviewHistoryDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Review history", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Review history", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             if (reviews.isEmpty()) {
-                Text("No reviews yet", fontSize = 13.sp, color = TextTertiary)
+                Text("No reviews yet", fontSize = 13.sp, color = AiModuleTheme.colors.textMuted)
             } else {
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(reviews) { review ->
@@ -3202,7 +3221,7 @@ private fun PullReviewHistoryDialog(
                         Column(
                             Modifier.fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(SurfaceLight)
+                                .background(AiModuleTheme.colors.background)
                                 .clickable {
                                     scope.launch {
                                         selectedReview = GitHubManager.getPullRequestReview(context, repo.owner, repo.name, pr.number, review.id) ?: review
@@ -3213,8 +3232,8 @@ private fun PullReviewHistoryDialog(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 PullBadge(review.state.ifBlank { "review" }, reviewStateColor(review.state))
-                                Text(review.user.ifBlank { "GitHub" }, fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                                if (review.submittedAt.isNotBlank()) Text(review.submittedAt.take(10), fontSize = 10.sp, color = TextTertiary)
+                                Text(review.user.ifBlank { "GitHub" }, fontSize = 12.sp, color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                                if (review.submittedAt.isNotBlank()) Text(review.submittedAt.take(10), fontSize = 10.sp, color = AiModuleTheme.colors.textMuted)
                                 if (review.htmlUrl.isNotBlank()) {
                                     IconButton(
                                         onClick = {
@@ -3226,26 +3245,26 @@ private fun PullReviewHistoryDialog(
                                         },
                                         modifier = Modifier.size(28.dp)
                                     ) {
-                                        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = TextSecondary)
+                                        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textSecondary)
                                     }
                                 }
                                 if (canMutate) {
                                     IconButton(onClick = { editReview = review }, modifier = Modifier.size(28.dp)) {
-                                        Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = Blue)
+                                        Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.accent)
                                     }
                                     IconButton(onClick = { deleteReview = review }, modifier = Modifier.size(28.dp)) {
                                         Icon(Icons.Rounded.Delete, null, Modifier.size(16.dp), tint = Color(0xFFFF3B30))
                                     }
                                 }
                             }
-                            if (review.body.isNotBlank()) Text(review.body, fontSize = 11.sp, color = TextSecondary, maxLines = 4, overflow = TextOverflow.Ellipsis)
-                            if (review.commitId.length >= 7) Text(review.commitId.take(7), fontSize = 10.sp, color = TextTertiary)
+                            if (review.body.isNotBlank()) Text(review.body, fontSize = 11.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                            if (review.commitId.length >= 7) Text(review.commitId.take(7), fontSize = 10.sp, color = AiModuleTheme.colors.textMuted)
                         }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.accent) } }
     )
 
     selectedReview?.let { review ->
@@ -3276,9 +3295,9 @@ private fun PullReviewHistoryDialog(
     deleteReview?.let { review ->
         AlertDialog(
             onDismissRequest = { if (!actionInFlight) deleteReview = null },
-            containerColor = SurfaceWhite,
-            title = { Text("Delete pending review?", fontWeight = FontWeight.Bold, color = TextPrimary) },
-            text = { Text("Delete review #${review.id}?", fontSize = 13.sp, color = TextSecondary) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Delete pending review?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
+            text = { Text("Delete review #${review.id}?", fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary) },
             confirmButton = {
                 TextButton(
                     enabled = !actionInFlight,
@@ -3297,7 +3316,7 @@ private fun PullReviewHistoryDialog(
                     }
                 ) { Text("Delete", color = Color(0xFFFF3B30)) }
             },
-            dismissButton = { TextButton(enabled = !actionInFlight, onClick = { deleteReview = null }) { Text(Strings.cancel, color = TextSecondary) } }
+            dismissButton = { TextButton(enabled = !actionInFlight, onClick = { deleteReview = null }) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
         )
     }
 }
@@ -3306,23 +3325,23 @@ private fun PullReviewHistoryDialog(
 private fun PullReviewDetailDialog(review: GHPullReview, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Review #${review.id}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Review #${review.id}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     PullBadge(review.state.ifBlank { "review" }, reviewStateColor(review.state))
-                    if (review.commitId.length >= 7) PullBadge(review.commitId.take(7), TextSecondary)
+                    if (review.commitId.length >= 7) PullBadge(review.commitId.take(7), AiModuleTheme.colors.textSecondary)
                 }
                 PullReviewDetailLine("Reviewer", review.user.ifBlank { "GitHub" })
                 PullReviewDetailLine("Submitted", review.submittedAt.take(19).replace('T', ' '))
                 PullReviewDetailLine("Commit", review.commitId)
                 if (review.body.isNotBlank()) {
-                    Text(review.body, fontSize = 13.sp, color = TextPrimary, lineHeight = 18.sp)
+                    Text(review.body, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, lineHeight = 18.sp)
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.accent) } }
     )
 }
 
@@ -3337,8 +3356,8 @@ private fun PullReviewEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Edit pending review", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Edit pending review", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PullBadge(review.state.ifBlank { "review" }, reviewStateColor(review.state))
@@ -3353,11 +3372,11 @@ private fun PullReviewEditDialog(
         },
         confirmButton = {
             TextButton(enabled = !saving, onClick = { onSave(body) }) {
-                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
-                else Text("Save", color = Blue)
+                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
+                else Text("Save", color = AiModuleTheme.colors.accent)
             }
         },
-        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -3365,8 +3384,8 @@ private fun PullReviewEditDialog(
 private fun PullReviewDetailLine(label: String, value: String) {
     if (value.isBlank()) return
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, fontSize = 11.sp, color = TextTertiary, fontWeight = FontWeight.Medium)
-        Text(value, fontSize = 13.sp, color = TextPrimary)
+        Text(label, fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, fontWeight = FontWeight.Medium)
+        Text(value, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary)
     }
 }
 
@@ -3383,8 +3402,8 @@ private fun PullMergeDialog(
 
     AlertDialog(
         onDismissRequest = { if (!merging) onDismiss() },
-        containerColor = SurfaceWhite,
-        title = { Text("Merge PR #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Merge PR #${pr.number}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3392,17 +3411,17 @@ private fun PullMergeDialog(
                         val selected = method == value
                         Box(
                             Modifier.clip(RoundedCornerShape(6.dp))
-                                .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+                                .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background)
                                 .clickable { method = value }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text(label, fontSize = 12.sp, color = if (selected) Blue else TextSecondary)
+                            Text(label, fontSize = 12.sp, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
                         }
                     }
                 }
                 OutlinedTextField(title, { title = it }, label = { Text("Commit title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(message, { message = it }, label = { Text("Commit message") }, minLines = 3, maxLines = 5, modifier = Modifier.fillMaxWidth())
-                Text("${pr.head} -> ${pr.base}", fontSize = 11.sp, color = TextTertiary)
+                Text("${pr.head} -> ${pr.base}", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
         },
         confirmButton = {
@@ -3411,16 +3430,17 @@ private fun PullMergeDialog(
                 else Text(Strings.ghMerge, color = Color(0xFF34C759))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !merging) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !merging) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
+@Composable
 private fun reviewStateColor(state: String): Color = when (state.lowercase()) {
     "approved" -> Color(0xFF34C759)
     "changes_requested" -> Color(0xFFFF3B30)
-    "commented" -> Blue
-    "dismissed" -> TextTertiary
-    else -> TextSecondary
+    "commented" -> AiModuleTheme.colors.accent
+    "dismissed" -> AiModuleTheme.colors.textMuted
+    else -> AiModuleTheme.colors.textSecondary
 }
 
 @Composable
@@ -3433,8 +3453,8 @@ private fun PullReviewDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> U
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Review #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Review #${pr.number}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3442,11 +3462,11 @@ private fun PullReviewDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> U
                         val selected = event == value
                         Box(
                             Modifier.clip(RoundedCornerShape(6.dp))
-                                .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+                                .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background)
                                 .clickable { event = value }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text(label, fontSize = 12.sp, color = if (selected) Blue else TextSecondary)
+                            Text(label, fontSize = 12.sp, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
                         }
                     }
                 }
@@ -3469,9 +3489,9 @@ private fun PullReviewDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> U
                     sending = false
                     if (ok) onDone()
                 }
-            }) { Text("Submit", color = Blue) }
+            }) { Text("Submit", color = AiModuleTheme.colors.accent) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -3489,21 +3509,21 @@ private fun PullFilesDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Un
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Files #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Files #${pr.number}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             if (loading) {
                 Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                 }
             } else {
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(files) { file ->
                         Column(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SurfaceLight).padding(10.dp)
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.background).padding(10.dp)
                         ) {
-                            Text(file.filename, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
-                            Text("${file.status}  +${file.additions}  -${file.deletions}", fontSize = 10.sp, color = TextSecondary)
+                            Text(file.filename, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Medium)
+                            Text("${file.status}  +${file.additions}  -${file.deletions}", fontSize = 10.sp, color = AiModuleTheme.colors.textSecondary)
                             if (file.patch.isNotBlank()) {
                                 Spacer(Modifier.height(6.dp))
                                 Box(Modifier.fillMaxWidth().background(Color(0xFF1E1E22), RoundedCornerShape(6.dp)).padding(8.dp)) {
@@ -3515,20 +3535,20 @@ private fun PullFilesDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Un
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.accent) } }
     )
 }
 
 @Composable
 internal fun CommitDiffScreen(repo: GHRepo, sha: String, onBack: () -> Unit) { val context = LocalContext.current; var detail by remember { mutableStateOf<GHCommitDetail?>(null) }; var loading by remember { mutableStateOf(true) }
     LaunchedEffect(sha) { detail = GitHubManager.getCommitDiff(context, repo.owner, repo.name, sha); loading = false }
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) { GHTopBar(sha.take(7), subtitle = detail?.message?.lines()?.firstOrNull(), onBack = onBack)
-        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
-        else if (detail != null) { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { Text("+${detail!!.totalAdditions}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF34C759)); Text("-${detail!!.totalDeletions}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF3B30)); Text("${detail!!.files.size} files", fontSize = 13.sp, color = TextSecondary) }
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) { AiModulePageBar(title = "> ${sha.take(7)}", subtitle = detail?.message?.lines()?.firstOrNull(), onBack = onBack)
+        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+        else if (detail != null) { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { Text("+${detail!!.totalAdditions}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF34C759)); Text("-${detail!!.totalDeletions}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF3B30)); Text("${detail!!.files.size} files", fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary) }
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) { items(detail!!.files) { f -> Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Box(Modifier.size(8.dp).clip(CircleShape).background(when (f.status) { "added" -> Color(0xFF34C759); "removed" -> Color(0xFFFF3B30); else -> Color(0xFFFF9500) })); Text(f.filename, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); Text("+${f.additions}", fontSize = 11.sp, color = Color(0xFF34C759)); Text("-${f.deletions}", fontSize = 11.sp, color = Color(0xFFFF3B30)) }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Box(Modifier.size(8.dp).clip(CircleShape).background(when (f.status) { "added" -> Color(0xFF34C759); "removed" -> Color(0xFFFF3B30); else -> Color(0xFFFF9500) })); Text(f.filename, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); Text("+${f.additions}", fontSize = 11.sp, color = Color(0xFF34C759)); Text("-${f.deletions}", fontSize = 11.sp, color = Color(0xFFFF3B30)) }
                 if (f.patch.isNotBlank()) { Spacer(Modifier.height(4.dp)); Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF1E1E22)).horizontalScroll(rememberScrollState()).padding(8.dp)) { Text(f.patch.take(2000), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFD4D4D4), lineHeight = 16.sp) } }
-            }; Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor)) } }
+            }; Box(Modifier.fillMaxWidth().height(0.5.dp).background(AiModuleTheme.colors.border)) } }
         }
     }
 }
@@ -3553,8 +3573,8 @@ private fun IssueReactionsDialog(repo: GHRepo, issueNumber: Int, onDismiss: () -
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Reactions", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Reactions", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column {
                 // Add reaction row
@@ -3562,7 +3582,7 @@ private fun IssueReactionsDialog(repo: GHRepo, issueNumber: Int, onDismiss: () -
                     emojiMap.forEach { (key, emoji) ->
                         Box(
                             Modifier.clip(RoundedCornerShape(8.dp))
-                                .background(SurfaceLight)
+                                .background(AiModuleTheme.colors.background)
                                 .clickable {
                                     scope.launch {
                                         val ok = GitHubManager.addIssueReaction(context, repo.owner, repo.name, issueNumber, key)
@@ -3579,10 +3599,10 @@ private fun IssueReactionsDialog(repo: GHRepo, issueNumber: Int, onDismiss: () -
 
                 if (loading) {
                     Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                     }
                 } else if (reactions.isEmpty()) {
-                    Text("No reactions yet", fontSize = 13.sp, color = TextTertiary)
+                    Text("No reactions yet", fontSize = 13.sp, color = AiModuleTheme.colors.textMuted)
                 } else {
                     // Group by reaction type
                     val grouped = reactions.groupBy { it.content }
@@ -3590,15 +3610,15 @@ private fun IssueReactionsDialog(repo: GHRepo, issueNumber: Int, onDismiss: () -
                         grouped.forEach { (content, items) ->
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(emojiMap[content] ?: content, fontSize = 16.sp)
-                                Text("${items.size}", fontSize = 12.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
-                                Text(items.joinToString(", ") { it.user }, fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${items.size}", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary, fontWeight = FontWeight.Medium)
+                                Text(items.joinToString(", ") { it.user }, fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.accent) } }
     )
 }
 
@@ -3617,16 +3637,16 @@ private fun IssueCommentReactionsDialog(repo: GHRepo, comment: GHComment, onDism
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Comment reactions", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Comment reactions", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(comment.body.lineSequence().firstOrNull().orEmpty().take(120), fontSize = 12.sp, color = TextSecondary, maxLines = 2)
+                Text(comment.body.lineSequence().firstOrNull().orEmpty().take(120), fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 2)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     emojiMap.forEach { (key, emoji) ->
                         Box(
                             Modifier.clip(RoundedCornerShape(8.dp))
-                                .background(SurfaceLight)
+                                .background(AiModuleTheme.colors.background)
                                 .clickable {
                                     scope.launch {
                                         GitHubManager.addIssueCommentReaction(context, repo.owner, repo.name, comment.id, key)
@@ -3641,24 +3661,24 @@ private fun IssueCommentReactionsDialog(repo: GHRepo, comment: GHComment, onDism
                 }
                 if (loading) {
                     Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                     }
                 } else if (reactions.isEmpty()) {
-                    Text("No reactions yet", fontSize = 13.sp, color = TextTertiary)
+                    Text("No reactions yet", fontSize = 13.sp, color = AiModuleTheme.colors.textMuted)
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         reactions.groupBy { it.content }.forEach { (content, items) ->
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(emojiMap[content] ?: content, fontSize = 16.sp)
-                                Text("${items.size}", fontSize = 12.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
-                                Text(items.joinToString(", ") { it.user }, fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("${items.size}", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary, fontWeight = FontWeight.Medium)
+                                Text(items.joinToString(", ") { it.user }, fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.accent) } }
     )
 }
 
@@ -3679,15 +3699,15 @@ private fun IssueTimelineDialog(repo: GHRepo, issueNumber: Int, onDismiss: () ->
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Timeline", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Timeline", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             if (loading) {
                 Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                 }
             } else if (events.isEmpty()) {
-                Text("No timeline events", fontSize = 13.sp, color = TextTertiary)
+                Text("No timeline events", fontSize = 13.sp, color = AiModuleTheme.colors.textMuted)
             } else {
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(events) { event ->
@@ -3707,16 +3727,16 @@ private fun IssueTimelineDialog(repo: GHRepo, issueNumber: Int, onDismiss: () ->
                             else -> event.event
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(Modifier.size(8.dp).clip(CircleShape).background(Blue))
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(AiModuleTheme.colors.accent))
                             Column {
-                                Text("${event.actor} $eventText", fontSize = 12.sp, color = TextPrimary)
-                                Text(event.createdAt.take(10), fontSize = 10.sp, color = TextTertiary)
+                                Text("${event.actor} $eventText", fontSize = 12.sp, color = AiModuleTheme.colors.textPrimary)
+                                Text(event.createdAt.take(10), fontSize = 10.sp, color = AiModuleTheme.colors.textMuted)
                             }
                         }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.accent) } }
     )
 }
