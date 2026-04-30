@@ -64,9 +64,7 @@ fun AiUsageScreen(onBack: () -> Unit) {
     val records = remember(refreshTick) { AiUsageStore.list(context) }
     val summary = remember(records, window) { summarise(records, window) }
 
-    val colors = AgentTerminalDarkColors
-
-    TerminalScreenScaffold(
+    AiModuleScreenScaffold(
         title = Strings.aiUsageTitle,
         onBack = onBack,
         subtitle = "local · " + when (window) {
