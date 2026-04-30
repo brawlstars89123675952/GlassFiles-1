@@ -1,8 +1,9 @@
 package com.glassfiles.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,17 +14,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,11 +38,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
 import com.glassfiles.data.ai.AiKeyStore
@@ -49,6 +49,12 @@ import com.glassfiles.data.ai.ModelRegistry
 import com.glassfiles.data.ai.models.AiCapability
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
+import com.glassfiles.ui.screens.ai.terminal.AgentTerminal
+import com.glassfiles.ui.screens.ai.terminal.AgentTerminalSurface
+import com.glassfiles.ui.screens.ai.terminal.JetBrainsMono
+import com.glassfiles.ui.screens.ai.terminal.TerminalChip
+import com.glassfiles.ui.screens.ai.terminal.TerminalHairline
+import com.glassfiles.ui.screens.ai.terminal.TerminalPageBar
 import kotlinx.coroutines.launch
 
 /**
@@ -59,7 +65,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun AiModelsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val colors = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
 
     val configured by remember {
@@ -103,78 +108,100 @@ fun AiModelsScreen(onBack: () -> Unit) {
         if (models[selected].isNullOrEmpty()) load(selected, force = false)
     }
 
-    Column(Modifier.fillMaxSize().background(colors.surface)) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 44.dp, start = 4.dp, end = 16.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = colors.onSurface)
-            }
-            Text(
-                Strings.aiModels,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.onSurface,
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(onClick = { load(selected, force = true) }) {
-                Icon(
-                    Icons.Rounded.Refresh,
-                    null,
-                    Modifier.size(20.dp),
-                    tint = colors.primary,
-                )
-            }
-        }
-
-        // Provider tabs
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            tabs.forEach { provider ->
-                val isSelected = provider == selected
-                val isConfigured = provider in configured
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(
-                            if (isSelected) colors.primary.copy(alpha = 0.16f)
-                            else Color.Transparent,
-                        )
-                        .clickable { selected = provider }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier
-                                .size(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(if (isConfigured) colors.tertiary else colors.outline),
-                        )
-                        Spacer(Modifier.size(8.dp))
-                        Text(
-                            provider.displayName,
-                            fontSize = 13.sp,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                            color = if (isSelected) colors.primary else colors.onSurfaceVariant,
+    AgentTerminalSurface {
+        Column(Modifier.fillMaxSize()) {
+            TerminalPageBar(
+                title = Strings.aiModels,
+                onBack = onBack,
+                subtitle = "$selected · catalog",
+                trailing = {
+                    IconButton(
+                        onClick = { load(selected, force = true) },
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            Icons.Rounded.Refresh,
+                            null,
+                            Modifier.size(18.dp),
+                            tint = AgentTerminal.colors.accent,
                         )
                     }
+                },
+            )
+
+            // Provider tabs — terminal-style breadcrumbs.
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                tabs.forEach { provider ->
+                    ProviderTab(
+                        provider = provider,
+                        selected = provider == selected,
+                        configured = provider in configured,
+                        onClick = { selected = provider },
+                    )
                 }
             }
-        }
+            TerminalHairline()
 
-        ModelsBody(
-            provider = selected,
-            list = models[selected].orEmpty(),
-            loading = loading[selected] == true,
-            error = errors[selected],
-            isConfigured = selected in configured,
+            ModelsBody(
+                provider = selected,
+                list = models[selected].orEmpty(),
+                loading = loading[selected] == true,
+                error = errors[selected],
+                isConfigured = selected in configured,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProviderTab(
+    provider: AiProviderId,
+    selected: Boolean,
+    configured: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = AgentTerminal.colors
+    val borderColor = when {
+        selected -> colors.accent
+        configured -> colors.border
+        else -> colors.border
+    }
+    val labelColor = when {
+        selected -> colors.accent
+        configured -> colors.textPrimary
+        else -> colors.textMuted
+    }
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (selected) colors.surface else androidx.compose.ui.graphics.Color.Transparent)
+            .border(1.dp, borderColor, RoundedCornerShape(6.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(if (configured) colors.accent else colors.background)
+                .border(1.dp, if (configured) colors.accent else colors.border, CircleShape),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            provider.displayName,
+            fontSize = 12.sp,
+            fontFamily = JetBrainsMono,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = labelColor,
+            lineHeight = 1.2.em,
         )
     }
 }
@@ -187,14 +214,13 @@ private fun ModelsBody(
     error: String?,
     isConfigured: Boolean,
 ) {
-    val colors = MaterialTheme.colorScheme
-
+    val colors = AgentTerminal.colors
     when {
         loading && list.isEmpty() -> Box(
             Modifier.fillMaxSize().padding(32.dp),
             contentAlignment = Alignment.Center,
         ) {
-            CircularProgressIndicator(color = colors.primary, strokeWidth = 2.dp)
+            CircularProgressIndicator(color = colors.accent, strokeWidth = 2.dp)
         }
         error != null -> Box(
             Modifier.fillMaxSize().padding(32.dp),
@@ -202,17 +228,21 @@ private fun ModelsBody(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    error,
+                    "! $error",
                     fontSize = 13.sp,
                     color = colors.error,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = JetBrainsMono,
+                    lineHeight = 1.3.em,
                 )
-                Spacer(Modifier.size(8.dp))
-                Text(
-                    if (!isConfigured) "${Strings.aiNoKey} — ${provider.displayName}" else "",
-                    fontSize = 12.sp,
-                    color = colors.onSurfaceVariant,
-                )
+                Spacer(Modifier.size(6.dp))
+                if (!isConfigured) {
+                    Text(
+                        "${Strings.aiNoKey} — ${provider.displayName}",
+                        fontSize = 12.sp,
+                        color = colors.textMuted,
+                        fontFamily = JetBrainsMono,
+                    )
+                }
             }
         }
         list.isEmpty() -> Box(
@@ -222,87 +252,89 @@ private fun ModelsBody(
             Text(
                 Strings.aiNoModels,
                 fontSize = 13.sp,
-                color = colors.onSurfaceVariant,
+                color = colors.textMuted,
+                fontFamily = JetBrainsMono,
             )
         }
         else -> LazyColumn(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            items(list) { model -> ModelRow(model) }
+            items(list) { model ->
+                ModelRow(model)
+                TerminalHairline()
+            }
         }
     }
 }
 
 @Composable
 private fun ModelRow(model: AiModel) {
-    val colors = MaterialTheme.colorScheme
+    val colors = AgentTerminal.colors
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(colors.surfaceVariant.copy(alpha = 0.5f))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
+                "▸ ",
+                color = colors.accentDim,
+                fontFamily = JetBrainsMono,
+                fontSize = 13.sp,
+            )
+            Text(
                 model.displayName,
                 fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.onSurface,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Medium,
+                color = colors.textPrimary,
+                lineHeight = 1.3.em,
                 modifier = Modifier.weight(1f),
             )
             if (model.contextWindow != null) {
                 Text(
-                    "${(model.contextWindow!! / 1000)}K",
+                    "${(model.contextWindow / 1000)}K",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
-                    color = colors.onSurfaceVariant,
-                    fontFamily = FontFamily.Monospace,
+                    color = colors.warning,
+                    fontFamily = JetBrainsMono,
                 )
             }
         }
         Text(
             model.id,
             fontSize = 11.sp,
-            color = colors.onSurfaceVariant,
-            fontFamily = FontFamily.Monospace,
+            color = colors.textMuted,
+            fontFamily = JetBrainsMono,
+            modifier = Modifier.padding(start = 14.dp),
         )
         if (model.capabilities.isNotEmpty()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                model.capabilities.sortedBy { it.ordinal }.forEach { CapabilityPill(it) }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(start = 14.dp, top = 2.dp),
+            ) {
+                model.capabilities.sortedBy { it.ordinal }.forEach { cap ->
+                    val (label, color) = capabilityStyle(cap)
+                    TerminalChip(label = label, color = color)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CapabilityPill(cap: AiCapability) {
-    val colors = MaterialTheme.colorScheme
-    val (label, tint) = when (cap) {
-        AiCapability.TEXT -> "TEXT" to colors.onSurfaceVariant
-        AiCapability.VISION -> "VIS" to colors.primary
-        AiCapability.IMAGE_GEN -> "IMG" to colors.tertiary
-        AiCapability.VIDEO_GEN -> "VID" to colors.tertiary
-        AiCapability.CODING -> "CODE" to colors.primary
-        AiCapability.REASONING -> "REASON" to colors.primary
-        AiCapability.EMBEDDING -> "EMB" to colors.onSurfaceVariant
-        AiCapability.AUDIO -> "AUD" to colors.tertiary
-    }
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(tint.copy(alpha = 0.14f))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-    ) {
-        Text(
-            label,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.4.sp,
-            color = tint,
-            fontFamily = FontFamily.Monospace,
-        )
+private fun capabilityStyle(cap: AiCapability): Pair<String, androidx.compose.ui.graphics.Color> {
+    val colors = AgentTerminal.colors
+    return when (cap) {
+        AiCapability.TEXT -> "TEXT" to colors.textSecondary
+        AiCapability.VISION -> "VIS" to colors.accent
+        AiCapability.IMAGE_GEN -> "IMG" to colors.warning
+        AiCapability.VIDEO_GEN -> "VID" to colors.warning
+        AiCapability.CODING -> "CODE" to colors.accent
+        AiCapability.REASONING -> "REASON" to colors.accentDim
+        AiCapability.EMBEDDING -> "EMB" to colors.textMuted
+        AiCapability.AUDIO -> "AUD" to colors.warning
     }
 }

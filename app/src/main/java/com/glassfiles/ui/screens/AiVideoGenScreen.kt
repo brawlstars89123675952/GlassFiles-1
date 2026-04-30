@@ -96,6 +96,15 @@ import java.io.File
  */
 @Composable
 fun AiVideoGenScreen(onBack: () -> Unit) {
+    com.glassfiles.ui.screens.ai.terminal.AgentTerminalSurface {
+        com.glassfiles.ui.screens.ai.terminal.AiTerminalMaterialBridge {
+            AiVideoGenScreenInner(onBack)
+        }
+    }
+}
+
+@Composable
+private fun AiVideoGenScreenInner(onBack: () -> Unit) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
@@ -397,7 +406,7 @@ fun AiVideoGenScreen(onBack: () -> Unit) {
                     Text(
                         "${Strings.aiVideoStatus.uppercase()}: $status",
                         fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
                         color = colors.onSurfaceVariant,
                         modifier = Modifier.weight(1f).padding(end = 8.dp),
                     )
@@ -641,7 +650,7 @@ private fun VideoHistoryRow(
                 sdf.format(java.util.Date(item.historyId)),
                 fontSize = 10.sp,
                 color = colors.onSurfaceVariant,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
                 maxLines = 1,
             )
         }
@@ -725,7 +734,7 @@ private fun VideoResultCard(
         Text(
             item.model.id,
             fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
             color = colors.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
         )

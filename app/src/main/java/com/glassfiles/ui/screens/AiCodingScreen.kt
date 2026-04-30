@@ -120,6 +120,15 @@ private const val SESSION_MODE = AiChatSessionStore.MODE_CODING
  */
 @Composable
 fun AiCodingScreen(onBack: () -> Unit) {
+    com.glassfiles.ui.screens.ai.terminal.AgentTerminalSurface {
+        com.glassfiles.ui.screens.ai.terminal.AiTerminalMaterialBridge {
+            AiCodingScreenInner(onBack)
+        }
+    }
+}
+
+@Composable
+private fun AiCodingScreenInner(onBack: () -> Unit) {
     val context = LocalContext.current
     var sessions by remember {
         mutableStateOf(loadSessionsWithMigration(context))
@@ -265,7 +274,7 @@ private fun CodingSessionsList(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,
                     color = colors.onSurface,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
                 )
                 Text(
                     "${sessions.size} sessions",
@@ -374,7 +383,7 @@ private fun CodingSessionsList(
                                 "${sdf.format(Date(s.updatedAt))} · ${s.messages.size} msgs",
                                 color = colors.onSurfaceVariant,
                                 fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
                                 maxLines = 1,
                             )
                         }
@@ -673,7 +682,7 @@ private fun CodingChatView(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,
                     color = colors.onSurface,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
                 )
                 Text(
                     Strings.aiCodingHint,
@@ -1006,7 +1015,7 @@ private fun AttachmentPreview(base64: String, visionAvailable: Boolean, onRemove
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = colors.onSurface,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
             )
             Text(
                 if (visionAvailable) Strings.aiCodingScreenshotHint else Strings.aiCodingNoVision,
@@ -1076,7 +1085,7 @@ private fun InputBar(
                         TextStyle(
                             color = colors.onSurface,
                             fontSize = 14.sp,
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
                         ),
                     ),
                     cursorBrush = SolidColor(colors.primary),
@@ -1086,7 +1095,7 @@ private fun InputBar(
                                 Strings.aiCodingPlaceholder,
                                 fontSize = 14.sp,
                                 color = colors.onSurfaceVariant,
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
                             )
                         }
                         inner()

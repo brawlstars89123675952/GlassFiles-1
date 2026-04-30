@@ -12,14 +12,14 @@ import com.glassfiles.R
 import com.glassfiles.ui.components.CodeColors
 
 /**
- * Terminal-mode palette and typography used exclusively by the AI Agent
- * screen. The palette is intentionally hand-picked (not derived from
- * [androidx.compose.material3.MaterialTheme.colorScheme]) so the screen
- * stays a visually obscured "engineering surface" regardless of the
- * user's chosen accent color elsewhere in the app. Don't import this
- * type from outside the agent-terminal package — anything that needs a
- * terminal palette there should ask for one rather than reach for the
- * global theme.
+ * Terminal-mode palette and typography used by the entire AI module
+ * (Agent, Chat, Coding, ImageGen, VideoGen, Hub, Keys, Models, Usage,
+ * Settings). The palette is intentionally hand-picked (not derived from
+ * [androidx.compose.material3.MaterialTheme.colorScheme]) so the AI
+ * surfaces stay a visually obscured "engineering surface" regardless of
+ * the user's chosen accent color elsewhere in the app. Outside the AI
+ * module the global Material theme still applies — this palette must
+ * not leak into Browse / Files / Settings / Terminal / GitHub etc.
  */
 @Immutable
 data class AgentTerminalColors(

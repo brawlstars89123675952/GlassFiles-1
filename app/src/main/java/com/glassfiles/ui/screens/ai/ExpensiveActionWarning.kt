@@ -1,17 +1,17 @@
 package com.glassfiles.ui.screens.ai
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -21,29 +21,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
+import com.glassfiles.ui.screens.ai.terminal.AgentTerminalDarkColors
+import com.glassfiles.ui.screens.ai.terminal.JetBrainsMono
 
 /**
  * Information block surfaced to the user before a potentially-expensive
- * AI Agent run is allowed to start. Built in `submit` from the active
- * picker selection plus the seed conversation length.
- *
- * @property repoFullName     `owner/repo` label.
- * @property branch            active branch.
- * @property providerLabel     human-readable provider name (e.g. "OpenAI").
- * @property modelLabel        human-readable model name.
- * @property approxFiles       approximate count of files this task may touch.
- *                             Reserved for future tool-aware estimates;
- *                             today we surface the seed transcript size only.
- * @property approxContextChars rough character count of the existing
- *                             conversation that will be re-sent.
- * @property isPrivate         whether the repo is private (changes the
- *                             tone of the warning copy).
- * @property reason            why the warning fired — used to colour the
- *                             title and help the user decide.
+ * AI Agent run is allowed to start.
  */
 data class ExpensiveActionWarning(
     val repoFullName: String,
@@ -57,24 +46,13 @@ data class ExpensiveActionWarning(
 )
 
 enum class ExpensiveActionReason {
-    /** Repo is private and we have no remembered "OK" for this provider. */
     PrivateRepo,
-    /** Cost mode is MaxQuality — always warn so the user knows. */
     MaxQualityMode,
-    /** Seed conversation is past the soft warning threshold. */
     LargeContext,
 }
 
 /**
- * Confirmation dialog that gates the start of a potentially-expensive
- * AI Agent run. Three actions:
- *
- *  - Cancel             — reject the run; user message stays in input.
- *  - Continue once      — allow this one run only.
- *  - Continue & remember — allow this run AND skip the dialog for the
- *                          same `(repo, provider)` next time. Hidden when
- *                          [allowRemember] is false (private repo with
- *                          no remembered exception, etc).
+ * Terminal-themed confirmation dialog gating an expensive AI run.
  */
 @Composable
 fun ExpensiveActionWarningDialog(
@@ -84,26 +62,20 @@ fun ExpensiveActionWarningDialog(
     onContinueOnce: () -> Unit,
     onContinueAndRemember: () -> Unit,
 ) {
-    val colors = MaterialTheme.colorScheme
+    val colors = AgentTerminalDarkColors
     var rememberChecked by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onCancel,
+        containerColor = colors.surfaceElevated,
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Rounded.Warning,
-                    null,
-                    Modifier.size(18.dp),
-                    tint = colors.tertiary,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    Strings.aiCostWarningTitle,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            Text(
+                "! ${Strings.aiCostWarningTitle.lowercase()}",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.warning,
+                fontFamily = JetBrainsMono,
+            )
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -114,7 +86,9 @@ fun ExpensiveActionWarningDialog(
                         ExpensiveActionReason.LargeContext -> Strings.aiCostWarningReasonLarge
                     },
                     fontSize = 13.sp,
-                    color = colors.onSurface,
+                    color = colors.textPrimary,
+                    fontFamily = JetBrainsMono,
+                    lineHeight = 1.4.em,
                 )
                 Spacer(Modifier.size(2.dp))
                 LabeledRow(Strings.aiCostWarningRepo, warning.repoFullName + if (warning.isPrivate) " · ${Strings.aiCostWarningPrivate}" else "")
@@ -132,19 +106,27 @@ fun ExpensiveActionWarningDialog(
                 Text(
                     Strings.aiCostWarningTransmitNote,
                     fontSize = 11.sp,
-                    color = colors.onSurfaceVariant,
+                    color = colors.textMuted,
+                    fontFamily = JetBrainsMono,
                 )
                 if (allowRemember) {
                     Spacer(Modifier.size(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = rememberChecked,
-                            onCheckedChange = { rememberChecked = it },
+                    Row(
+                        Modifier.clickable { rememberChecked = !rememberChecked },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (rememberChecked) "[✓]" else "[ ]",
+                            color = if (rememberChecked) colors.accent else colors.textSecondary,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 14.sp,
                         )
+                        Spacer(Modifier.width(8.dp))
                         Text(
                             Strings.aiCostWarningRememberLabel,
                             fontSize = 12.sp,
-                            color = colors.onSurface,
+                            color = colors.textPrimary,
+                            fontFamily = JetBrainsMono,
                         )
                     }
                 }
@@ -156,14 +138,22 @@ fun ExpensiveActionWarningDialog(
                 else onContinueOnce()
             }) {
                 Text(
-                    if (allowRemember && rememberChecked) Strings.aiCostWarningContinueRemember
-                    else Strings.aiCostWarningContinueOnce,
+                    "[ " + (if (allowRemember && rememberChecked) Strings.aiCostWarningContinueRemember
+                    else Strings.aiCostWarningContinueOnce).lowercase() + " ]",
+                    color = colors.accent,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 13.sp,
                 )
             }
         },
         dismissButton = {
             TextButton(onClick = onCancel) {
-                Text(Strings.cancel)
+                Text(
+                    "[ ${Strings.cancel.lowercase()} ]",
+                    color = colors.textSecondary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 13.sp,
+                )
             }
         },
     )
@@ -171,19 +161,21 @@ fun ExpensiveActionWarningDialog(
 
 @Composable
 private fun LabeledRow(label: String, value: String) {
-    val colors = MaterialTheme.colorScheme
+    val colors = AgentTerminalDarkColors
     Row(verticalAlignment = Alignment.Top) {
         Text(
             label,
             fontSize = 12.sp,
-            color = colors.onSurfaceVariant,
+            color = colors.textMuted,
+            fontFamily = JetBrainsMono,
             modifier = Modifier.width(96.dp),
         )
         Text(
             value,
             fontSize = 12.sp,
-            color = colors.onSurface,
+            color = colors.textPrimary,
             fontWeight = FontWeight.Medium,
+            fontFamily = JetBrainsMono,
         )
     }
 }

@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -786,7 +787,10 @@ private fun AiAgentBottomSheet(
     initialPrompt: String?,
     onInitialConsumed: () -> Unit,
 ) {
-    val colors = MaterialTheme.colorScheme
+    // Terminal palette for the GitHub→AI agent sheet so it reads as
+    // the same surface as the standalone agent / chat / hub screens.
+    // Material colors stay reserved for the GitHub module behind it.
+    val term = com.glassfiles.ui.screens.ai.terminal.AgentTerminalDarkColors
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val maxH = maxHeight
         val collapsedHeight = 56.dp
@@ -813,7 +817,7 @@ private fun AiAgentBottomSheet(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(colors.scrim.copy(alpha = scrimAlpha))
+                    .background(Color.Black.copy(alpha = scrimAlpha))
                     .then(
                         if (expanded) Modifier.clickable(
                             interactionSource = scrimInteraction,
@@ -828,10 +832,11 @@ private fun AiAgentBottomSheet(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .height(animatedHeight),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            color = colors.surface,
-            tonalElevation = 6.dp,
-            shadowElevation = 12.dp,
+            shape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp),
+            color = term.surfaceElevated,
+            tonalElevation = 0.dp,
+            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, term.border),
         ) {
             Column(Modifier.fillMaxSize()) {
                 // Drag-handle row: drag down → collapse, drag up → expand,
@@ -839,7 +844,7 @@ private fun AiAgentBottomSheet(
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(28.dp)
+                        .height(24.dp)
                         .pointerInput(Unit) {
                             detectVerticalDragGestures { _, dy ->
                                 if (dy > 4f) onExpandedChange(false)
@@ -851,9 +856,9 @@ private fun AiAgentBottomSheet(
                 ) {
                     Box(
                         Modifier
-                            .size(width = 36.dp, height = 4.dp)
+                            .size(width = 32.dp, height = 3.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(colors.outlineVariant),
+                            .background(term.border),
                     )
                 }
                 // Crossfade keeps the sheet's content visually continuous
@@ -883,23 +888,30 @@ private fun AiAgentBottomSheet(
                     Row(
                         Modifier
                             .fillMaxSize()
-                            .padding(start = 16.dp, end = 8.dp),
+                            .padding(start = 14.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp), tint = colors.primary)
+                        Text(
+                            ">",
+                            color = term.accent,
+                            fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                        )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            Strings.aiAgent,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.onSurface,
+                            Strings.aiAgent.lowercase(),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                            color = term.textPrimary,
                         )
                         Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { onExpandedChange(true) }) {
-                            Icon(Icons.Rounded.KeyboardArrowUp, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                        IconButton(onClick = { onExpandedChange(true) }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Rounded.KeyboardArrowUp, null, Modifier.size(18.dp), tint = term.textSecondary)
                         }
-                        IconButton(onClick = onClose) {
-                            Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = colors.onSurfaceVariant)
+                        IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Rounded.Close, null, Modifier.size(16.dp), tint = term.textMuted)
                         }
                     }
                 } }

@@ -1,4 +1,5 @@
 package com.glassfiles.ui.screens
+
 import com.glassfiles.data.Strings
 import android.app.Activity
 import android.content.ClipData
@@ -11,419 +12,1669 @@ import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Send
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
+import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.FolderZip
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.StopCircle
+import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.glassfiles.data.ai.*
-import com.glassfiles.ui.theme.*
+import com.glassfiles.data.ai.AiManager
+import com.glassfiles.data.ai.AiProvider
+import com.glassfiles.data.ai.ChatHistoryManager
+import com.glassfiles.data.ai.ChatMessage
+import com.glassfiles.data.ai.ChatSession
+import com.glassfiles.data.ai.GeminiKeyStore
+import com.glassfiles.ui.screens.ai.terminal.AgentBlinkingCursor
+import com.glassfiles.ui.screens.ai.terminal.AgentTerminal
+import com.glassfiles.ui.screens.ai.terminal.AgentTerminalCodeBlock
+import com.glassfiles.ui.screens.ai.terminal.AgentTerminalSurface
+import com.glassfiles.ui.screens.ai.terminal.JetBrainsMono
+import com.glassfiles.ui.screens.ai.terminal.TerminalCard
+import com.glassfiles.ui.screens.ai.terminal.TerminalChip
+import com.glassfiles.ui.screens.ai.terminal.TerminalHairline
+import com.glassfiles.ui.screens.ai.terminal.TerminalListRow
+import com.glassfiles.ui.screens.ai.terminal.TerminalPageBar
+import com.glassfiles.ui.screens.ai.terminal.TerminalPillButton
+import com.glassfiles.ui.screens.ai.terminal.TerminalScreenScaffold
+import com.glassfiles.ui.screens.ai.terminal.TerminalSectionLabel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
-private val BG = Color(0xFF09090B); private val Card = Color(0xFF111113); private val Card2 = Color(0xFF18181B)
-private val Border = Color(0xFF27272A); private val T1 = Color(0xFFE4E4E7); private val T2 = Color(0xFF71717A); private val T3 = Color(0xFF52525B)
-private val Accent = Color(0xFF22C55E); private val Bl = Color(0xFF3B82F6); private val QwenColor = Color(0xFF6366F1)
-private val CodeBg = Color(0xFF0D1117); private val CodeBorder = Color(0xFF30363D); private val CodeKw = Color(0xFFFF7B72)
-private val CodeStr = Color(0xFFA5D6A7); private val CodeCmt = Color(0xFF8B949E); private val CodeNum = Color(0xFF79C0FF)
-private val CodeTy = Color(0xFFFFA657); private val CodeFn = Color(0xFFD2A8FF); private val CodeDef = Color(0xFFE6EDF3)
-private val kwSet = setOf("fun","val","var","class","object","interface","enum","when","if","else","for","while","return","import","package","private","public","protected","internal","override","suspend","data","sealed","abstract","open","companion","init","try","catch","throw","finally","is","as","in","by","null","true","false","this","super","it","break","continue","const","lateinit","function","let","def","self","None","True","False","async","await","yield","from","with","lambda","elif","except","raise","static","final","void","int","String","boolean","float","double","long","new","delete","typeof","instanceof","export","default","switch","case","struct","impl","fn","pub","mut","use","mod","func","go","chan","select","defer","range","type","map","make","println","print")
+/**
+ * Chat / sessions screen for the AI module, terminal-themed.
+ *
+ * Wrapped in [AgentTerminalSurface] so every descendant reads the
+ * same palette as the agent / hub / models screens. Outside the AI
+ * module the global Material theme remains untouched — the override
+ * is scoped via the surface's CompositionLocal.
+ */
+@Composable
+fun AiChatScreen(
+    onBack: () -> Unit,
+    initialPrompt: String? = null,
+    initialImageBase64: String? = null,
+    currentFolder: String? = null,
+    onRunInTerminal: ((String) -> Unit)? = null,
+) {
+    AgentTerminalSurface {
+        AiChatScreenInner(
+            onBack = onBack,
+            initialPrompt = initialPrompt,
+            initialImageBase64 = initialImageBase64,
+            currentFolder = currentFolder,
+            onRunInTerminal = onRunInTerminal,
+        )
+    }
+}
 
 @Composable
-fun AiChatScreen(onBack: () -> Unit, initialPrompt: String? = null, initialImageBase64: String? = null, currentFolder: String? = null, onRunInTerminal: ((String) -> Unit)? = null) {
-    val context = LocalContext.current; val historyMgr = remember { ChatHistoryManager(context) }
-    var activeSessionId by remember { mutableStateOf<String?>(null) }; var sessions by remember { mutableStateOf(historyMgr.getSessions()) }
+private fun AiChatScreenInner(
+    onBack: () -> Unit,
+    initialPrompt: String?,
+    initialImageBase64: String?,
+    currentFolder: String?,
+    onRunInTerminal: ((String) -> Unit)?,
+) {
+    val context = LocalContext.current
+    val historyMgr = remember { ChatHistoryManager(context) }
+    var activeSessionId by remember { mutableStateOf<String?>(null) }
+    var sessions by remember { mutableStateOf(historyMgr.getSessions()) }
     var consumedPrompt by remember { mutableStateOf(false) }
     var hasKey by remember { mutableStateOf(GeminiKeyStore.hasKey(context) || GeminiKeyStore.hasQwenKey(context)) }
-    if (!hasKey) { ApiKeySetupScreen(onBack = onBack, onKeySet = { hasKey = true }); return }
+    if (!hasKey) {
+        ApiKeySetupScreen(onBack = onBack, onKeySet = { hasKey = true })
+        return
+    }
     LaunchedEffect(initialPrompt, initialImageBase64) {
         if (initialPrompt != null && activeSessionId == null && !consumedPrompt) {
             val dp = if (GeminiKeyStore.hasKey(context)) AiProvider.GEMINI_FLASH else AiProvider.QWEN_PLUS
-            val s = historyMgr.createSession(dp); historyMgr.saveSession(s); activeSessionId = s.id; consumedPrompt = true
+            val s = historyMgr.createSession(dp)
+            historyMgr.saveSession(s)
+            activeSessionId = s.id
+            consumedPrompt = true
         }
     }
     fun refresh() { sessions = historyMgr.getSessions() }
-    if (activeSessionId != null) {
-        ChatView(sessionId = activeSessionId!!, historyMgr = historyMgr, onBack = { activeSessionId = null; refresh() },
-            initialPrompt = if (!consumedPrompt) initialPrompt else null, initialImageBase64 = if (!consumedPrompt) initialImageBase64 else null,
-            currentFolder = currentFolder, onRunInTerminal = onRunInTerminal)
+    val activeId = activeSessionId
+    if (activeId != null) {
+        ChatView(
+            sessionId = activeId,
+            historyMgr = historyMgr,
+            onBack = { activeSessionId = null; refresh() },
+            initialPrompt = if (!consumedPrompt) initialPrompt else null,
+            initialImageBase64 = if (!consumedPrompt) initialImageBase64 else null,
+            currentFolder = currentFolder,
+            onRunInTerminal = onRunInTerminal,
+        )
     } else {
         val dp = if (GeminiKeyStore.hasKey(context)) AiProvider.GEMINI_FLASH else AiProvider.QWEN_PLUS
-        ChatHistoryList(sessions, { val s = historyMgr.createSession(dp); historyMgr.saveSession(s); activeSessionId = s.id },
-            { activeSessionId = it.id }, { historyMgr.deleteSession(it.id); refresh() }, { historyMgr.deleteAll(); refresh() }, onBack)
+        ChatHistoryList(
+            sessions = sessions,
+            onNew = {
+                val s = historyMgr.createSession(dp)
+                historyMgr.saveSession(s)
+                activeSessionId = s.id
+            },
+            onOpen = { activeSessionId = it.id },
+            onDel = { historyMgr.deleteSession(it.id); refresh() },
+            onDelAll = { historyMgr.deleteAll(); refresh() },
+            onBack = onBack,
+        )
     }
 }
 
 // ═══════════════════════════════════
-// API Key Setup
+// API key setup
 // ═══════════════════════════════════
 @Composable
 private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
-    val context = LocalContext.current; var geminiKey by remember { mutableStateOf("") }; var qwenKey by remember { mutableStateOf("") }; var proxy by remember { mutableStateOf(GeminiKeyStore.getProxy(context)) }
-    Column(Modifier.fillMaxSize().background(BG).verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.Center) {
-        Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(48.dp), tint = Accent); Spacer(Modifier.height(16.dp))
-        Text("AI Assistant", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = T1)
-        Text("Enter at least one API key", fontSize = 14.sp, color = T2, modifier = Modifier.padding(top = 4.dp)); Spacer(Modifier.height(32.dp))
-        SectionLabel("Gemini", Accent); Spacer(Modifier.height(6.dp)); InputField(geminiKey, { geminiKey = it }, "AIza...", mono = true)
-        Text("aistudio.google.com/apikey", fontSize = 12.sp, color = T3, modifier = Modifier.padding(top = 4.dp)); Spacer(Modifier.height(6.dp))
-        InputField(proxy, { proxy = it }, "Proxy (optional)"); Spacer(Modifier.height(24.dp))
-        SectionLabel("Qwen (Alibaba Cloud)", QwenColor); Spacer(Modifier.height(6.dp)); InputField(qwenKey, { qwenKey = it }, "sk-...", mono = true)
-        Text("bailian.console.alibabacloud.com", fontSize = 12.sp, color = T3, modifier = Modifier.padding(top = 4.dp)); Spacer(Modifier.height(32.dp))
-        val ok = geminiKey.length > 10 || qwenKey.length > 10
-        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (ok) Accent else Border).clickable(enabled = ok) {
-            if (geminiKey.length > 10) GeminiKeyStore.saveKey(context, geminiKey); if (proxy.isNotBlank()) GeminiKeyStore.saveProxy(context, proxy)
-            if (qwenKey.length > 10) GeminiKeyStore.saveQwenKey(context, qwenKey); onKeySet()
-        }.padding(14.dp), contentAlignment = Alignment.Center) { Text("Continue", color = if (ok) Color.Black else T3, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
-        Spacer(Modifier.height(12.dp)); Box(Modifier.fillMaxWidth().clickable { onBack() }.padding(8.dp), contentAlignment = Alignment.Center) { Text("Back", color = T2, fontSize = 14.sp) }
+    val context = LocalContext.current
+    var geminiKey by remember { mutableStateOf("") }
+    var qwenKey by remember { mutableStateOf("") }
+    var proxy by remember { mutableStateOf(GeminiKeyStore.getProxy(context)) }
+    val colors = AgentTerminal.colors
+    TerminalScreenScaffold(title = "AI · setup", onBack = onBack) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                "Add at least one provider key to continue.",
+                color = colors.textSecondary,
+                fontFamily = JetBrainsMono,
+                fontSize = 13.sp,
+                lineHeight = 1.4.em,
+            )
+            TerminalSectionLabel("> gemini")
+            TerminalMonoField(
+                value = geminiKey,
+                onValueChange = { geminiKey = it },
+                placeholder = "AIza...",
+                singleLine = true,
+            )
+            Text(
+                "aistudio.google.com/apikey",
+                color = colors.textMuted,
+                fontFamily = JetBrainsMono,
+                fontSize = 11.sp,
+            )
+            TerminalMonoField(
+                value = proxy,
+                onValueChange = { proxy = it },
+                placeholder = "proxy (optional)",
+                singleLine = true,
+            )
+            TerminalHairline()
+            TerminalSectionLabel("> qwen")
+            TerminalMonoField(
+                value = qwenKey,
+                onValueChange = { qwenKey = it },
+                placeholder = "sk-...",
+                singleLine = true,
+            )
+            Text(
+                "bailian.console.alibabacloud.com",
+                color = colors.textMuted,
+                fontFamily = JetBrainsMono,
+                fontSize = 11.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            val ok = geminiKey.length > 10 || qwenKey.length > 10
+            TerminalPillButton(
+                label = "continue",
+                onClick = {
+                    if (geminiKey.length > 10) GeminiKeyStore.saveKey(context, geminiKey)
+                    if (proxy.isNotBlank()) GeminiKeyStore.saveProxy(context, proxy)
+                    if (qwenKey.length > 10) GeminiKeyStore.saveQwenKey(context, qwenKey)
+                    onKeySet()
+                },
+                enabled = ok,
+                accent = true,
+            )
+        }
     }
 }
 
 // ═══════════════════════════════════
-// Chat History (with search)
+// Sessions list
 // ═══════════════════════════════════
 @Composable
-private fun ChatHistoryList(sessions: List<ChatSession>, onNew: () -> Unit, onOpen: (ChatSession) -> Unit, onDel: (ChatSession) -> Unit, onDelAll: () -> Unit, onBack: () -> Unit) {
+private fun ChatHistoryList(
+    sessions: List<ChatSession>,
+    onNew: () -> Unit,
+    onOpen: (ChatSession) -> Unit,
+    onDel: (ChatSession) -> Unit,
+    onDelAll: () -> Unit,
+    onBack: () -> Unit,
+) {
     val sdf = remember { SimpleDateFormat("dd.MM.yy HH:mm", Locale.getDefault()) }
     var searchQ by remember { mutableStateOf("") }
-    val filtered = if (searchQ.isBlank()) sessions else sessions.filter { it.title.contains(searchQ, true) || it.messages.any { m -> m.content.contains(searchQ, true) } }
-    Column(Modifier.fillMaxSize().background(BG)) {
-        Row(Modifier.fillMaxWidth().padding(top = 48.dp, start = 4.dp, end = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = T1) }
-            Text("AI", color = T1, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.weight(1f))
-            if (sessions.isNotEmpty()) IconButton(onClick = onDelAll) { Icon(Icons.Rounded.DeleteSweep, null, Modifier.size(20.dp), tint = T2) }
+    val filtered = if (searchQ.isBlank()) sessions
+    else sessions.filter { it.title.contains(searchQ, true) || it.messages.any { m -> m.content.contains(searchQ, true) } }
+    val colors = AgentTerminal.colors
+    TerminalScreenScaffold(
+        title = "AI · chat",
+        onBack = onBack,
+        subtitle = if (sessions.isNotEmpty()) "${sessions.size} session${if (sessions.size == 1) "" else "s"}" else null,
+        trailing = {
+            if (sessions.isNotEmpty()) {
+                IconButton(onClick = onDelAll, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Rounded.DeleteSweep,
+                        contentDescription = "clear all",
+                        modifier = Modifier.size(18.dp),
+                        tint = colors.warning,
+                    )
+                }
+            }
+        },
+        bottomBar = {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .background(colors.background)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                TerminalPillButton(
+                    label = "new chat",
+                    onClick = onNew,
+                    leadingIcon = Icons.Rounded.Add,
+                    accent = true,
+                )
+            }
+        },
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            if (sessions.size > 2) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(colors.surface)
+                        .border(1.dp, colors.border, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Search, null, Modifier.size(14.dp), tint = colors.textMuted)
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.weight(1f)) {
+                            BasicTextField(
+                                value = searchQ,
+                                onValueChange = { searchQ = it },
+                                textStyle = TextStyle(
+                                    color = colors.textPrimary,
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 13.sp,
+                                ),
+                                cursorBrush = SolidColor(colors.accent),
+                                singleLine = true,
+                            )
+                            if (searchQ.isEmpty()) {
+                                Text(
+                                    "search chats…",
+                                    color = colors.textMuted,
+                                    fontFamily = JetBrainsMono,
+                                    fontSize = 13.sp,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (filtered.isEmpty()) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = if (searchQ.isNotBlank()) "no matches" else "> no sessions yet",
+                        color = colors.textSecondary,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 14.sp,
+                    )
+                    if (searchQ.isBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "tap [ new chat ] below to start.",
+                            color = colors.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = 4.dp),
+                ) {
+                    items(filtered) { s ->
+                        val provider = try { AiProvider.valueOf(s.provider) } catch (_: Exception) { null }
+                        val pc = if (provider?.isQwen == true) colors.warning else colors.accent
+                        TerminalListRow(
+                            title = s.title,
+                            prefix = "▸",
+                            prefixColor = pc,
+                            subtitle = "${sdf.format(Date(s.updatedAt))}  ·  ${s.messages.size} msg" +
+                                (provider?.let { "  ·  ${it.label}" } ?: ""),
+                            onClick = { onOpen(s) },
+                            trailing = {
+                                IconButton(onClick = { onDel(s) }, modifier = Modifier.size(28.dp)) {
+                                    Icon(
+                                        Icons.Rounded.Close,
+                                        contentDescription = "delete",
+                                        modifier = Modifier.size(14.dp),
+                                        tint = colors.textMuted,
+                                    )
+                                }
+                            },
+                        )
+                        TerminalHairline(modifier = Modifier.padding(start = 12.dp))
+                    }
+                }
+            }
         }
-        // Search bar
-        if (sessions.size > 2) {
-            BasicTextField(searchQ, { searchQ = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).background(Card, RoundedCornerShape(10.dp)).border(1.dp, Border, RoundedCornerShape(10.dp)).padding(12.dp),
-                textStyle = TextStyle(T1, 14.sp), cursorBrush = SolidColor(Accent), singleLine = true,
-                decorationBox = { inner -> Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Search, null, Modifier.size(16.dp), tint = T3); Spacer(Modifier.width(8.dp)); Box { if (searchQ.isEmpty()) Text("Search chats...", color = T3, fontSize = 14.sp); inner() } } })
-        }
-        if (filtered.isEmpty()) { Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(48.dp), tint = Accent); Text(if (searchQ.isNotBlank()) "Nothing found" else "No chats yet", color = T2, fontSize = 16.sp) } }
-        } else { LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(filtered) { s -> val pc = try { val p = AiProvider.valueOf(s.provider); if (p.isQwen) QwenColor else Accent } catch (_: Exception) { Accent }
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Card).clickable { onOpen(s) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(Modifier.size(40.dp).background(Card2, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Chat, null, Modifier.size(20.dp), tint = pc) }
-                    Column(Modifier.weight(1f)) { Text(s.title, color = T1, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text(sdf.format(Date(s.updatedAt)), color = T3, fontSize = 11.sp); Text("${s.messages.size} msgs", color = T3, fontSize = 11.sp)
-                            Text(try { AiProvider.valueOf(s.provider).label } catch (_: Exception) { s.provider }, color = pc, fontSize = 11.sp) } }
-                    IconButton(onClick = { onDel(s) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Rounded.Close, null, Modifier.size(16.dp), tint = T3) }
-                } } } }
-        Box(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(14.dp)).background(Accent).clickable(onClick = onNew).padding(14.dp), contentAlignment = Alignment.Center) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Add, null, Modifier.size(20.dp), tint = Color.Black); Text("New Chat", color = Color.Black, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) } }
     }
 }
 
 // ═══════════════════════════════════
-// Chat View (main)
+// Chat view (single conversation)
 // ═══════════════════════════════════
 @Composable
-private fun ChatView(sessionId: String, historyMgr: ChatHistoryManager, onBack: () -> Unit, initialPrompt: String? = null, initialImageBase64: String? = null, currentFolder: String? = null, onRunInTerminal: ((String) -> Unit)? = null) {
-    val context = LocalContext.current; val scope = rememberCoroutineScope(); val session = remember { historyMgr.getSession(sessionId) }
-    var messages by remember { mutableStateOf(session?.messages ?: emptyList()) }; var input by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }; var currentResponse by remember { mutableStateOf("") }
-    var provider by remember { mutableStateOf(try { AiProvider.valueOf(session?.provider ?: "GEMINI_FLASH") } catch (_: Exception) { AiProvider.GEMINI_FLASH }) }
-    var showModelPicker by remember { mutableStateOf(false) }; var attachedImage by remember { mutableStateOf<String?>(null) }
-    var attachedFile by remember { mutableStateOf<Pair<String, String>?>(null) }; var attachedZip by remember { mutableStateOf<String?>(null) }
-    val listState = rememberLazyListState(); var geminiKey by remember { mutableStateOf(GeminiKeyStore.getKey(context)) }
-    var qwenKey by remember { mutableStateOf(GeminiKeyStore.getQwenKey(context)) }; var qwenRegion by remember { mutableStateOf(GeminiKeyStore.getQwenRegion(context)) }
-    var proxyUrl by remember { mutableStateOf(GeminiKeyStore.getProxy(context)) }; var showSettings by remember { mutableStateOf(false) }
-    var autoSent by remember { mutableStateOf(false) }; var currentJob by remember { mutableStateOf<Job?>(null) }
-    var editIdx by remember { mutableIntStateOf(-1) }; var editTxt by remember { mutableStateOf("") }
+private fun ChatView(
+    sessionId: String,
+    historyMgr: ChatHistoryManager,
+    onBack: () -> Unit,
+    initialPrompt: String? = null,
+    initialImageBase64: String? = null,
+    currentFolder: String? = null,
+    onRunInTerminal: ((String) -> Unit)? = null,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val session = remember { historyMgr.getSession(sessionId) }
+    var messages by remember { mutableStateOf(session?.messages ?: emptyList()) }
+    var input by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    var currentResponse by remember { mutableStateOf("") }
+    var provider by remember {
+        mutableStateOf(
+            try { AiProvider.valueOf(session?.provider ?: "GEMINI_FLASH") }
+            catch (_: Exception) { AiProvider.GEMINI_FLASH }
+        )
+    }
+    var showModelPicker by remember { mutableStateOf(false) }
+    var attachedImage by remember { mutableStateOf<String?>(null) }
+    var attachedFile by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var attachedZip by remember { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
+    var geminiKey by remember { mutableStateOf(GeminiKeyStore.getKey(context)) }
+    var qwenKey by remember { mutableStateOf(GeminiKeyStore.getQwenKey(context)) }
+    var qwenRegion by remember { mutableStateOf(GeminiKeyStore.getQwenRegion(context)) }
+    var proxyUrl by remember { mutableStateOf(GeminiKeyStore.getProxy(context)) }
+    var showSettings by remember { mutableStateOf(false) }
+    var autoSent by remember { mutableStateOf(false) }
+    var currentJob by remember { mutableStateOf<Job?>(null) }
+    var editIdx by remember { mutableIntStateOf(-1) }
+    var editTxt by remember { mutableStateOf("") }
+    val colors = AgentTerminal.colors
+
     // TTS
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     var ttsReady by remember { mutableStateOf(false) }
     var speakingIdx by remember { mutableIntStateOf(-1) }
-    DisposableEffect(Unit) { tts = TextToSpeech(context) { status -> ttsReady = status == TextToSpeech.SUCCESS }; onDispose { tts?.shutdown() } }
-    // Voice input
+    DisposableEffect(Unit) {
+        tts = TextToSpeech(context) { status -> ttsReady = status == TextToSpeech.SUCCESS }
+        onDispose { tts?.shutdown() }
+    }
+    // Voice
     val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) { val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull(); if (text != null) input = if (input.isBlank()) text else "$input $text" } }
+        if (result.resultCode == Activity.RESULT_OK) {
+            val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (text != null) input = if (input.isBlank()) text else "$input $text"
+        }
+    }
     // Camera
     val cameraFile = remember { File(context.cacheDir, "ai_camera_${System.currentTimeMillis()}.jpg") }
     val cameraUri = remember { androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", cameraFile) }
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success -> if (success) attachedImage = AiManager.encodeImage(cameraFile) }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) attachedImage = AiManager.encodeImage(cameraFile)
+    }
     // File picker
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        try { val mime = context.contentResolver.getType(uri) ?: ""; val cursor = context.contentResolver.query(uri, null, null, null, null)
-            val name = cursor?.use { c -> if (c.moveToFirst()) { val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME); if (idx >= 0) c.getString(idx) else null } else null } ?: uri.lastPathSegment ?: "file"
+        try {
+            val mime = context.contentResolver.getType(uri) ?: ""
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            val name = cursor?.use { c ->
+                if (c.moveToFirst()) {
+                    val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) c.getString(idx) else null
+                } else null
+            } ?: uri.lastPathSegment ?: "file"
             val ext = name.substringAfterLast(".", "").lowercase()
-            when { mime.startsWith("image/") -> { context.contentResolver.openInputStream(uri)?.use { s -> val f = File(context.cacheDir, "ai_img.jpg"); f.outputStream().use { o -> s.copyTo(o) }; attachedImage = AiManager.encodeImage(f) } }
-                ext in listOf("zip", "jar") -> { val tmp = File(context.cacheDir, "ai_zip_${System.currentTimeMillis()}.$ext"); context.contentResolver.openInputStream(uri)?.use { s -> tmp.outputStream().use { o -> s.copyTo(o) } }
-                    val entries = AiManager.extractZipForAi(tmp.absolutePath, context); attachedZip = AiManager.formatZipContents(entries); attachedFile = Pair(name, "${entries.size} files extracted"); tmp.delete() }
-                else -> { context.contentResolver.openInputStream(uri)?.use { s -> val t = s.bufferedReader().readText(); attachedFile = Pair(name, if (t.length > 10000) t.take(10000) + "\n...[truncated]" else t) } } }
-        } catch (e: Exception) { Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show() } }
-
-    // Folder context
-    val folderFiles = remember(currentFolder) { if (currentFolder != null) try { File(currentFolder).listFiles()?.map { "${if (it.isDirectory) "[DIR]" else "[${it.extension}]"} ${it.name}" }?.take(30)?.joinToString("\n") } catch (_: Exception) { null } else null }
-
-    fun save(msgs: List<ChatMessage>) { historyMgr.saveSession(ChatSession(id = sessionId, title = historyMgr.generateTitle(msgs), provider = provider.name, messages = msgs, createdAt = session?.createdAt ?: System.currentTimeMillis(), updatedAt = System.currentTimeMillis())) }
-    fun clip(t: String) { (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("ai", t)); Toast.makeText(context, Strings.copied, Toast.LENGTH_SHORT).show() }
-    fun exportChat() { val sb = StringBuilder("# AI Chat\n**${provider.label}** — ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())}\n\n---\n\n")
-        messages.forEach { m -> sb.append(if (m.role == "user") "**You:**\n" else "**AI:**\n").append(m.content).append("\n\n") }
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_AI"); dir.mkdirs()
-        val f = File(dir, "chat_${System.currentTimeMillis()}.md"); f.writeText(sb.toString()); Toast.makeText(context, "Saved: ${f.name}", Toast.LENGTH_SHORT).show() }
-    fun saveCode(code: String, lang: String) { val ext = when (lang) { "kotlin","kt" -> "kt"; "java" -> "java"; "python","py" -> "py"; "javascript","js" -> "js"; "typescript","ts" -> "ts"; "html" -> "html"; "css" -> "css"; "xml" -> "xml"; "json" -> "json"; "yaml","yml" -> "yml"; "bash","sh" -> "sh"; "sql" -> "sql"; "go" -> "go"; "rust","rs" -> "rs"; "swift" -> "swift"; "c" -> "c"; "cpp" -> "cpp"; else -> "txt" }
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_AI"); dir.mkdirs()
-        val f = File(dir, "code_${System.currentTimeMillis()}.$ext"); f.writeText(code); Toast.makeText(context, "Saved: ${f.name}", Toast.LENGTH_SHORT).show() }
-    fun speak(text: String, idx: Int) { if (!ttsReady || tts == null) return; if (speakingIdx == idx) { tts?.stop(); speakingIdx = -1; return }
-        val clean = text.replace(Regex("```[\\s\\S]*?```"), "code block").replace(Regex("[*_`#>]"), ""); tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "msg_$idx"); speakingIdx = idx }
-    fun voiceInput() { val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply { putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM); putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak...") }
-        try { voiceLauncher.launch(intent) } catch (_: Exception) { Toast.makeText(context, "Voice not available", Toast.LENGTH_SHORT).show() } }
-
-    fun doSend(text: String, image: String? = null, fc: String? = null) { if (isLoading) return
-        // Add folder context if available
-        val fullText = if (folderFiles != null && messages.isEmpty()) "Current folder: $currentFolder\nFiles:\n$folderFiles\n\nUser: $text" else text
-        val um = ChatMessage("user", text, image, fc); currentResponse = ""; messages = messages + um; isLoading = true
-        val msgsForApi = if (folderFiles != null && messages.size == 1) listOf(ChatMessage("user", fullText, image, fc)) else messages
-        currentJob = scope.launch { try { val r = AiManager.chat(provider, msgsForApi, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }; messages = messages + ChatMessage("assistant", r); currentResponse = ""; save(messages)
-        } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException && currentResponse.isNotBlank()) { messages = messages + ChatMessage("assistant", currentResponse + "\n\n*(stopped)*"); currentResponse = "" } else { messages = messages + ChatMessage("assistant", "Error: ${e.message}"); currentResponse = "" }; save(messages) }; isLoading = false; currentJob = null } }
-
-    fun send() { var t = input.trim(); if (t.isEmpty() && attachedImage == null && attachedFile == null && attachedZip == null) return
-        val fc = when { attachedZip != null -> attachedZip; attachedFile != null -> "File: ${attachedFile!!.first}\n```\n${attachedFile!!.second}\n```"; else -> null }
-        if (t.isEmpty() && attachedImage != null) t = "What is in this image?"; if (t.isEmpty() && fc != null) t = "Analyze this file"
-        input = ""; val img = attachedImage; val fcc = fc; attachedImage = null; attachedFile = null; attachedZip = null; doSend(t, img, fcc) }
-
-    fun regenerate() { if (messages.isEmpty() || isLoading) return; val m = messages.toMutableList(); if (m.last().role == "assistant") m.removeLast(); messages = m; isLoading = true; currentResponse = ""
-        currentJob = scope.launch { try { val r = AiManager.chat(provider, messages, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }; messages = messages + ChatMessage("assistant", r); currentResponse = ""; save(messages)
-        } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException && currentResponse.isNotBlank()) { messages = messages + ChatMessage("assistant", currentResponse + "\n\n*(stopped)*") } else { messages = messages + ChatMessage("assistant", "Error: ${e.message}") }; currentResponse = ""; save(messages) }; isLoading = false; currentJob = null } }
-
-    fun quickAction(action: String) { val lastAi = messages.lastOrNull { it.role == "assistant" }?.content ?: return
-        val prompt = when (action) { "shorter" -> "Make this shorter:\n$lastAi"; "detail" -> "Explain in more detail:\n$lastAi"; "translate_ru" -> "Translate to Russian:\n$lastAi"; "translate_en" -> "Translate to English:\n$lastAi"
-            "script" -> "Convert this into a bash script that can be run in terminal:\n$lastAi"; "fix" -> "Fix any errors in this code:\n$lastAi"; "explain" -> "Explain this code step by step:\n$lastAi"; else -> action }
-        doSend(prompt) }
-
-    fun confirmEdit() { if (editIdx < 0) return; val nm = messages.take(editIdx) + ChatMessage("user", editTxt, messages[editIdx].imageBase64, messages[editIdx].fileContent); messages = nm; editIdx = -1; editTxt = ""
-        isLoading = true; currentResponse = ""; currentJob = scope.launch { try { val r = AiManager.chat(provider, messages, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }; messages = messages + ChatMessage("assistant", r); currentResponse = ""; save(messages) } catch (e: Exception) { messages = messages + ChatMessage("assistant", "Error: ${e.message}"); currentResponse = ""; save(messages) }; isLoading = false; currentJob = null } }
-
-    LaunchedEffect(messages.size, currentResponse) { val total = messages.size + if (currentResponse.isNotEmpty()) 1 else 0; if (total > 0) listState.animateScrollToItem(total - 1) }
-    LaunchedEffect(initialPrompt) { if (initialPrompt != null && !autoSent && messages.isEmpty()) { autoSent = true; doSend(initialPrompt, initialImageBase64, null) } }
-
-    if (editIdx >= 0) AlertDialog(onDismissRequest = { editIdx = -1 }, containerColor = Card,
-        title = { Text("Edit message", fontWeight = FontWeight.Bold, color = T1) },
-        text = { OutlinedTextField(editTxt, { editTxt = it }, modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp), maxLines = 8,
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = T1, unfocusedTextColor = T1, focusedBorderColor = Accent, unfocusedBorderColor = Border, cursorColor = Accent)) },
-        confirmButton = { TextButton(onClick = { confirmEdit() }) { Text("Send", color = Accent) } },
-        dismissButton = { TextButton(onClick = { editIdx = -1 }) { Text("Cancel", color = T2) } })
-
-    Column(Modifier.fillMaxSize().background(BG).imePadding()) {
-        // Top bar
-        Row(Modifier.fillMaxWidth().background(Card).padding(top = 48.dp, start = 4.dp, end = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { save(messages); onBack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = T1) }
-            Column(Modifier.weight(1f)) { Text("AI", color = T1, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                if (currentFolder != null) Text(currentFolder.substringAfterLast("/"), color = T3, fontSize = 11.sp, maxLines = 1) }
-            IconButton(onClick = { exportChat() }, modifier = Modifier.size(36.dp)) { Icon(Icons.Rounded.FileDownload, null, Modifier.size(18.dp), tint = T2) }
-            val pc = if (provider.isQwen) QwenColor else Accent
-            Row(Modifier.clip(RoundedCornerShape(8.dp)).background(Card2).border(1.dp, Border, RoundedCornerShape(8.dp)).clickable { showModelPicker = true }.padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(pc)); Text(provider.label.removePrefix("Gemini ").removePrefix("Qwen "), color = T1, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                Icon(Icons.Rounded.KeyboardArrowDown, null, Modifier.size(14.dp), tint = T2) }
-            Spacer(Modifier.width(4.dp)); IconButton(onClick = { showSettings = true }, modifier = Modifier.size(36.dp)) { Icon(Icons.Rounded.Settings, null, Modifier.size(18.dp), tint = T2) }
+            when {
+                mime.startsWith("image/") -> {
+                    context.contentResolver.openInputStream(uri)?.use { s ->
+                        val f = File(context.cacheDir, "ai_img.jpg")
+                        f.outputStream().use { o -> s.copyTo(o) }
+                        attachedImage = AiManager.encodeImage(f)
+                    }
+                }
+                ext in listOf("zip", "jar") -> {
+                    val tmp = File(context.cacheDir, "ai_zip_${System.currentTimeMillis()}.$ext")
+                    context.contentResolver.openInputStream(uri)?.use { s ->
+                        tmp.outputStream().use { o -> s.copyTo(o) }
+                    }
+                    val entries = AiManager.extractZipForAi(tmp.absolutePath, context)
+                    attachedZip = AiManager.formatZipContents(entries)
+                    attachedFile = Pair(name, "${entries.size} files extracted")
+                    tmp.delete()
+                }
+                else -> {
+                    context.contentResolver.openInputStream(uri)?.use { s ->
+                        val t = s.bufferedReader().readText()
+                        attachedFile = Pair(name, if (t.length > 10000) t.take(10000) + "\n...[truncated]" else t)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
         }
-        // Messages
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (messages.isEmpty()) { item { Column(Modifier.fillMaxWidth().padding(top = 40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(48.dp), tint = if (provider.isQwen) QwenColor else Accent)
-                Text(provider.label, color = T1, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(provider.desc, color = T3, fontSize = 13.sp)
-                if (currentFolder != null) { Text("Context: ${currentFolder.substringAfterLast("/")}", color = Accent, fontSize = 12.sp) }
-                // Smart suggestions
-                Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val suggestions = mutableListOf("Explain this code", "Analyze ZIP archive", "What's in this image?")
-                    if (currentFolder != null) { suggestions.add(0, "What files are in this folder?"); suggestions.add(1, "What takes the most space here?") }
-                    suggestions.take(5).forEach { q -> Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Card).border(1.dp, Border, RoundedCornerShape(10.dp)).clickable { input = q }.padding(12.dp)) { Text(q, color = T2, fontSize = 13.sp) } } }
-            } } }
-            items(messages.size) { idx -> val msg = messages[idx]; val isLast = idx == messages.lastIndex
-                Bubble(msg, provider, idx, speakingIdx,
-                    onCopy = { clip(msg.content) },
-                    onEdit = if (msg.role == "user") {{ editIdx = idx; editTxt = msg.content }} else null,
-                    onDelete = { val m = messages.toMutableList(); m.removeAt(idx); messages = m; save(messages) },
-                    onSaveCode = { c, l -> saveCode(c, l) },
-                    onRegenerate = if (isLast && msg.role == "assistant" && !isLoading) {{ regenerate() }} else null,
-                    onSpeak = { speak(msg.content, idx) },
-                    onRunScript = if (msg.role == "assistant" && onRunInTerminal != null) {{ onRunInTerminal(msg.content) }} else null
-                ) }
-            if (currentResponse.isNotEmpty()) { item { Bubble(ChatMessage("assistant", currentResponse + "\u2588"), provider, -1, speakingIdx, {}, null, {}, { _, _ -> }, null, {}, null) } }
-            if (isLoading && currentResponse.isEmpty()) { item { Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CircularProgressIndicator(Modifier.size(16.dp), color = if (provider.isQwen) QwenColor else Accent, strokeWidth = 2.dp); Text("Thinking...", color = T2, fontSize = 13.sp) } } }
-            // Quick actions after last AI message
-            if (!isLoading && messages.isNotEmpty() && messages.last().role == "assistant") { item {
-                LazyRow(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val actions = mutableListOf("shorter" to "Shorter", "detail" to "More detail", "translate_ru" to "RU", "translate_en" to "EN", "explain" to "Explain code", "fix" to "Fix code")
-                    if (onRunInTerminal != null) actions.add("script" to "Make script")
-                    items(actions) { (key, label) -> Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Card).border(1.dp, Border, RoundedCornerShape(8.dp)).clickable { quickAction(key) }.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                        Text(label, fontSize = 11.sp, color = T2, fontWeight = FontWeight.Medium) } } } } }
-        }
-        // Attachments
-        if (attachedImage != null || attachedFile != null) { Row(Modifier.fillMaxWidth().background(Card).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (attachedImage != null) { Icon(Icons.Rounded.Image, null, Modifier.size(18.dp), tint = Accent); Text("Photo", color = T2, fontSize = 12.sp, modifier = Modifier.weight(1f)); IconButton(onClick = { attachedImage = null }, modifier = Modifier.size(24.dp)) { Icon(Icons.Rounded.Close, null, Modifier.size(14.dp), tint = T2) } }
-            if (attachedFile != null) { Icon(if (attachedZip != null) Icons.Rounded.FolderZip else Icons.Rounded.Description, null, Modifier.size(18.dp), tint = if (attachedZip != null) QwenColor else Bl)
-                Column(Modifier.weight(1f)) { Text(attachedFile!!.first, color = T2, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis); if (attachedZip != null) Text(attachedFile!!.second, color = T3, fontSize = 10.sp) }
-                IconButton(onClick = { attachedFile = null; attachedZip = null }, modifier = Modifier.size(24.dp)) { Icon(Icons.Rounded.Close, null, Modifier.size(14.dp), tint = T2) } } } }
-        // Input bar
-        Row(Modifier.fillMaxWidth().background(Card).padding(8.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            IconButton(onClick = { filePicker.launch("*/*") }, modifier = Modifier.size(40.dp)) { Icon(Icons.Rounded.AttachFile, null, Modifier.size(20.dp), tint = T2) }
-            IconButton(onClick = { try { cameraLauncher.launch(cameraUri) } catch (_: Exception) { Toast.makeText(context, "Camera not available", Toast.LENGTH_SHORT).show() } }, modifier = Modifier.size(40.dp)) { Icon(Icons.Rounded.CameraAlt, null, Modifier.size(20.dp), tint = T2) }
-            BasicTextField(input, { input = it }, Modifier.weight(1f).background(Card2, RoundedCornerShape(20.dp)).border(1.dp, Border, RoundedCornerShape(20.dp)).padding(horizontal = 14.dp, vertical = 11.dp),
-                textStyle = TextStyle(T1, 15.sp), cursorBrush = SolidColor(if (provider.isQwen) QwenColor else Accent), decorationBox = { i -> if (input.isEmpty()) Text("Message...", color = T3, fontSize = 15.sp); i() })
-            val sc = if (provider.isQwen) QwenColor else Accent
-            if (isLoading) { Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFFF3B30)).clickable { currentJob?.cancel(); currentJob = null }, contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Stop, null, Modifier.size(20.dp), tint = Color.White) } }
-            else { val cs = input.isNotBlank() || attachedImage != null || attachedFile != null
-                Box(Modifier.size(40.dp).clip(CircleShape).background(if (cs) sc else Card2).clickable(enabled = cs) { send() }, contentAlignment = Alignment.Center) { Icon(Icons.AutoMirrored.Rounded.Send, null, Modifier.size(20.dp), tint = if (cs) Color.White else T3) } } }
     }
-    // Model picker
-    if (showModelPicker) { val hG = geminiKey.isNotBlank(); val hQ = qwenKey.isNotBlank()
-        AlertDialog(onDismissRequest = { showModelPicker = false }, containerColor = Card, title = { Text("Select Model", fontWeight = FontWeight.Bold, color = T1, fontSize = 18.sp) },
-            text = { LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.heightIn(max = 500.dp)) {
-                val av = AiProvider.entries.filter { (it.isGemini && hG) || (it.isQwen && hQ) }; val cats = av.groupBy { it.category }.toList()
-                cats.forEach { (cat, models) -> val cc = if (models.first().isQwen) QwenColor else Accent; item { Text(cat, fontSize = 12.sp, color = cc, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)) }
-                    items(models) { p -> ModelCard(p, provider == p, cc) { provider = p; showModelPicker = false } } }
-                if (!hG) item { Text("Add Gemini key in Settings", color = T3, fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
-                if (!hQ) item { Text("Add Qwen key in Settings", color = T3, fontSize = 12.sp, modifier = Modifier.padding(8.dp)) }
-            } }, confirmButton = {}) }
-    // Settings
-    if (showSettings) { var gK by remember { mutableStateOf(geminiKey) }; var pU by remember { mutableStateOf(proxyUrl) }; var qK by remember { mutableStateOf(qwenKey) }; var rI by remember { mutableStateOf(qwenRegion) }
-        AlertDialog(onDismissRequest = { showSettings = false }, containerColor = Card, title = { Text("AI Settings", fontWeight = FontWeight.Bold, color = T1) },
-            text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SectionLabel("Gemini API Key", Accent); OutlinedTextField(gK, { gK = it }, singleLine = true, placeholder = { Text("AIza...", color = T3) }, colors = OutlinedTextFieldDefaults.colors(focusedTextColor = T1, unfocusedTextColor = T1, focusedBorderColor = Accent, unfocusedBorderColor = Border, cursorColor = Accent), modifier = Modifier.fillMaxWidth())
-                SectionLabel("Proxy (optional)", T2); OutlinedTextField(pU, { pU = it }, singleLine = true, placeholder = { Text("https://proxy/v1beta/models", color = T3, fontSize = 13.sp) }, colors = OutlinedTextFieldDefaults.colors(focusedTextColor = T1, unfocusedTextColor = T1, focusedBorderColor = Accent, unfocusedBorderColor = Border, cursorColor = Accent), modifier = Modifier.fillMaxWidth())
-                HorizontalDivider(color = Border); SectionLabel("Qwen API Key", QwenColor)
-                OutlinedTextField(qK, { qK = it }, singleLine = true, placeholder = { Text("sk-...", color = T3) }, colors = OutlinedTextFieldDefaults.colors(focusedTextColor = T1, unfocusedTextColor = T1, focusedBorderColor = QwenColor, unfocusedBorderColor = Border, cursorColor = QwenColor), modifier = Modifier.fillMaxWidth())
-                SectionLabel("Region", T2); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("intl" to "Singapore", "cn" to "Beijing").forEach { (c, l) -> val s = rI == c
-                    Box(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (s) QwenColor.copy(0.15f) else Card2).border(1.dp, if (s) QwenColor else Border, RoundedCornerShape(8.dp)).clickable { rI = c }.padding(10.dp), contentAlignment = Alignment.Center) { Text(l, fontSize = 13.sp, color = if (s) QwenColor else T2, fontWeight = if (s) FontWeight.SemiBold else FontWeight.Normal) } } }
-            } }, confirmButton = { TextButton(onClick = { GeminiKeyStore.saveKey(context, gK); geminiKey = gK.trim(); GeminiKeyStore.saveProxy(context, pU); proxyUrl = pU.trim()
-                GeminiKeyStore.saveQwenKey(context, qK); qwenKey = qK.trim(); GeminiKeyStore.saveQwenRegion(context, rI); qwenRegion = rI; showSettings = false; Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
-            }) { Text("Save", color = Accent) } }, dismissButton = { TextButton(onClick = { showSettings = false }) { Text("Cancel", color = T2) } }) }
+
+    val folderFiles = remember(currentFolder) {
+        if (currentFolder != null) try {
+            File(currentFolder).listFiles()
+                ?.map { "${if (it.isDirectory) "[DIR]" else "[${it.extension}]"} ${it.name}" }
+                ?.take(30)?.joinToString("\n")
+        } catch (_: Exception) { null } else null
+    }
+
+    fun save(msgs: List<ChatMessage>) {
+        historyMgr.saveSession(
+            ChatSession(
+                id = sessionId,
+                title = historyMgr.generateTitle(msgs),
+                provider = provider.name,
+                messages = msgs,
+                createdAt = session?.createdAt ?: System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
+    }
+    fun clip(t: String) {
+        (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+            .setPrimaryClip(ClipData.newPlainText("ai", t))
+        Toast.makeText(context, Strings.copied, Toast.LENGTH_SHORT).show()
+    }
+    fun exportChat() {
+        val sb = StringBuilder("# AI Chat\n**${provider.label}** — ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())}\n\n---\n\n")
+        messages.forEach { m -> sb.append(if (m.role == "user") "**You:**\n" else "**AI:**\n").append(m.content).append("\n\n") }
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_AI")
+        dir.mkdirs()
+        val f = File(dir, "chat_${System.currentTimeMillis()}.md")
+        f.writeText(sb.toString())
+        Toast.makeText(context, "Saved: ${f.name}", Toast.LENGTH_SHORT).show()
+    }
+    fun saveCode(code: String, lang: String) {
+        val ext = when (lang) {
+            "kotlin", "kt" -> "kt"; "java" -> "java"; "python", "py" -> "py"; "javascript", "js" -> "js"
+            "typescript", "ts" -> "ts"; "html" -> "html"; "css" -> "css"; "xml" -> "xml"; "json" -> "json"
+            "yaml", "yml" -> "yml"; "bash", "sh" -> "sh"; "sql" -> "sql"; "go" -> "go"; "rust", "rs" -> "rs"
+            "swift" -> "swift"; "c" -> "c"; "cpp" -> "cpp"; else -> "txt"
+        }
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_AI")
+        dir.mkdirs()
+        val f = File(dir, "code_${System.currentTimeMillis()}.$ext")
+        f.writeText(code)
+        Toast.makeText(context, "Saved: ${f.name}", Toast.LENGTH_SHORT).show()
+    }
+    fun speak(text: String, idx: Int) {
+        if (!ttsReady || tts == null) return
+        if (speakingIdx == idx) { tts?.stop(); speakingIdx = -1; return }
+        val clean = text.replace(Regex("```[\\s\\S]*?```"), "code block").replace(Regex("[*_`#>]"), "")
+        tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "msg_$idx")
+        speakingIdx = idx
+    }
+    fun voiceInput() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak...")
+        }
+        try { voiceLauncher.launch(intent) } catch (_: Exception) {
+            Toast.makeText(context, "Voice not available", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun doSend(text: String, image: String? = null, fc: String? = null) {
+        if (isLoading) return
+        val fullText = if (folderFiles != null && messages.isEmpty()) "Current folder: $currentFolder\nFiles:\n$folderFiles\n\nUser: $text" else text
+        val um = ChatMessage("user", text, image, fc)
+        currentResponse = ""
+        messages = messages + um
+        isLoading = true
+        val msgsForApi = if (folderFiles != null && messages.size == 1) listOf(ChatMessage("user", fullText, image, fc)) else messages
+        currentJob = scope.launch {
+            try {
+                val r = AiManager.chat(provider, msgsForApi, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
+                messages = messages + ChatMessage("assistant", r)
+                currentResponse = ""
+                save(messages)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException && currentResponse.isNotBlank()) {
+                    messages = messages + ChatMessage("assistant", currentResponse + "\n\n*(stopped)*")
+                    currentResponse = ""
+                } else {
+                    messages = messages + ChatMessage("assistant", "Error: ${e.message}")
+                    currentResponse = ""
+                }
+                save(messages)
+            }
+            isLoading = false
+            currentJob = null
+        }
+    }
+    fun send() {
+        var t = input.trim()
+        if (t.isEmpty() && attachedImage == null && attachedFile == null && attachedZip == null) return
+        val fc = when {
+            attachedZip != null -> attachedZip
+            attachedFile != null -> "File: ${attachedFile!!.first}\n```\n${attachedFile!!.second}\n```"
+            else -> null
+        }
+        if (t.isEmpty() && attachedImage != null) t = "What is in this image?"
+        if (t.isEmpty() && fc != null) t = "Analyze this file"
+        input = ""
+        val img = attachedImage
+        val fcc = fc
+        attachedImage = null
+        attachedFile = null
+        attachedZip = null
+        doSend(t, img, fcc)
+    }
+    fun regenerate() {
+        if (messages.isEmpty() || isLoading) return
+        val m = messages.toMutableList()
+        if (m.last().role == "assistant") m.removeLast()
+        messages = m
+        isLoading = true
+        currentResponse = ""
+        currentJob = scope.launch {
+            try {
+                val r = AiManager.chat(provider, messages, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
+                messages = messages + ChatMessage("assistant", r)
+                currentResponse = ""
+                save(messages)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException && currentResponse.isNotBlank()) {
+                    messages = messages + ChatMessage("assistant", currentResponse + "\n\n*(stopped)*")
+                } else {
+                    messages = messages + ChatMessage("assistant", "Error: ${e.message}")
+                }
+                currentResponse = ""
+                save(messages)
+            }
+            isLoading = false
+            currentJob = null
+        }
+    }
+    fun quickAction(action: String) {
+        val lastAi = messages.lastOrNull { it.role == "assistant" }?.content ?: return
+        val prompt = when (action) {
+            "shorter" -> "Make this shorter:\n$lastAi"
+            "detail" -> "Explain in more detail:\n$lastAi"
+            "translate_ru" -> "Translate to Russian:\n$lastAi"
+            "translate_en" -> "Translate to English:\n$lastAi"
+            "script" -> "Convert this into a bash script that can be run in terminal:\n$lastAi"
+            "fix" -> "Fix any errors in this code:\n$lastAi"
+            "explain" -> "Explain this code step by step:\n$lastAi"
+            else -> action
+        }
+        doSend(prompt)
+    }
+    fun confirmEdit() {
+        if (editIdx < 0) return
+        val nm = messages.take(editIdx) + ChatMessage("user", editTxt, messages[editIdx].imageBase64, messages[editIdx].fileContent)
+        messages = nm
+        editIdx = -1
+        editTxt = ""
+        isLoading = true
+        currentResponse = ""
+        currentJob = scope.launch {
+            try {
+                val r = AiManager.chat(provider, messages, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
+                messages = messages + ChatMessage("assistant", r)
+                currentResponse = ""
+                save(messages)
+            } catch (e: Exception) {
+                messages = messages + ChatMessage("assistant", "Error: ${e.message}")
+                currentResponse = ""
+                save(messages)
+            }
+            isLoading = false
+            currentJob = null
+        }
+    }
+
+    LaunchedEffect(messages.size, currentResponse) {
+        val total = messages.size + if (currentResponse.isNotEmpty()) 1 else 0
+        if (total > 0) listState.animateScrollToItem(total - 1)
+    }
+    LaunchedEffect(initialPrompt) {
+        if (initialPrompt != null && !autoSent && messages.isEmpty()) {
+            autoSent = true
+            doSend(initialPrompt, initialImageBase64, null)
+        }
+    }
+
+    if (editIdx >= 0) {
+        AlertDialog(
+            onDismissRequest = { editIdx = -1 },
+            containerColor = colors.surfaceElevated,
+            title = {
+                Text(
+                    "edit message",
+                    color = colors.textPrimary,
+                    fontFamily = JetBrainsMono,
+                    fontWeight = FontWeight.Medium,
+                )
+            },
+            text = {
+                TerminalMonoField(
+                    value = editTxt,
+                    onValueChange = { editTxt = it },
+                    placeholder = "edit…",
+                    singleLine = false,
+                    minHeight = 90.dp,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { confirmEdit() }) {
+                    Text("[ send ]", color = colors.accent, fontFamily = JetBrainsMono)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editIdx = -1 }) {
+                    Text("[ cancel ]", color = colors.textSecondary, fontFamily = JetBrainsMono)
+                }
+            },
+        )
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(colors.background)
+            .imePadding(),
+    ) {
+        // Topbar
+        TerminalPageBar(
+            title = "AI · chat",
+            onBack = { save(messages); onBack() },
+            subtitle = currentFolder?.let { "ctx: ${it.substringAfterLast("/")}" },
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .border(1.dp, colors.border, RoundedCornerShape(6.dp))
+                            .clickable { showModelPicker = true }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        val pc = if (provider.isQwen) colors.warning else colors.accent
+                        Box(Modifier.size(6.dp).clip(RoundedCornerShape(50)).background(pc))
+                        Text(
+                            provider.label.removePrefix("Gemini ").removePrefix("Qwen "),
+                            color = colors.textPrimary,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.sp,
+                        )
+                        Icon(
+                            Icons.Rounded.KeyboardArrowDown,
+                            null,
+                            Modifier.size(12.dp),
+                            tint = colors.textMuted,
+                        )
+                    }
+                    IconButton(onClick = { exportChat() }, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Rounded.FileDownload,
+                            null,
+                            Modifier.size(16.dp),
+                            tint = colors.textSecondary,
+                        )
+                    }
+                    IconButton(onClick = { showSettings = true }, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Rounded.Settings,
+                            null,
+                            Modifier.size(16.dp),
+                            tint = colors.textSecondary,
+                        )
+                    }
+                }
+            },
+        )
+
+        // Messages
+        LazyColumn(
+            Modifier.weight(1f).fillMaxWidth(),
+            state = listState,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (messages.isEmpty()) {
+                item {
+                    EmptyChatBanner(
+                        provider = provider,
+                        currentFolder = currentFolder,
+                        onSuggestion = { input = it },
+                    )
+                }
+            }
+            items(messages.size) { idx ->
+                val msg = messages[idx]
+                val isLast = idx == messages.lastIndex
+                TerminalChatMessage(
+                    msg = msg,
+                    msgIdx = idx,
+                    speakingIdx = speakingIdx,
+                    onCopy = { clip(msg.content) },
+                    onEdit = if (msg.role == "user") {
+                        { editIdx = idx; editTxt = msg.content }
+                    } else null,
+                    onDelete = {
+                        val m = messages.toMutableList(); m.removeAt(idx); messages = m; save(messages)
+                    },
+                    onSaveCode = { c, l -> saveCode(c, l) },
+                    onRegenerate = if (isLast && msg.role == "assistant" && !isLoading) {
+                        { regenerate() }
+                    } else null,
+                    onSpeak = { speak(msg.content, idx) },
+                    onRunScript = if (msg.role == "assistant" && onRunInTerminal != null) {
+                        { onRunInTerminal(msg.content) }
+                    } else null,
+                )
+            }
+            if (currentResponse.isNotEmpty()) {
+                item {
+                    TerminalChatMessage(
+                        msg = ChatMessage("assistant", currentResponse),
+                        msgIdx = -1,
+                        speakingIdx = speakingIdx,
+                        streaming = true,
+                        onCopy = {},
+                        onEdit = null,
+                        onDelete = {},
+                        onSaveCode = { _, _ -> },
+                        onRegenerate = null,
+                        onSpeak = {},
+                        onRunScript = null,
+                    )
+                }
+            }
+            if (isLoading && currentResponse.isEmpty()) {
+                item {
+                    Row(
+                        Modifier.padding(start = 24.dp, top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(
+                            Modifier.size(12.dp),
+                            color = if (provider.isQwen) colors.warning else colors.accent,
+                            strokeWidth = 1.5.dp,
+                        )
+                        Text(
+                            "thinking…",
+                            color = colors.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
+            if (!isLoading && messages.isNotEmpty() && messages.last().role == "assistant") {
+                item {
+                    LazyRow(
+                        Modifier.fillMaxWidth().padding(start = 24.dp, top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        val actions = mutableListOf(
+                            "shorter" to "shorter",
+                            "detail" to "detail",
+                            "translate_ru" to "ru",
+                            "translate_en" to "en",
+                            "explain" to "explain",
+                            "fix" to "fix",
+                        )
+                        if (onRunInTerminal != null) actions.add("script" to "script")
+                        items(actions) { (key, label) ->
+                            TerminalPillButton(
+                                label = label,
+                                onClick = { quickAction(key) },
+                                accent = false,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Attachments banner
+        if (attachedImage != null || attachedFile != null) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(colors.surface)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (attachedImage != null) {
+                    Icon(Icons.Rounded.AddPhotoAlternate, null, Modifier.size(14.dp), tint = colors.accent)
+                    Text(
+                        "image attached",
+                        color = colors.textSecondary,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { attachedImage = null }, modifier = Modifier.size(20.dp)) {
+                        Icon(Icons.Rounded.Close, null, Modifier.size(12.dp), tint = colors.textMuted)
+                    }
+                }
+                if (attachedFile != null) {
+                    Icon(
+                        if (attachedZip != null) Icons.Rounded.FolderZip else Icons.Rounded.Description,
+                        null,
+                        Modifier.size(14.dp),
+                        tint = if (attachedZip != null) colors.warning else colors.accent,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            attachedFile!!.first,
+                            color = colors.textSecondary,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (attachedZip != null) {
+                            Text(
+                                attachedFile!!.second,
+                                color = colors.textMuted,
+                                fontFamily = JetBrainsMono,
+                                fontSize = 10.sp,
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = { attachedFile = null; attachedZip = null },
+                        modifier = Modifier.size(20.dp),
+                    ) {
+                        Icon(Icons.Rounded.Close, null, Modifier.size(12.dp), tint = colors.textMuted)
+                    }
+                }
+            }
+        }
+
+        // Input
+        TerminalChatInput(
+            value = input,
+            onValueChange = { input = it },
+            onSend = ::send,
+            onPickFile = { filePicker.launch("*/*") },
+            onPickCamera = {
+                try { cameraLauncher.launch(cameraUri) } catch (_: Exception) {
+                    Toast.makeText(context, "Camera not available", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onVoice = ::voiceInput,
+            onStop = { currentJob?.cancel(); currentJob = null },
+            isLoading = isLoading,
+            canSend = input.isNotBlank() || attachedImage != null || attachedFile != null,
+        )
+    }
+
+    if (showModelPicker) {
+        TerminalModelPicker(
+            current = provider,
+            geminiAvailable = geminiKey.isNotBlank(),
+            qwenAvailable = qwenKey.isNotBlank(),
+            onSelect = { provider = it; showModelPicker = false },
+            onDismiss = { showModelPicker = false },
+        )
+    }
+
+    if (showSettings) {
+        TerminalKeysDialog(
+            initialGemini = geminiKey,
+            initialProxy = proxyUrl,
+            initialQwen = qwenKey,
+            initialRegion = qwenRegion,
+            onSave = { gK, pU, qK, rI ->
+                GeminiKeyStore.saveKey(context, gK); geminiKey = gK.trim()
+                GeminiKeyStore.saveProxy(context, pU); proxyUrl = pU.trim()
+                GeminiKeyStore.saveQwenKey(context, qK); qwenKey = qK.trim()
+                GeminiKeyStore.saveQwenRegion(context, rI); qwenRegion = rI
+                showSettings = false
+                Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showSettings = false },
+        )
+    }
 }
 
 // ═══════════════════════════════════
-// Model Card + Badge
+// Empty banner
 // ═══════════════════════════════════
-@Composable private fun ModelCard(p: AiProvider, sel: Boolean, ac: Color, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (sel) ac.copy(0.1f) else Color.Transparent).border(1.dp, if (sel) ac.copy(0.3f) else Border, RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.size(36.dp).background(if (sel) ac.copy(0.15f) else Card2, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp), tint = if (sel) ac else T2) }
-        Column(Modifier.weight(1f)) { Text(p.label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = if (sel) ac else T1); Text(p.desc, fontSize = 11.sp, color = T3) }
-        if (p.supportsVision) Bdg("Vision", T2); if (p.supportsFiles) Bdg("Files", ac); if (sel) Icon(Icons.Rounded.Check, null, Modifier.size(16.dp), tint = ac) } }
-@Composable private fun Bdg(t: String, c: Color) { Box(Modifier.background(c.copy(0.1f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) { Text(t, fontSize = 9.sp, color = c, fontWeight = FontWeight.SemiBold) } }
+@Composable
+private fun EmptyChatBanner(
+    provider: AiProvider,
+    currentFolder: String?,
+    onSuggestion: (String) -> Unit,
+) {
+    val colors = AgentTerminal.colors
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 24.dp, start = 4.dp, end = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            "> ai/${provider.name.lowercase()} ready",
+            color = if (provider.isQwen) colors.warning else colors.accent,
+            fontFamily = JetBrainsMono,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            provider.desc,
+            color = colors.textMuted,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            lineHeight = 1.4.em,
+        )
+        if (currentFolder != null) {
+            Text(
+                "context: ${currentFolder.substringAfterLast("/")}",
+                color = colors.textSecondary,
+                fontFamily = JetBrainsMono,
+                fontSize = 11.sp,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        TerminalSectionLabel("> suggested")
+        val suggestions = mutableListOf("Explain this code", "Analyze ZIP archive", "What's in this image?")
+        if (currentFolder != null) {
+            suggestions.add(0, "What files are in this folder?")
+            suggestions.add(1, "What takes the most space here?")
+        }
+        suggestions.take(5).forEach { q ->
+            TerminalListRow(
+                title = q,
+                prefix = "▸",
+                onClick = { onSuggestion(q) },
+                paddingVertical = 8.dp,
+            )
+        }
+    }
+}
 
 // ═══════════════════════════════════
-// Syntax Highlighting
+// Message rendering
 // ═══════════════════════════════════
-@Composable private fun CodeBlock(code: String, lang: String, onCopy: () -> Unit, onSave: () -> Unit) {
-    val lines = code.lines()
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(1.dp, CodeBorder, RoundedCornerShape(8.dp))) {
-        Row(Modifier.fillMaxWidth().background(Color(0xFF1C2128)).padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(lang.ifBlank { "code" }, fontSize = 11.sp, color = CodeCmt, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-            Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFF30363D)).clickable { onSave() }.padding(horizontal = 8.dp, vertical = 3.dp)) { Text("Save", fontSize = 10.sp, color = CodeDef) }
-            Spacer(Modifier.width(6.dp))
-            Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFF30363D)).clickable { onCopy() }.padding(horizontal = 8.dp, vertical = 3.dp)) { Text("Copy", fontSize = 10.sp, color = CodeDef) } }
-        Column(Modifier.background(CodeBg).horizontalScroll(rememberScrollState()).padding(8.dp)) {
-            lines.forEachIndexed { idx, line -> Row { Text("${idx + 1}".padStart(3), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Color(0xFF484F58), modifier = Modifier.padding(end = 10.dp)); Text(hlLine(line, lang), fontSize = 12.sp, fontFamily = FontFamily.Monospace, lineHeight = 18.sp) } } } } }
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TerminalChatMessage(
+    msg: ChatMessage,
+    msgIdx: Int,
+    speakingIdx: Int,
+    streaming: Boolean = false,
+    onCopy: () -> Unit,
+    onEdit: (() -> Unit)?,
+    onDelete: () -> Unit,
+    onSaveCode: (String, String) -> Unit,
+    onRegenerate: (() -> Unit)?,
+    onSpeak: () -> Unit,
+    onRunScript: (() -> Unit)?,
+) {
+    val isUser = msg.role == "user"
+    val colors = AgentTerminal.colors
+    val context = LocalContext.current
+    val glyph = if (isUser) ">" else "\u25A0" // ■
+    val glyphColor = colors.accent
 
-private fun hlLine(line: String, lang: String): AnnotatedString = buildAnnotatedString {
-    var i = 0; while (i < line.length) { when {
-        i < line.length - 1 && line[i] == '/' && line[i + 1] == '/' -> { withStyle(SpanStyle(color = CodeCmt)) { append(line.substring(i)) }; i = line.length }
-        line[i] == '#' && lang in listOf("python","py","bash","sh","yaml","yml","rb") -> { withStyle(SpanStyle(color = CodeCmt)) { append(line.substring(i)) }; i = line.length }
-        line[i] == '"' -> { val e = line.indexOf('"', i + 1).let { if (it < 0) line.length - 1 else it }; withStyle(SpanStyle(color = CodeStr)) { append(line.substring(i, e + 1)) }; i = e + 1 }
-        line[i] == '\'' -> { val e = line.indexOf('\'', i + 1).let { if (it < 0) line.length - 1 else it }; withStyle(SpanStyle(color = CodeStr)) { append(line.substring(i, e + 1)) }; i = e + 1 }
-        line[i] == '@' -> { var j = i + 1; while (j < line.length && (line[j].isLetterOrDigit() || line[j] == '.')) j++; withStyle(SpanStyle(color = CodeTy)) { append(line.substring(i, j)) }; i = j }
-        line[i].isDigit() && (i == 0 || !line[i - 1].isLetterOrDigit()) -> { var j = i; while (j < line.length && (line[j].isDigit() || line[j] == '.' || line[j] == 'f' || line[j] == 'L')) j++; withStyle(SpanStyle(color = CodeNum)) { append(line.substring(i, j)) }; i = j }
-        line[i].isLetter() || line[i] == '_' -> { var j = i; while (j < line.length && (line[j].isLetterOrDigit() || line[j] == '_')) j++; val w = line.substring(i, j)
-            val c = when { w in kwSet -> CodeKw; w.first().isUpperCase() -> CodeTy; j < line.length && line[j] == '(' -> CodeFn; else -> CodeDef }; withStyle(SpanStyle(color = c)) { append(w) }; i = j }
-        else -> { withStyle(SpanStyle(color = CodeDef)) { append(line[i].toString()) }; i++ } } } }
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(Modifier.width(20.dp).padding(top = 2.dp), contentAlignment = Alignment.TopStart) {
+            Text(
+                glyph,
+                color = glyphColor,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                lineHeight = 1.45.em,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(
+            Modifier.weight(1f).combinedClickable(onClick = {}, onLongClick = onCopy),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (msg.imageBase64 != null) {
+                val bmp = remember(msg.imageBase64) {
+                    try {
+                        val b = android.util.Base64.decode(msg.imageBase64, android.util.Base64.NO_WRAP)
+                        android.graphics.BitmapFactory.decodeByteArray(b, 0, b.size)
+                    } catch (_: Exception) { null }
+                }
+                if (bmp != null) {
+                    androidx.compose.foundation.Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .widthIn(max = 240.dp)
+                            .heightIn(max = 180.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, colors.border, RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+            }
+            if (msg.fileContent != null && isUser) {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(colors.surface)
+                        .border(1.dp, colors.border, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Rounded.AttachFile, null, Modifier.size(10.dp), tint = colors.textMuted)
+                    Text(
+                        "file attached",
+                        color = colors.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 10.sp,
+                    )
+                }
+            }
+
+            val content = msg.content
+            if (!isUser && content.contains("```")) {
+                val parts = content.split("```")
+                parts.forEachIndexed { i, part ->
+                    if (i % 2 == 0) {
+                        if (part.isNotBlank()) {
+                            TerminalMarkdownText(part.trim())
+                        }
+                    } else {
+                        val lines = part.lines()
+                        val lang = if (lines.isNotEmpty() && lines.first().matches(Regex("^[a-zA-Z0-9_+#.-]+$"))) lines.first().lowercase() else ""
+                        val code = if (lang.isNotBlank()) lines.drop(1).joinToString("\n") else part
+                        Box(
+                            Modifier.combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                                        .setPrimaryClip(ClipData.newPlainText("code", code))
+                                    Toast.makeText(context, Strings.copied, Toast.LENGTH_SHORT).show()
+                                },
+                            ),
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                AgentTerminalCodeBlock(
+                                    text = code.trimEnd(),
+                                    lang = lang,
+                                    context = context,
+                                )
+                                TerminalPillButton(
+                                    label = "save",
+                                    onClick = { onSaveCode(code.trimEnd(), lang) },
+                                    accent = false,
+                                )
+                            }
+                        }
+                    }
+                }
+            } else if (!isUser) {
+                TerminalMarkdownText(content)
+            } else {
+                Text(
+                    text = content,
+                    color = colors.textPrimary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 14.sp,
+                    lineHeight = 1.45.em,
+                )
+            }
+
+            if (streaming) {
+                AgentBlinkingCursor()
+            }
+
+            // Action row
+            Row(
+                Modifier.padding(top = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                MsgActionButton(Icons.Rounded.ContentCopy, onCopy)
+                if (onEdit != null) MsgActionButton(Icons.Rounded.Edit, onEdit)
+                MsgActionButton(Icons.Rounded.Delete, onDelete)
+                if (!isUser) {
+                    MsgActionButton(
+                        if (speakingIdx == msgIdx) Icons.Rounded.StopCircle else Icons.AutoMirrored.Rounded.VolumeUp,
+                        onSpeak,
+                    )
+                }
+                if (onRegenerate != null) MsgActionButton(Icons.Rounded.Refresh, onRegenerate)
+                if (onRunScript != null) MsgActionButton(Icons.Rounded.Terminal, onRunScript)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MsgActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    val colors = AgentTerminal.colors
+    IconButton(onClick = onClick, modifier = Modifier.size(26.dp)) {
+        Icon(icon, null, Modifier.size(12.dp), tint = colors.textMuted)
+    }
+}
 
 // ═══════════════════════════════════
 // Markdown
 // ═══════════════════════════════════
-@Composable private fun MdText(text: String) { val lines = text.lines()
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) { for (l in lines) { when {
-        l.startsWith("### ") -> Text(l.removePrefix("### "), color = T1, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        l.startsWith("## ") -> Text(l.removePrefix("## "), color = T1, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        l.startsWith("# ") -> Text(l.removePrefix("# "), color = T1, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        l.startsWith("- ") || l.startsWith("* ") -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Text("\u2022", color = Accent, fontSize = 14.sp); Text(inlineMd(l.drop(2)), fontSize = 14.sp, lineHeight = 20.sp) }
-        l.matches(Regex("^\\d+\\.\\s.*")) -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Text(l.substringBefore(".") + ".", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold); Text(inlineMd(l.substringAfter(". ")), fontSize = 14.sp, lineHeight = 20.sp) }
-        l.startsWith("> ") -> Row { Box(Modifier.width(3.dp).height(20.dp).background(Accent, RoundedCornerShape(2.dp))); Spacer(Modifier.width(8.dp)); Text(inlineMd(l.removePrefix("> ")), fontSize = 14.sp, color = T2, fontStyle = FontStyle.Italic, lineHeight = 20.sp) }
-        l.isBlank() -> Spacer(Modifier.height(4.dp))
-        else -> Text(inlineMd(l), fontSize = 14.sp, lineHeight = 20.sp)
-    } } } }
-private fun inlineMd(t: String): AnnotatedString = buildAnnotatedString { var i = 0; while (i < t.length) { when {
-    i < t.length - 1 && t[i] == '*' && t[i + 1] == '*' -> { val e = t.indexOf("**", i + 2); if (e > 0) { withStyle(SpanStyle(color = T1, fontWeight = FontWeight.Bold)) { append(t.substring(i + 2, e)) }; i = e + 2 } else { withStyle(SpanStyle(color = T1)) { append(t[i].toString()) }; i++ } }
-    t[i] == '*' -> { val e = t.indexOf('*', i + 1); if (e > 0) { withStyle(SpanStyle(color = T1, fontStyle = FontStyle.Italic)) { append(t.substring(i + 1, e)) }; i = e + 1 } else { withStyle(SpanStyle(color = T1)) { append(t[i].toString()) }; i++ } }
-    t[i] == '`' -> { val e = t.indexOf('`', i + 1); if (e > 0) { withStyle(SpanStyle(color = Color(0xFFE06C75), fontFamily = FontFamily.Monospace, background = Color(0xFF1E1E2E))) { append(t.substring(i + 1, e)) }; i = e + 1 } else { withStyle(SpanStyle(color = T1)) { append(t[i].toString()) }; i++ } }
-    else -> { withStyle(SpanStyle(color = T1)) { append(t[i].toString()) }; i++ }
-} } }
-
-// ═══════════════════════════════════
-// Bubble
-// ═══════════════════════════════════
-@OptIn(ExperimentalFoundationApi::class) @Composable
-private fun Bubble(msg: ChatMessage, prov: AiProvider, msgIdx: Int, speakingIdx: Int, onCopy: () -> Unit, onEdit: (() -> Unit)?, onDelete: () -> Unit, onSaveCode: (String, String) -> Unit, onRegenerate: (() -> Unit)?, onSpeak: () -> Unit, onRunScript: (() -> Unit)?) {
-    val isUser = msg.role == "user"; val context = LocalContext.current; val pc = if (prov.isQwen) QwenColor else Accent
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Top) {
-        if (!isUser) { Box(Modifier.padding(top = 4.dp).size(28.dp).clip(CircleShape).background(pc.copy(0.15f)), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(14.dp), tint = pc) }; Spacer(Modifier.width(6.dp)) }
-        Column(Modifier.weight(1f, fill = false), horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
-            if (msg.imageBase64 != null) { val bmp = remember(msg.imageBase64) { try { val b = android.util.Base64.decode(msg.imageBase64, android.util.Base64.NO_WRAP); android.graphics.BitmapFactory.decodeByteArray(b, 0, b.size) } catch (_: Exception) { null } }
-                if (bmp != null) { androidx.compose.foundation.Image(bitmap = bmp.asImageBitmap(), contentDescription = null, modifier = Modifier.widthIn(max = 240.dp).heightIn(max = 180.dp).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop); Spacer(Modifier.height(4.dp)) } }
-            if (msg.fileContent != null && isUser) Row(Modifier.padding(bottom = 4.dp).clip(RoundedCornerShape(8.dp)).background(Card2).padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.AttachFile, null, Modifier.size(12.dp), tint = T2); Text("File attached", color = T2, fontSize = 10.sp) }
-            if (isUser) { Box(Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)).background(Accent).combinedClickable(onClick = {}, onLongClick = onCopy).padding(12.dp)) { Text(msg.content, color = Color.Black, fontSize = 14.sp, lineHeight = 20.sp) }
-            } else { val content = msg.content
-                if (content.contains("```")) { Column(Modifier.widthIn(max = 340.dp).combinedClickable(onClick = {}, onLongClick = onCopy), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val parts = content.split("```"); parts.forEachIndexed { i, part -> if (i % 2 == 0) { if (part.isNotBlank()) Box(Modifier.clip(RoundedCornerShape(12.dp)).background(Card).padding(12.dp)) { MdText(part.trim()) } }
-                        else { val lines = part.lines(); val lang = if (lines.isNotEmpty() && lines.first().matches(Regex("^[a-zA-Z0-9_+#.-]+$"))) lines.first().lowercase() else ""
-                            val code = if (lang.isNotBlank()) lines.drop(1).joinToString("\n") else part
-                            CodeBlock(code.trimEnd(), lang, onCopy = { (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("code", code)); Toast.makeText(context, Strings.copied, Toast.LENGTH_SHORT).show() }, onSave = { onSaveCode(code, lang) }) } } } }
-                else Box(Modifier.widthIn(max = 320.dp).clip(RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)).background(Card).combinedClickable(onClick = {}, onLongClick = onCopy).padding(12.dp)) { MdText(content) } }
-            // Actions
-            Row(Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                SBtn(Icons.Rounded.ContentCopy) { onCopy() }
-                if (onEdit != null) SBtn(Icons.Rounded.Edit) { onEdit() }
-                SBtn(Icons.Rounded.Delete) { onDelete() }
-                if (!isUser) SBtn(if (speakingIdx == msgIdx) Icons.Rounded.StopCircle else Icons.Rounded.VolumeUp) { onSpeak() }
-                if (onRegenerate != null) SBtn(Icons.Rounded.Refresh) { onRegenerate() }
-                if (onRunScript != null) SBtn(Icons.Rounded.Terminal) { onRunScript() }
+@Composable
+private fun TerminalMarkdownText(text: String) {
+    val colors = AgentTerminal.colors
+    val lines = text.lines()
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        for (l in lines) {
+            when {
+                l.startsWith("### ") -> Text(
+                    l.removePrefix("### "),
+                    color = colors.textPrimary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 1.35.em,
+                )
+                l.startsWith("## ") -> Text(
+                    l.removePrefix("## "),
+                    color = colors.textPrimary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 1.35.em,
+                )
+                l.startsWith("# ") -> Text(
+                    l.removePrefix("# "),
+                    color = colors.textPrimary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 1.35.em,
+                )
+                l.startsWith("- ") || l.startsWith("* ") -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "•",
+                        color = colors.accent,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 14.sp,
+                    )
+                    Text(
+                        text = inlineMd(l.drop(2), colors.textPrimary, colors.error, colors.surface),
+                        fontFamily = JetBrainsMono,
+                        fontSize = 14.sp,
+                        lineHeight = 1.45.em,
+                    )
+                }
+                l.matches(Regex("^\\d+\\.\\s.*")) -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        l.substringBefore(".") + ".",
+                        color = colors.accent,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = inlineMd(l.substringAfter(". "), colors.textPrimary, colors.error, colors.surface),
+                        fontFamily = JetBrainsMono,
+                        fontSize = 14.sp,
+                        lineHeight = 1.45.em,
+                    )
+                }
+                l.startsWith("> ") -> Row {
+                    Box(Modifier.width(2.dp).height(20.dp).background(colors.accentDim))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = inlineMd(l.removePrefix("> "), colors.textSecondary, colors.error, colors.surface),
+                        fontFamily = JetBrainsMono,
+                        fontSize = 13.sp,
+                        fontStyle = FontStyle.Italic,
+                        lineHeight = 1.45.em,
+                    )
+                }
+                l.isBlank() -> Spacer(Modifier.height(4.dp))
+                else -> Text(
+                    text = inlineMd(l, colors.textPrimary, colors.error, colors.surface),
+                    fontFamily = JetBrainsMono,
+                    fontSize = 14.sp,
+                    lineHeight = 1.45.em,
+                )
             }
         }
-        if (isUser) { Spacer(Modifier.width(6.dp)); Box(Modifier.padding(top = 4.dp).size(28.dp).clip(CircleShape).background(Accent.copy(0.15f)), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Person, null, Modifier.size(14.dp), tint = Accent) } }
-    } }
-@Composable private fun SBtn(icon: ImageVector, onClick: () -> Unit) { IconButton(onClick = onClick, modifier = Modifier.size(28.dp)) { Icon(icon, null, Modifier.size(13.dp), tint = T3) } }
+    }
+}
 
-@Composable private fun SectionLabel(t: String, c: Color) { Text(t, fontSize = 13.sp, color = c, fontWeight = FontWeight.Medium) }
-@Composable private fun InputField(v: String, ch: (String) -> Unit, h: String, mono: Boolean = false) {
-    BasicTextField(v, ch, Modifier.fillMaxWidth().background(Card, RoundedCornerShape(10.dp)).border(1.dp, Border, RoundedCornerShape(10.dp)).padding(14.dp),
-        textStyle = TextStyle(T1, 14.sp, fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default), cursorBrush = SolidColor(Accent), singleLine = true,
-        decorationBox = { inner -> if (v.isEmpty()) Text(h, color = T3, fontSize = 14.sp); inner() }) }
+private fun inlineMd(t: String, primary: Color, codeFg: Color, codeBg: Color): AnnotatedString = buildAnnotatedString {
+    var i = 0
+    while (i < t.length) {
+        when {
+            i < t.length - 1 && t[i] == '*' && t[i + 1] == '*' -> {
+                val e = t.indexOf("**", i + 2)
+                if (e > 0) {
+                    withStyle(SpanStyle(color = primary, fontWeight = FontWeight.Bold)) { append(t.substring(i + 2, e)) }
+                    i = e + 2
+                } else {
+                    withStyle(SpanStyle(color = primary)) { append(t[i].toString()) }; i++
+                }
+            }
+            t[i] == '*' -> {
+                val e = t.indexOf('*', i + 1)
+                if (e > 0) {
+                    withStyle(SpanStyle(color = primary, fontStyle = FontStyle.Italic)) { append(t.substring(i + 1, e)) }
+                    i = e + 1
+                } else {
+                    withStyle(SpanStyle(color = primary)) { append(t[i].toString()) }; i++
+                }
+            }
+            t[i] == '`' -> {
+                val e = t.indexOf('`', i + 1)
+                if (e > 0) {
+                    withStyle(SpanStyle(color = codeFg, fontFamily = JetBrainsMono, background = codeBg)) {
+                        append(t.substring(i + 1, e))
+                    }
+                    i = e + 1
+                } else {
+                    withStyle(SpanStyle(color = primary)) { append(t[i].toString()) }; i++
+                }
+            }
+            else -> {
+                withStyle(SpanStyle(color = primary)) { append(t[i].toString()) }; i++
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════
+// Input bar
+// ═══════════════════════════════════
+@Composable
+private fun TerminalChatInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onPickFile: () -> Unit,
+    onPickCamera: () -> Unit,
+    onVoice: () -> Unit,
+    onStop: () -> Unit,
+    isLoading: Boolean,
+    canSend: Boolean,
+) {
+    val colors = AgentTerminal.colors
+    Column(Modifier.fillMaxWidth().background(colors.background)) {
+        TerminalHairline()
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            IconButton(onClick = onPickFile, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Rounded.AttachFile, null, Modifier.size(16.dp), tint = colors.textSecondary)
+            }
+            IconButton(onClick = onPickCamera, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Rounded.CameraAlt, null, Modifier.size(16.dp), tint = colors.textSecondary)
+            }
+            IconButton(onClick = onVoice, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Rounded.Mic, null, Modifier.size(16.dp), tint = colors.textSecondary)
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(colors.surface)
+                    .border(1.dp, colors.border, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(
+                        ">",
+                        color = colors.accent,
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        lineHeight = 1.4.em,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Box(Modifier.weight(1f)) {
+                        BasicTextField(
+                            value = value,
+                            onValueChange = onValueChange,
+                            textStyle = TextStyle(
+                                color = colors.textPrimary,
+                                fontFamily = JetBrainsMono,
+                                fontSize = 14.sp,
+                                lineHeight = 1.4.em,
+                            ),
+                            cursorBrush = SolidColor(colors.accent),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 22.dp, max = 140.dp),
+                        )
+                        if (value.isEmpty()) {
+                            Text(
+                                "message…",
+                                color = colors.textMuted,
+                                fontFamily = JetBrainsMono,
+                                fontSize = 14.sp,
+                            )
+                        }
+                    }
+                }
+            }
+            if (isLoading) {
+                IconButton(onClick = onStop, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Stop, null, Modifier.size(18.dp), tint = colors.warning)
+                }
+            } else {
+                IconButton(
+                    onClick = { if (canSend) onSend() },
+                    enabled = canSend,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.Send,
+                        null,
+                        Modifier.size(16.dp),
+                        tint = if (canSend) colors.accent else colors.textMuted,
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════
+// Model picker dialog
+// ═══════════════════════════════════
+@Composable
+private fun TerminalModelPicker(
+    current: AiProvider,
+    geminiAvailable: Boolean,
+    qwenAvailable: Boolean,
+    onSelect: (AiProvider) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = AgentTerminal.colors
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surfaceElevated,
+        title = {
+            Text(
+                "select model",
+                color = colors.textPrimary,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Medium,
+                fontSize = 16.sp,
+            )
+        },
+        text = {
+            LazyColumn(
+                Modifier.heightIn(max = 480.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                val avail = AiProvider.entries.filter {
+                    (it.isGemini && geminiAvailable) || (it.isQwen && qwenAvailable)
+                }
+                val cats = avail.groupBy { it.category }.toList()
+                cats.forEach { (cat, models) ->
+                    val cc = if (models.first().isQwen) colors.warning else colors.accent
+                    item {
+                        Text(
+                            cat.uppercase(),
+                            color = cc,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                        )
+                    }
+                    items(models) { p ->
+                        val selected = p == current
+                        TerminalListRow(
+                            title = p.label,
+                            subtitle = p.desc,
+                            prefix = if (selected) "▣" else "▸",
+                            prefixColor = cc,
+                            titleColor = if (selected) cc else colors.textPrimary,
+                            onClick = { onSelect(p) },
+                            paddingVertical = 8.dp,
+                            trailing = {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (p.supportsVision) TerminalChip("vision", color = colors.textMuted)
+                                    if (p.supportsFiles) TerminalChip("files", color = cc)
+                                    if (selected) Icon(
+                                        Icons.Rounded.Check,
+                                        null,
+                                        Modifier.size(14.dp),
+                                        tint = cc,
+                                    )
+                                }
+                            },
+                        )
+                    }
+                }
+                if (!geminiAvailable) item {
+                    Text(
+                        "add gemini key in [ settings ]",
+                        color = colors.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(8.dp),
+                    )
+                }
+                if (!qwenAvailable) item {
+                    Text(
+                        "add qwen key in [ settings ]",
+                        color = colors.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(8.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("[ close ]", color = colors.textSecondary, fontFamily = JetBrainsMono)
+            }
+        },
+    )
+}
+
+// ═══════════════════════════════════
+// Keys / settings dialog
+// ═══════════════════════════════════
+@Composable
+private fun TerminalKeysDialog(
+    initialGemini: String,
+    initialProxy: String,
+    initialQwen: String,
+    initialRegion: String,
+    onSave: (String, String, String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = AgentTerminal.colors
+    var gK by remember { mutableStateOf(initialGemini) }
+    var pU by remember { mutableStateOf(initialProxy) }
+    var qK by remember { mutableStateOf(initialQwen) }
+    var rI by remember { mutableStateOf(initialRegion) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = colors.surfaceElevated,
+        title = {
+            Text(
+                "ai · keys",
+                color = colors.textPrimary,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Medium,
+                fontSize = 16.sp,
+            )
+        },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TerminalSectionLabel("> gemini")
+                TerminalMonoField(value = gK, onValueChange = { gK = it }, placeholder = "AIza…")
+                TerminalSectionLabel("> proxy (optional)")
+                TerminalMonoField(value = pU, onValueChange = { pU = it }, placeholder = "https://proxy/v1beta/models")
+                TerminalHairline()
+                TerminalSectionLabel("> qwen")
+                TerminalMonoField(value = qK, onValueChange = { qK = it }, placeholder = "sk-…")
+                TerminalSectionLabel("> region")
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("intl" to "singapore", "cn" to "beijing").forEach { (c, l) ->
+                        TerminalPillButton(
+                            label = l,
+                            onClick = { rI = c },
+                            accent = rI == c,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(gK, pU, qK, rI) }) {
+                Text("[ save ]", color = colors.accent, fontFamily = JetBrainsMono)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("[ cancel ]", color = colors.textSecondary, fontFamily = JetBrainsMono)
+            }
+        },
+    )
+}
+
+// ═══════════════════════════════════
+// Mono input field (shared by setup + dialogs)
+// ═══════════════════════════════════
+@Composable
+private fun TerminalMonoField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    singleLine: Boolean = true,
+    minHeight: androidx.compose.ui.unit.Dp = 0.dp,
+) {
+    val colors = AgentTerminal.colors
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(colors.surface)
+            .border(1.dp, colors.border, RoundedCornerShape(6.dp))
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = TextStyle(
+                color = colors.textPrimary,
+                fontFamily = JetBrainsMono,
+                fontSize = 13.sp,
+                lineHeight = 1.4.em,
+            ),
+            cursorBrush = SolidColor(colors.accent),
+            singleLine = singleLine,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = minHeight),
+        )
+        if (value.isEmpty()) {
+            Text(
+                placeholder,
+                color = colors.textMuted,
+                fontFamily = JetBrainsMono,
+                fontSize = 13.sp,
+            )
+        }
+    }
+}

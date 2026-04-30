@@ -90,6 +90,15 @@ import java.io.File
  */
 @Composable
 fun AiImageGenScreen(onBack: () -> Unit) {
+    com.glassfiles.ui.screens.ai.terminal.AgentTerminalSurface {
+        com.glassfiles.ui.screens.ai.terminal.AiTerminalMaterialBridge {
+            AiImageGenScreenInner(onBack)
+        }
+    }
+}
+
+@Composable
+private fun AiImageGenScreenInner(onBack: () -> Unit) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
@@ -603,7 +612,7 @@ private fun ImageHistorySheet(
                                     sdf.format(java.util.Date(item.historyId)),
                                     fontSize = 10.sp,
                                     color = colors.onSurfaceVariant,
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
                                     maxLines = 1,
                                 )
                             }
@@ -742,7 +751,7 @@ private fun ImageResultCard(
             Text(
                 item.model.displayName,
                 fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
                 color = colors.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
