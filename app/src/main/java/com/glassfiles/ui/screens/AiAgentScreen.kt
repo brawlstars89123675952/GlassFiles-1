@@ -285,56 +285,6 @@ fun AiAgentScreen(
         fileEditCounts.clear()
     }
 
-    fun requestYoloConfirm() {
-        pendingYoloConfirm = true
-    }
-
-    fun applyYoloPreset() {
-        autoApproveReads = true
-        autoApproveEdits = true
-        autoApproveWrites = true
-        autoApproveCommits = true
-        yoloMode = true
-        AiAgentApprovalPrefs.setAutoApproveReads(context, true)
-        AiAgentApprovalPrefs.setAutoApproveEdits(context, true)
-        AiAgentApprovalPrefs.setAutoApproveWrites(context, true)
-        AiAgentApprovalPrefs.setAutoApproveCommits(context, true)
-        AiAgentApprovalPrefs.setYoloMode(context, true)
-        transcript += AgentEntry.Assistant(
-            "[system: YOLO mode enabled. Agent will skip approval for most actions.]",
-        )
-        persistSession()
-        Toast.makeText(
-            context,
-            "YOLO mode enabled. Agent will not ask for most actions.",
-            Toast.LENGTH_LONG,
-        ).show()
-        scope.launch {
-            AiAgentApprovalPrefs.setYoloModeConfirmed(context, true)
-            yoloConfirmed = true
-        }
-    }
-
-    fun updateAutoApproveToggles(
-        reads: Boolean = autoApproveReads,
-        edits: Boolean = autoApproveEdits,
-        writes: Boolean = autoApproveWrites,
-        commits: Boolean = autoApproveCommits,
-    ) {
-        if (!yoloMode && reads && edits && writes && commits) {
-            requestYoloConfirm()
-            return
-        }
-        autoApproveReads = reads
-        autoApproveEdits = edits
-        autoApproveWrites = writes
-        autoApproveCommits = commits
-        AiAgentApprovalPrefs.setAutoApproveReads(context, reads)
-        AiAgentApprovalPrefs.setAutoApproveEdits(context, edits)
-        AiAgentApprovalPrefs.setAutoApproveWrites(context, writes)
-        AiAgentApprovalPrefs.setAutoApproveCommits(context, commits)
-    }
-
     // ─── Initial loads ────────────────────────────────────────────────────
     LaunchedEffect(Unit) {
         // Repos
@@ -529,6 +479,56 @@ fun AiAgentScreen(
             ),
         )
         refreshSessions()
+    }
+
+    fun requestYoloConfirm() {
+        pendingYoloConfirm = true
+    }
+
+    fun applyYoloPreset() {
+        autoApproveReads = true
+        autoApproveEdits = true
+        autoApproveWrites = true
+        autoApproveCommits = true
+        yoloMode = true
+        AiAgentApprovalPrefs.setAutoApproveReads(context, true)
+        AiAgentApprovalPrefs.setAutoApproveEdits(context, true)
+        AiAgentApprovalPrefs.setAutoApproveWrites(context, true)
+        AiAgentApprovalPrefs.setAutoApproveCommits(context, true)
+        AiAgentApprovalPrefs.setYoloMode(context, true)
+        transcript += AgentEntry.Assistant(
+            "[system: YOLO mode enabled. Agent will skip approval for most actions.]",
+        )
+        persistSession()
+        Toast.makeText(
+            context,
+            "YOLO mode enabled. Agent will not ask for most actions.",
+            Toast.LENGTH_LONG,
+        ).show()
+        scope.launch {
+            AiAgentApprovalPrefs.setYoloModeConfirmed(context, true)
+            yoloConfirmed = true
+        }
+    }
+
+    fun updateAutoApproveToggles(
+        reads: Boolean = autoApproveReads,
+        edits: Boolean = autoApproveEdits,
+        writes: Boolean = autoApproveWrites,
+        commits: Boolean = autoApproveCommits,
+    ) {
+        if (!yoloMode && reads && edits && writes && commits) {
+            requestYoloConfirm()
+            return
+        }
+        autoApproveReads = reads
+        autoApproveEdits = edits
+        autoApproveWrites = writes
+        autoApproveCommits = commits
+        AiAgentApprovalPrefs.setAutoApproveReads(context, reads)
+        AiAgentApprovalPrefs.setAutoApproveEdits(context, edits)
+        AiAgentApprovalPrefs.setAutoApproveWrites(context, writes)
+        AiAgentApprovalPrefs.setAutoApproveCommits(context, commits)
     }
 
     fun openSession(session: AiChatSessionStore.Session) {

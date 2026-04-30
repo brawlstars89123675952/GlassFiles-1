@@ -75,6 +75,7 @@ object AiAgentApprovalPolicy {
             category == AiAgentApprovalCategory.EDIT -> settings.autoApproveEdits || sessionTrusted
             category == AiAgentApprovalCategory.WRITE -> settings.autoApproveWrites || sessionTrusted
             category == AiAgentApprovalCategory.COMMIT -> settings.autoApproveCommits
+            else -> false
         }
         val reason = when {
             destructiveAutoRequested -> "destructive auto-approve is disabled by policy"
