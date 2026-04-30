@@ -9,6 +9,7 @@ import com.glassfiles.data.ai.models.AiMessage
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import kotlinx.coroutines.Dispatchers
+import com.glassfiles.data.ai.providers.Http.optStringOrEmpty
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -129,7 +130,7 @@ object GoogleProvider : AiProvider {
                 val parts = candidates.getJSONObject(0).optJSONObject("content")?.optJSONArray("parts")
                     ?: return@iterateSse
                 for (i in 0 until parts.length()) {
-                    val text = parts.getJSONObject(i).optString("text", "")
+                    val text = parts.getJSONObject(i).optStringOrEmpty("text")
                     if (text.isNotEmpty()) {
                         sb.append(text)
                         onChunk(text)

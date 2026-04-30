@@ -38,13 +38,23 @@ object AiCostPolicy {
         maxWriteProposals = 8,
     )
 
+    /**
+     * MaxQuality is the home for power-user / long-running tasks. The
+     * `maxTotalContextChars` budget is sized at ~1M tokens (≈ 4M chars
+     * at the 4-chars-per-token rule of thumb) so a long agent loop can
+     * keep an entire repository's worth of read context in flight on
+     * providers that natively expose 1M+ windows (GPT-4.1, Gemini 2.5
+     * Pro). Models with smaller windows (Claude 200k, GPT-4o 128k) will
+     * still 4xx earlier — the cap above is a *client-side* ceiling, not
+     * a guarantee the model will accept the full payload.
+     */
     val MAX_QUALITY = AiAgentLimits(
-        maxFilesPerTask = 60,
-        maxFileSizeBytes = 500_000,
-        maxTotalContextChars = 250_000,
-        maxToolCalls = 80,
+        maxFilesPerTask = 200,
+        maxFileSizeBytes = 2_000_000,
+        maxTotalContextChars = 4_000_000,
+        maxToolCalls = 200,
         maxLogLines = 5000,
-        maxDiffChars = 150_000,
+        maxDiffChars = 600_000,
         maxWriteProposals = 20,
     )
 

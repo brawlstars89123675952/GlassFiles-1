@@ -9,6 +9,7 @@ import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.glassfiles.data.ai.providers.Http.optStringOrEmpty
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -82,7 +83,7 @@ abstract class OpenAiCompatProvider(
                 val choices = JSONObject(data).optJSONArray("choices") ?: return@iterateSse
                 if (choices.length() == 0) return@iterateSse
                 val delta = choices.getJSONObject(0).optJSONObject("delta") ?: return@iterateSse
-                val text = delta.optString("content", "")
+                val text = delta.optStringOrEmpty("content")
                 if (text.isNotEmpty()) {
                     sb.append(text)
                     onChunk(text)
@@ -185,7 +186,7 @@ abstract class OpenAiCompatProvider(
 
         val choice = JSONObject(raw).optJSONArray("choices")?.optJSONObject(0)
         val message = choice?.optJSONObject("message") ?: return@withContext AiToolTurn("", emptyList())
-        val text = message.optString("content", "").orEmpty()
+        val text = message.optStringOrEmpty("content")
         val toolCallsArr = message.optJSONArray("tool_calls") ?: JSONArray()
         val calls = (0 until toolCallsArr.length()).mapNotNull { i ->
             val tc = toolCallsArr.optJSONObject(i) ?: return@mapNotNull null
@@ -261,7 +262,7 @@ abstract class OpenAiCompatProvider(
             if (choices.length() == 0) return@iterateSse
             val delta = choices.optJSONObject(0)?.optJSONObject("delta") ?: return@iterateSse
 
-            val content = delta.optString("content", "")
+            val content = delta.optStringOrEmpty("content")
             if (content.isNotEmpty()) {
                 text.append(content)
                 onTextDelta(content)

@@ -10,6 +10,7 @@ import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.glassfiles.data.ai.providers.Http.optStringOrEmpty
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -101,7 +102,7 @@ object AnthropicProvider : AiProvider {
                 val event = JSONObject(data)
                 if (event.optString("type") == "content_block_delta") {
                     val delta = event.optJSONObject("delta") ?: return@iterateSse
-                    val text = delta.optString("text", "")
+                    val text = delta.optStringOrEmpty("text")
                     if (text.isNotEmpty()) {
                         sb.append(text)
                         onChunk(text)
@@ -159,7 +160,7 @@ object AnthropicProvider : AiProvider {
         for (i in 0 until content.length()) {
             val block = content.optJSONObject(i) ?: continue
             when (block.optString("type")) {
-                "text" -> text.append(block.optString("text", ""))
+                "text" -> text.append(block.optStringOrEmpty("text"))
                 "tool_use" -> {
                     val input = block.optJSONObject("input") ?: JSONObject()
                     calls += AiToolCall(
@@ -239,7 +240,7 @@ object AnthropicProvider : AiProvider {
                     val delta = event.optJSONObject("delta") ?: return@iterateSse
                     when (delta.optString("type")) {
                         "text_delta" -> {
-                            val chunk = delta.optString("text", "")
+                            val chunk = delta.optStringOrEmpty("text")
                             if (chunk.isNotEmpty()) {
                                 text.append(chunk)
                                 onTextDelta(chunk)

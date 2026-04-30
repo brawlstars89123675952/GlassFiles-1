@@ -59,6 +59,19 @@ internal object Http {
         }
     }
 
+    /**
+     * Returns the string at [key] or `""`. Unlike [JSONObject.optString]
+     * which returns the literal `"null"` when the value is JSON `null`,
+     * this helper treats both *missing* and *null* values as empty.
+     *
+     * This is the canonical way to read text fields out of provider
+     * responses — OpenAI in particular emits `{"delta":{"content":null,…}}`
+     * during tool-call streaming, and the raw [JSONObject.optString] would
+     * leak the literal "null" into the rendered transcript.
+     */
+    fun JSONObject.optStringOrEmpty(key: String): String =
+        if (isNull(key)) "" else optString(key, "")
+
     private fun parseErrorMessage(raw: String): String = try {
         val json = JSONObject(raw)
         when {
