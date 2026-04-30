@@ -120,45 +120,4 @@ fun GitHubScreen(
     }
 }
 
-@Composable
-internal fun GHTopBar(title: String, subtitle: String? = null, onBack: () -> Unit, onMinimize: (() -> Unit)? = null, onClose: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
-    val compact = LocalGHCompact.current
-    val colors = MaterialTheme.colorScheme
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(colors.surface)
-            // In full-screen mode the top bar must clear the system
-            // status bar. Hardcoding 48.dp doesn't generalise (devices
-            // with notches / camera cutouts can need more, devices
-            // with hidden status bars don't need any). Using the live
-            // inset means the layout no longer "jumps under the
-            // clock" when re-entering full-screen from the mini
-            // bubble — see PR #31 follow-up.
-            .then(if (compact) Modifier else Modifier.statusBarsPadding())
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(
-                    top = if (compact) 4.dp else 8.dp,
-                    start = if (compact) 8.dp else 16.dp,
-                    end = if (compact) 8.dp else 16.dp,
-                    bottom = if (compact) 4.dp else 14.dp
-                ),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(if (compact) 32.dp else 48.dp)) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(if (compact) 16.dp else 22.dp), tint = Blue)
-            }
-            Column(Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = if (compact) 15.sp else 24.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (subtitle != null && !compact) Text(subtitle, fontSize = 13.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (onMinimize != null && !compact) IconButton(onClick = onMinimize) { Icon(Icons.Rounded.PictureInPictureAlt, null, Modifier.size(20.dp), tint = Blue) }
-            if (onClose != null && !compact) IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = Color(0xFFFF3B30)) }
-            actions()
-        }
-        Box(Modifier.fillMaxWidth().height(0.5.dp).background(colors.outlineVariant.copy(alpha = 0.08f)))
-    }
-}
+

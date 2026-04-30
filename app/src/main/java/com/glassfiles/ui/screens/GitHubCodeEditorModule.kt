@@ -99,6 +99,9 @@ import coil.compose.AsyncImage
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.GHContent
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.theme.AiModuleSurface
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.Blue
 import com.glassfiles.ui.theme.SeparatorColor
 import com.glassfiles.ui.theme.TextSecondary
@@ -416,7 +419,9 @@ fun CodeEditorScreen(
         )
     }
 
-    Column(Modifier.fillMaxSize().background(Color(0xFF09111F))) {
+    AiModuleSurface {
+    val palette = AiModuleTheme.colors
+    Column(Modifier.fillMaxSize().background(palette.background)) {
         GitHubEditorTopBar(
             fileName = file.name,
             subtitle = buildEditorSubtitle(ext, lines.size, text.length, hasChanges),
@@ -567,6 +572,7 @@ fun CodeEditorScreen(
             }
         }
     }
+    }
 
     if (showCommitDialog) {
         var aiSuggesting by remember { mutableStateOf(false) }
@@ -696,36 +702,64 @@ private fun GitHubEditorTopBar(
     onOpenImage: () -> Unit,
     onAskAi: ((prompt: String?) -> Unit)? = null
 ) {
-    val colors = MaterialTheme.colorScheme
-    GHTopBar(fileName, subtitle = subtitle, onBack = onBack) {
-        if (onAskAi != null) {
-            IconButton(onClick = { onAskAi(null) }) { Icon(Icons.Rounded.AutoAwesome, null, tint = colors.primary) }
-        }
-        if (!isImage) {
-            IconButton(onClick = onToggleSearch) { Icon(Icons.Rounded.Search, null, tint = if (showSearch) Blue else TextSecondary) }
-            IconButton(onClick = onGoTo) { Icon(Icons.Rounded.Tag, null, tint = TextSecondary) }
-            if (hasOutline) IconButton(onClick = onOutline) { Icon(Icons.Rounded.Code, null, tint = TextSecondary) }
-            IconButton(onClick = onCopy) { Icon(Icons.Rounded.ContentCopy, null, tint = TextSecondary) }
-            IconButton(onClick = onToggleLineNumbers) { Icon(Icons.Rounded.FindInPage, null, tint = if (lineNumbers) Blue else TextSecondary) }
-            IconButton(onClick = onToggleWrap) { Icon(Icons.Rounded.WrapText, null, tint = if (wrapLines) Blue else TextSecondary) }
-            if (canUndo) IconButton(onClick = onUndo) { Icon(Icons.Rounded.Undo, null, tint = Blue) }
-            if (canRedo) IconButton(onClick = onRedo) { Icon(Icons.Rounded.Redo, null, tint = Blue) }
-            IconButton(onClick = onCycleMode) {
-                Icon(
-                    when (mode) {
-                        GitHubEditorMode.EDIT -> if (isMarkdown) Icons.Rounded.MenuBook else Icons.Rounded.Visibility
-                        GitHubEditorMode.READ -> Icons.Rounded.Edit
-                        GitHubEditorMode.PREVIEW -> Icons.Rounded.Visibility
-                    },
-                    null,
-                    tint = Blue
-                )
+    val palette = AiModuleTheme.colors
+    AiModulePageBar(
+        title = "> ${fileName}",
+        subtitle = subtitle,
+        onBack = onBack,
+        trailing = {
+            if (onAskAi != null) {
+                IconButton(onClick = { onAskAi(null) }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp), tint = palette.accent)
+                }
             }
-            if (hasChanges) IconButton(onClick = onSave) { Icon(Icons.Rounded.Save, null, tint = Color(0xFF34C759)) }
-        } else {
-            IconButton(onClick = onOpenImage) { Icon(Icons.Rounded.Download, null, tint = Blue) }
-        }
-    }
+            if (!isImage) {
+                IconButton(onClick = onToggleSearch, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = if (showSearch) palette.accent else palette.textSecondary)
+                }
+                IconButton(onClick = onGoTo, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Tag, null, Modifier.size(18.dp), tint = palette.textSecondary)
+                }
+                if (hasOutline) IconButton(onClick = onOutline, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Code, null, Modifier.size(18.dp), tint = palette.textSecondary)
+                }
+                IconButton(onClick = onCopy, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.ContentCopy, null, Modifier.size(18.dp), tint = palette.textSecondary)
+                }
+                IconButton(onClick = onToggleLineNumbers, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.FindInPage, null, Modifier.size(18.dp), tint = if (lineNumbers) palette.accent else palette.textSecondary)
+                }
+                IconButton(onClick = onToggleWrap, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.WrapText, null, Modifier.size(18.dp), tint = if (wrapLines) palette.accent else palette.textSecondary)
+                }
+                if (canUndo) IconButton(onClick = onUndo, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Undo, null, Modifier.size(18.dp), tint = palette.accent)
+                }
+                if (canRedo) IconButton(onClick = onRedo, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Redo, null, Modifier.size(18.dp), tint = palette.accent)
+                }
+                IconButton(onClick = onCycleMode, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        when (mode) {
+                            GitHubEditorMode.EDIT -> if (isMarkdown) Icons.Rounded.MenuBook else Icons.Rounded.Visibility
+                            GitHubEditorMode.READ -> Icons.Rounded.Edit
+                            GitHubEditorMode.PREVIEW -> Icons.Rounded.Visibility
+                        },
+                        null,
+                        Modifier.size(18.dp),
+                        tint = palette.accent,
+                    )
+                }
+                if (hasChanges) IconButton(onClick = onSave, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Save, null, Modifier.size(18.dp), tint = GitHubSuccessGreen)
+                }
+            } else {
+                IconButton(onClick = onOpenImage, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Download, null, Modifier.size(18.dp), tint = palette.accent)
+                }
+            }
+        },
+    )
 }
 
 @Composable

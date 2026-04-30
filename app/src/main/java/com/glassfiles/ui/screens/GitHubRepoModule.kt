@@ -368,13 +368,20 @@ internal fun RepoDetailScreen(
         LaunchedEffect(safeEditingFile.path, selectedBranch) {
             fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, safeEditingFile.path, selectedBranch)
         }
-        Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-            GHTopBar(safeEditingFile.name, subtitle = "Loading editor", onBack = {
-                editingFile = null
-                fileContent = null
-            })
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+        AiModuleSurface {
+            val loadingPalette = AiModuleTheme.colors
+            Column(Modifier.fillMaxSize().background(loadingPalette.background)) {
+                AiModulePageBar(
+                    title = "> ${safeEditingFile.name}",
+                    subtitle = "loading editor…",
+                    onBack = {
+                        editingFile = null
+                        fileContent = null
+                    },
+                )
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = loadingPalette.accent, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                }
             }
         }
         return
@@ -399,40 +406,54 @@ internal fun RepoDetailScreen(
         val isImage = ext in listOf("png", "jpg", "jpeg", "gif", "webp", "svg", "ico")
         val isMd = ext in listOf("md", "markdown")
         val cachedLines = remember(safeFileContent) { safeFileContent.lines() }
-        Column(Modifier.fillMaxSize().background(Color(0xFF0D1117))) {
-            GHTopBar(safeOpenedFile.name, onBack = {
-                fileContent = null
-                openedFile = null
-            }) {
-                IconButton(onClick = {
-                    val clip = android.content.ClipData.newPlainText("code", safeFileContent)
-                    (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
-                    Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
-                }) { Icon(Icons.Rounded.ContentCopy, null, Modifier.size(20.dp), tint = Blue) }
-                IconButton(onClick = {
-                    scope.launch {
-                        val dest = File(
-                            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                            "GlassFiles_Git/${safeOpenedFile.name}"
-                        )
-                        val ok = GitHubManager.downloadFile(
-                            context, repo.owner, repo.name, safeOpenedFile.path, dest, selectedBranch
-                        )
-                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+        AiModuleSurface {
+        val viewerPalette = AiModuleTheme.colors
+        Column(Modifier.fillMaxSize().background(viewerPalette.background)) {
+            AiModulePageBar(
+                title = "> ${safeOpenedFile.name}",
+                subtitle = if (ext.isNotBlank()) "${cachedLines.size} lines · ${safeFileContent.length} chars · ${ext.uppercase()}" else "${cachedLines.size} lines · ${safeFileContent.length} chars",
+                onBack = {
+                    fileContent = null
+                    openedFile = null
+                },
+                trailing = {
+                    IconButton(onClick = {
+                        val clip = android.content.ClipData.newPlainText("code", safeFileContent)
+                        (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
+                        Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                    }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.ContentCopy, null, Modifier.size(18.dp), tint = viewerPalette.textSecondary)
                     }
-                }) { Icon(Icons.Rounded.Download, null, Modifier.size(20.dp), tint = Blue) }
-                IconButton(onClick = {
-                    editingFile = safeOpenedFile
-                }) { Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = colors.primary) }
-            }
-            Row(Modifier.fillMaxWidth().background(Color(0xFF161B22)).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("${cachedLines.size} lines", fontSize = 11.sp, color = Color(0xFF8B949E))
-                Text("${safeFileContent.length} chars", fontSize = 11.sp, color = Color(0xFF8B949E))
-                Text(ext.uppercase(), fontSize = 11.sp, color = Color(0xFF58A6FF), fontWeight = FontWeight.SemiBold)
-            }
+                    IconButton(onClick = {
+                        scope.launch {
+                            val dest = File(
+                                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                                "GlassFiles_Git/${safeOpenedFile.name}"
+                            )
+                            val ok = GitHubManager.downloadFile(
+                                context, repo.owner, repo.name, safeOpenedFile.path, dest, selectedBranch
+                            )
+                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        }
+                    }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Download, null, Modifier.size(18.dp), tint = viewerPalette.textSecondary)
+                    }
+                    IconButton(onClick = {
+                        editingFile = safeOpenedFile
+                    }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = viewerPalette.accent)
+                    }
+                },
+            )
             if (isImage) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Image preview not available\nUse Download to save", fontSize = 14.sp, color = Color(0xFF8B949E), textAlign = TextAlign.Center)
+                    Text(
+                        "Image preview not available\nUse Download to save",
+                        fontSize = 12.sp,
+                        fontFamily = JetBrainsMono,
+                        color = viewerPalette.textMuted,
+                        textAlign = TextAlign.Center,
+                    )
                 }
             } else if (isMd) {
                 LazyColumn(Modifier.fillMaxSize().padding(12.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
@@ -442,12 +463,13 @@ internal fun RepoDetailScreen(
                 LazyColumn(Modifier.fillMaxSize().padding(start = 4.dp, end = 4.dp, top = 4.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                     items(cachedLines.size) { idx ->
                         Row(Modifier.fillMaxWidth()) {
-                            Text("${idx + 1}".padStart(4), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Color(0xFF484F58), modifier = Modifier.padding(end = 10.dp))
-                            Text(highlightLine(cachedLines[idx], ext), fontSize = 12.sp, fontFamily = FontFamily.Monospace, lineHeight = 18.sp)
+                            Text("${idx + 1}".padStart(4), fontSize = 11.sp, fontFamily = JetBrainsMono, color = viewerPalette.textMuted, modifier = Modifier.padding(end = 10.dp))
+                            Text(highlightLine(cachedLines[idx], ext), fontSize = 12.sp, fontFamily = JetBrainsMono, lineHeight = 16.sp)
                         }
                     }
                 }
             }
+        }
         }; return
     }
     val filteredContents = remember(contents, repoQuery) {
@@ -1177,14 +1199,16 @@ private fun PullRequestDetailScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Pull request #$pullNumber",
+    AiModuleSurface {
+    val prPalette = AiModuleTheme.colors
+    Column(Modifier.fillMaxSize().background(prPalette.background)) {
+        AiModulePageBar(
+            title = "> pr #$pullNumber",
             subtitle = repo.name,
             onBack = onBack,
-            actions = {
-                IconButton(onClick = { scope.launch { refreshPull() } }) {
-                    Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
+            trailing = {
+                IconButton(onClick = { scope.launch { refreshPull() } }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = prPalette.accent)
                 }
                 if (currentHtmlUrl.isNotBlank()) {
                     IconButton(onClick = {
@@ -1193,8 +1217,8 @@ private fun PullRequestDetailScreen(
                         } catch (_: Exception) {
                             Toast.makeText(context, Strings.error, Toast.LENGTH_SHORT).show()
                         }
-                    }) {
-                        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(20.dp), tint = Blue)
+                    }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = prPalette.accent)
                     }
                 }
             }
@@ -1315,6 +1339,7 @@ private fun PullRequestDetailScreen(
                 }
             }
         }
+    }
     }
 
     if (showReview && current != null) {
@@ -2694,49 +2719,56 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
         refreshIssueDetail(showLoader = true)
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar("#$issueNumber", subtitle = detail?.title, onBack = onBack) {
-            if (detail != null) {
-                IconButton(onClick = { showReactions = true }) {
-                    Icon(Icons.Rounded.EmojiEmotions, null, Modifier.size(20.dp), tint = Blue)
-                }
-                IconButton(onClick = { showTimeline = true }) {
-                    Icon(Icons.Rounded.Timeline, null, Modifier.size(20.dp), tint = Blue)
-                }
-                IconButton(onClick = { showMetaDialog = true }) {
-                    Icon(Icons.Rounded.Tune, null, Modifier.size(20.dp), tint = Blue)
-                }
-                if (repo.canWrite()) {
-                    IconButton(onClick = { showLockDialog = true }) {
-                        Icon(
-                            if (detail!!.locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
-                            null,
-                            Modifier.size(20.dp),
-                            tint = if (detail!!.locked) Color(0xFF34C759) else Color(0xFFFF9500)
-                        )
+    AiModuleSurface {
+    val issuePalette = AiModuleTheme.colors
+    Column(Modifier.fillMaxSize().background(issuePalette.background)) {
+        AiModulePageBar(
+            title = "> issue #$issueNumber",
+            subtitle = detail?.title,
+            onBack = onBack,
+            trailing = {
+                if (detail != null) {
+                    IconButton(onClick = { showReactions = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.EmojiEmotions, null, Modifier.size(18.dp), tint = issuePalette.accent)
                     }
-                    val isOpen = detail!!.state == "open"
-                    IconButton(onClick = {
-                        scope.launch {
-                            val ok = if (isOpen) {
-                                GitHubManager.closeIssue(context, repo.owner, repo.name, issueNumber)
-                            } else {
-                                GitHubManager.reopenIssue(context, repo.owner, repo.name, issueNumber)
-                            }
-                            if (ok) refreshIssueDetail()
-                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                    IconButton(onClick = { showTimeline = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Timeline, null, Modifier.size(18.dp), tint = issuePalette.accent)
+                    }
+                    IconButton(onClick = { showMetaDialog = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Tune, null, Modifier.size(18.dp), tint = issuePalette.accent)
+                    }
+                    if (repo.canWrite()) {
+                        IconButton(onClick = { showLockDialog = true }, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                if (detail!!.locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
+                                null,
+                                Modifier.size(18.dp),
+                                tint = if (detail!!.locked) GitHubSuccessGreen else issuePalette.warning,
+                            )
                         }
-                    }) {
-                        Icon(
-                            if (isOpen) Icons.Rounded.Close else Icons.Rounded.Refresh,
-                            null,
-                            Modifier.size(20.dp),
-                            tint = if (isOpen) Color(0xFFFF3B30) else Color(0xFF34C759)
-                        )
+                        val isOpen = detail!!.state == "open"
+                        IconButton(onClick = {
+                            scope.launch {
+                                val ok = if (isOpen) {
+                                    GitHubManager.closeIssue(context, repo.owner, repo.name, issueNumber)
+                                } else {
+                                    GitHubManager.reopenIssue(context, repo.owner, repo.name, issueNumber)
+                                }
+                                if (ok) refreshIssueDetail()
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                            }
+                        }, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                if (isOpen) Icons.Rounded.Close else Icons.Rounded.Refresh,
+                                null,
+                                Modifier.size(18.dp),
+                                tint = if (isOpen) GitHubErrorRed else GitHubSuccessGreen,
+                            )
+                        }
                     }
                 }
-            }
-        }
+            },
+        )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -2825,6 +2857,7 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
                 }
             }
         }
+    }
     }
 
     if (showMetaDialog && detail != null) {
@@ -3760,14 +3793,58 @@ private fun PullFilesDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Un
 @Composable
 internal fun CommitDiffScreen(repo: GHRepo, sha: String, onBack: () -> Unit) { val context = LocalContext.current; var detail by remember { mutableStateOf<GHCommitDetail?>(null) }; var loading by remember { mutableStateOf(true) }
     LaunchedEffect(sha) { detail = GitHubManager.getCommitDiff(context, repo.owner, repo.name, sha); loading = false }
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) { GHTopBar(sha.take(7), subtitle = detail?.message?.lines()?.firstOrNull(), onBack = onBack)
-        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
-        else if (detail != null) { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) { Text("+${detail!!.totalAdditions}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF34C759)); Text("-${detail!!.totalDeletions}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF3B30)); Text("${detail!!.files.size} files", fontSize = 13.sp, color = TextSecondary) }
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) { items(detail!!.files) { f -> Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Box(Modifier.size(8.dp).clip(CircleShape).background(when (f.status) { "added" -> Color(0xFF34C759); "removed" -> Color(0xFFFF3B30); else -> Color(0xFFFF9500) })); Text(f.filename, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); Text("+${f.additions}", fontSize = 11.sp, color = Color(0xFF34C759)); Text("-${f.deletions}", fontSize = 11.sp, color = Color(0xFFFF3B30)) }
-                if (f.patch.isNotBlank()) { Spacer(Modifier.height(4.dp)); Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF1E1E22)).horizontalScroll(rememberScrollState()).padding(8.dp)) { Text(f.patch.take(2000), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = Color(0xFFD4D4D4), lineHeight = 16.sp) } }
-            }; Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor)) } }
+    AiModuleSurface {
+    val commitPalette = AiModuleTheme.colors
+    Column(Modifier.fillMaxSize().background(commitPalette.background)) {
+        AiModulePageBar(
+            title = "> ${sha.take(7)}",
+            subtitle = detail?.message?.lines()?.firstOrNull(),
+            onBack = onBack,
+        )
+        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = commitPalette.accent, modifier = Modifier.size(20.dp), strokeWidth = 2.dp) }
+        else if (detail != null) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("+${detail!!.totalAdditions}", fontSize = 12.sp, fontFamily = JetBrainsMono, fontWeight = FontWeight.Medium, color = GitHubSuccessGreen)
+                Text("-${detail!!.totalDeletions}", fontSize = 12.sp, fontFamily = JetBrainsMono, fontWeight = FontWeight.Medium, color = GitHubErrorRed)
+                Text("${detail!!.files.size} files", fontSize = 12.sp, fontFamily = JetBrainsMono, color = commitPalette.textSecondary)
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(commitPalette.border))
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
+                items(detail!!.files) { f ->
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val statusGlyph = when (f.status) { "added" -> "+"; "removed" -> "-"; "renamed" -> "~"; else -> "M" }
+                            val statusColor = when (f.status) { "added" -> GitHubSuccessGreen; "removed" -> GitHubErrorRed; else -> commitPalette.warning }
+                            Text(statusGlyph, color = statusColor, fontFamily = JetBrainsMono, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.width(12.dp))
+                            Text(f.filename, fontSize = 12.sp, fontFamily = JetBrainsMono, color = commitPalette.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Text("+${f.additions}", fontSize = 11.sp, fontFamily = JetBrainsMono, color = GitHubSuccessGreen)
+                            Text("-${f.deletions}", fontSize = 11.sp, fontFamily = JetBrainsMono, color = GitHubErrorRed)
+                        }
+                        if (f.patch.isNotBlank()) {
+                            Spacer(Modifier.height(4.dp))
+                            Box(
+                                Modifier.fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .border(1.dp, commitPalette.border, RoundedCornerShape(6.dp))
+                                    .background(commitPalette.surface)
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(8.dp),
+                            ) {
+                                Text(
+                                    f.patch.take(2000),
+                                    fontSize = 11.sp,
+                                    fontFamily = JetBrainsMono,
+                                    color = commitPalette.textPrimary,
+                                    lineHeight = 14.sp,
+                                )
+                            }
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(commitPalette.border))
+                }
+            }
         }
+    }
     }
 }
 

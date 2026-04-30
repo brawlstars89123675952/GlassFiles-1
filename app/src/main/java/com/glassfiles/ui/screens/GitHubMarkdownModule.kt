@@ -39,25 +39,26 @@ import java.io.File
 
 @Composable
 internal fun MarkdownLine(line: String) {
+    val palette = AiModuleTheme.colors
     val trimmed = line.trimStart()
     when {
-        trimmed.startsWith("# ") -> Text(trimmed.removePrefix("# "), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE6EDF3), modifier = Modifier.padding(vertical = 6.dp))
-        trimmed.startsWith("## ") -> Text(trimmed.removePrefix("## "), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE6EDF3), modifier = Modifier.padding(vertical = 4.dp))
-        trimmed.startsWith("### ") -> Text(trimmed.removePrefix("### "), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFE6EDF3), modifier = Modifier.padding(vertical = 3.dp))
-        trimmed.startsWith("```") -> Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFF30363D)))
+        trimmed.startsWith("# ") -> Text(trimmed.removePrefix("# "), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = palette.textPrimary, fontFamily = JetBrainsMono, modifier = Modifier.padding(vertical = 6.dp))
+        trimmed.startsWith("## ") -> Text(trimmed.removePrefix("## "), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = palette.textPrimary, fontFamily = JetBrainsMono, modifier = Modifier.padding(vertical = 4.dp))
+        trimmed.startsWith("### ") -> Text(trimmed.removePrefix("### "), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = palette.textPrimary, fontFamily = JetBrainsMono, modifier = Modifier.padding(vertical = 3.dp))
+        trimmed.startsWith("```") -> Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
         trimmed.startsWith("- ") || trimmed.startsWith("* ") -> Row(Modifier.padding(vertical = 1.dp)) {
-            Text("  \u2022  ", fontSize = 13.sp, color = Color(0xFF8B949E))
-            Text(trimmed.drop(2), fontSize = 13.sp, color = Color(0xFFC9D1D9), lineHeight = 18.sp)
+            Text("  \u2022  ", fontSize = 13.sp, color = palette.textMuted, fontFamily = JetBrainsMono)
+            Text(trimmed.drop(2), fontSize = 13.sp, color = palette.textPrimary, fontFamily = JetBrainsMono, lineHeight = 18.sp)
         }
         trimmed.startsWith("> ") -> Row(Modifier.padding(vertical = 1.dp)) {
-            Box(Modifier.width(3.dp).height(18.dp).background(Color(0xFF30363D)))
-            Text(trimmed.drop(2), fontSize = 13.sp, color = Color(0xFF8B949E), modifier = Modifier.padding(start = 8.dp))
+            Box(Modifier.width(3.dp).height(18.dp).background(palette.border))
+            Text(trimmed.drop(2), fontSize = 13.sp, color = palette.textSecondary, fontFamily = JetBrainsMono, modifier = Modifier.padding(start = 8.dp))
         }
-        trimmed.startsWith("---") || trimmed.startsWith("***") -> Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(Color(0xFF30363D)))
+        trimmed.startsWith("---") || trimmed.startsWith("***") -> Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(palette.border))
         trimmed.isEmpty() -> Spacer(Modifier.height(8.dp))
         else -> {
             // Inline formatting: **bold**, *italic*, `code`, [link](url)
-            Text(buildMdAnnotated(trimmed), fontSize = 13.sp, lineHeight = 18.sp)
+            Text(buildMdAnnotated(trimmed), fontSize = 13.sp, fontFamily = JetBrainsMono, lineHeight = 18.sp)
         }
     }
 }
@@ -66,11 +67,12 @@ internal fun buildMdAnnotated(text: String): androidx.compose.ui.text.AnnotatedS
     return androidx.compose.ui.text.buildAnnotatedString {
         var i = 0
         val len = text.length
-        val defColor = Color(0xFFC9D1D9)
-        val codeColor = Color(0xFFE6EDF3)
-        val codeBg = Color(0xFF161B22)
-        val boldColor = Color(0xFFE6EDF3)
-        val linkColor = Color(0xFF58A6FF)
+        val palette = AiModuleDarkColors
+        val defColor = palette.textPrimary
+        val codeColor = palette.textPrimary
+        val codeBg = palette.surface
+        val boldColor = palette.textPrimary
+        val linkColor = palette.accent
 
         while (i < len) {
             when {
@@ -134,7 +136,7 @@ internal val htmlKeywords = setOf(
 )
 
 internal fun highlightLine(line: String, ext: String): androidx.compose.ui.text.AnnotatedString {
-    val defColor = Color(0xFFD4D4D4)
+    val defColor = AiModuleDarkColors.textPrimary
 
     // Safety: very long lines → no highlighting (prevents OOM on minified files)
     if (line.length > 500) {
@@ -156,14 +158,15 @@ internal fun highlightLine(line: String, ext: String): androidx.compose.ui.text.
 }
 
 internal fun doHighlightLine(line: String, ext: String): androidx.compose.ui.text.AnnotatedString {
-    val kwColor = Color(0xFFC586C0)
-    val strColor = Color(0xFFCE9178)
-    val commentColor = Color(0xFF6A9955)
-    val numColor = Color(0xFFB5CEA8)
-    val typeColor = Color(0xFF4EC9B0)
-    val tagColor = Color(0xFF569CD6)
-    val attrColor = Color(0xFF9CDCFE)
-    val defColor = Color(0xFFD4D4D4)
+    val palette = AiModuleDarkColors
+    val kwColor = palette.syntaxKeyword
+    val strColor = palette.syntaxString
+    val commentColor = palette.syntaxComment
+    val numColor = palette.syntaxNumber
+    val typeColor = palette.accent
+    val tagColor = palette.accent
+    val attrColor = palette.syntaxArg
+    val defColor = palette.textPrimary
 
     val isHtml = ext in listOf("html", "xml", "svg", "xaml", "xhtml")
     val isCss = ext in listOf("css", "scss", "sass", "less")
@@ -279,7 +282,7 @@ internal fun doHighlightLine(line: String, ext: String): androidx.compose.ui.tex
                 line[i] == '@' -> {
                     val start = i; i++
                     while (i < len && (line[i].isLetterOrDigit() || line[i] == '_')) i++
-                    pushStyle(androidx.compose.ui.text.SpanStyle(color = Color(0xFFDCDCAA))); append(line.substring(start, minOf(i, len))); pop()
+                    pushStyle(androidx.compose.ui.text.SpanStyle(color = palette.syntaxFlag)); append(line.substring(start, minOf(i, len))); pop()
                 }
                 else -> { pushStyle(androidx.compose.ui.text.SpanStyle(color = defColor)); append(line[i]); pop(); i++ }
             }
