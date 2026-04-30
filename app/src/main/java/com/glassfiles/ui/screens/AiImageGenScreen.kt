@@ -75,6 +75,7 @@ import com.glassfiles.data.ai.models.AiProviderId
 import com.glassfiles.data.ai.providers.AiProviders
 import com.glassfiles.ui.components.AiImageViewer
 import com.glassfiles.ui.components.AiPickerChip
+import com.glassfiles.ui.theme.AiModuleSurface
 import kotlinx.coroutines.launch
 import java.io.File
 
