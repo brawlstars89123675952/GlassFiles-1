@@ -1,5 +1,6 @@
 package com.glassfiles.ui.screens
 
+
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,7 +26,13 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.glassfiles.data.github.GHCollaborator
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
 import com.glassfiles.ui.theme.*
+import com.glassfiles.ui.theme.AiModuleTheme
+import com.glassfiles.ui.theme.AiModuleSurface
+import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.launch
 
 private val COLLABORATOR_PERMISSIONS = listOf(
@@ -65,21 +72,21 @@ internal fun CollaboratorsScreen(
 
     LaunchedEffect(repoOwner, repoName) { loadCollaborators() }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Collaborators",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> collaborators",
             subtitle = "$repoOwner/$repoName",
             onBack = onBack,
-            actions = {
-                IconButton(onClick = { showAddDialog = true }) {
-                    Icon(Icons.Rounded.PersonAdd, null, Modifier.size(20.dp), tint = Blue)
+            trailing = {
+                IconButton(onClick = { showAddDialog = true }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.PersonAdd, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
                 }
-            }
+            },
         )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
         } else {
             val visibleCollaborators = collaborators.filter {
@@ -100,7 +107,7 @@ internal fun CollaboratorsScreen(
                         label = { Text("Search collaborators") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = TextSecondary) }
+                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
                     )
                 }
                 items(visibleCollaborators) { collaborator ->
@@ -114,7 +121,7 @@ internal fun CollaboratorsScreen(
                 if (visibleCollaborators.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text(if (collaborators.isEmpty()) "No collaborators yet" else "No matching collaborators", fontSize = 14.sp, color = TextTertiary)
+                            Text(if (collaborators.isEmpty()) "No collaborators yet" else "No matching collaborators", fontSize = 14.sp, color = AiModuleTheme.colors.textMuted)
                         }
                     }
                 }
@@ -126,8 +133,8 @@ internal fun CollaboratorsScreen(
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            containerColor = SurfaceWhite,
-            title = { Text("Add Collaborator", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Add Collaborator", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
@@ -138,7 +145,7 @@ internal fun CollaboratorsScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Text("Permission level:", fontSize = 12.sp, color = TextSecondary)
+                    Text("Permission level:", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                     Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -173,12 +180,12 @@ internal fun CollaboratorsScreen(
                         }
                     }
                 ) {
-                    Text("Add", color = Blue)
+                    Text("Add", color = AiModuleTheme.colors.accent)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAddDialog = false }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
                 }
             }
         )
@@ -188,10 +195,10 @@ internal fun CollaboratorsScreen(
     if (userToRemove != null) {
         AlertDialog(
             onDismissRequest = { userToRemove = null },
-            containerColor = SurfaceWhite,
-            title = { Text("Remove Collaborator?", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Remove Collaborator?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
             text = {
-                Text("Remove ${userToRemove!!.login} from this repository?", fontSize = 14.sp, color = TextSecondary)
+                Text("Remove ${userToRemove!!.login} from this repository?", fontSize = 14.sp, color = AiModuleTheme.colors.textSecondary)
             },
             confirmButton = {
                 TextButton(
@@ -212,7 +219,7 @@ internal fun CollaboratorsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { userToRemove = null }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
                 }
             }
         )
@@ -223,12 +230,12 @@ internal fun CollaboratorsScreen(
         var editPermission by remember(userToEdit) { mutableStateOf(normalizeCollaboratorPermission(userToEdit!!.role)) }
         AlertDialog(
             onDismissRequest = { userToEdit = null },
-            containerColor = SurfaceWhite,
-            title = { Text("Change Permission", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Change Permission", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${userToEdit!!.login}", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                    Text("Select permission level:", fontSize = 12.sp, color = TextSecondary)
+                    Text("${userToEdit!!.login}", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
+                    Text("Select permission level:", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                     Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -258,12 +265,12 @@ internal fun CollaboratorsScreen(
                         }
                     }
                 ) {
-                    Text("Save", color = Blue)
+                    Text("Save", color = AiModuleTheme.colors.accent)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { userToEdit = null }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
                 }
             }
         )
@@ -273,10 +280,10 @@ internal fun CollaboratorsScreen(
 @Composable
 private fun CollaboratorsSummaryCard(collaborators: List<GHCollaborator>) {
     val grouped = collaborators.groupingBy { normalizeCollaboratorPermission(it.role) }.eachCount()
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.Group, null, Modifier.size(18.dp), tint = Blue)
-            Text("${collaborators.size} collaborators", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+            Icon(Icons.Rounded.Group, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+            Text("${collaborators.size} collaborators", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             COLLABORATOR_PERMISSIONS.forEach { (permission, label) ->
@@ -309,7 +316,7 @@ private fun CollaboratorCard(
     val roleColor = collaboratorRoleColor(permission)
 
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -320,7 +327,7 @@ private fun CollaboratorCard(
             Modifier.size(40.dp).clip(CircleShape)
         )
         Column(Modifier.weight(1f)) {
-            Text(collaborator.login, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
+            Text(collaborator.login, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.size(8.dp).clip(CircleShape).background(roleColor))
                 Text(
@@ -332,7 +339,7 @@ private fun CollaboratorCard(
             }
         }
         IconButton(onClick = onPermissionChange) {
-            Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = Blue)
+            Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
         }
         IconButton(onClick = onRemove) {
             Icon(Icons.Rounded.PersonRemove, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30))
@@ -350,19 +357,20 @@ private fun normalizeCollaboratorPermission(role: String): String = when (role) 
 private fun permissionLabel(permission: String): String =
     COLLABORATOR_PERMISSIONS.firstOrNull { it.first == normalizeCollaboratorPermission(permission) }?.second ?: permission.replaceFirstChar { it.uppercase() }
 
+@Composable
 private fun collaboratorRoleColor(permission: String): Color = when (normalizeCollaboratorPermission(permission)) {
     "admin" -> Color(0xFFFF3B30)
     "maintain" -> Color(0xFFFF9F0A)
     "push" -> Color(0xFF34C759)
-    "triage" -> Blue
-    else -> TextSecondary
+    "triage" -> AiModuleTheme.colors.accent
+    else -> AiModuleTheme.colors.textSecondary
 }
 
 @Composable
 private fun PermissionChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+            .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
@@ -370,7 +378,7 @@ private fun PermissionChip(label: String, selected: Boolean, onClick: () -> Unit
             label,
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) Blue else TextPrimary
+            color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textPrimary
         )
     }
 }

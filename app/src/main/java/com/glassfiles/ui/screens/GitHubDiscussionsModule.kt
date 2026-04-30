@@ -58,15 +58,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.glassfiles.data.github.GHComment
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.data.github.GHDiscussion
 import com.glassfiles.data.github.GHDiscussionCategory
 import com.glassfiles.data.github.GitHubManager
-import com.glassfiles.ui.theme.Blue
-import com.glassfiles.ui.theme.SurfaceLight
-import com.glassfiles.ui.theme.SurfaceWhite
-import com.glassfiles.ui.theme.TextPrimary
-import com.glassfiles.ui.theme.TextSecondary
-import com.glassfiles.ui.theme.TextTertiary
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
 import kotlinx.coroutines.launch
 
 @Composable
@@ -117,23 +115,23 @@ internal fun DiscussionsScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Discussions",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> discussions",
             subtitle = "$repoOwner/$repoName",
             onBack = onBack,
-            actions = {
-                if (canWrite) {
-                    IconButton(onClick = { showCreateDialog = true }) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue)
+            trailing = if (canWrite) {
+                {
+                    IconButton(onClick = { showCreateDialog = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
                     }
                 }
-            }
+            } else null,
         )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
         } else {
             val visibleDiscussions = discussions.filter { discussion ->
@@ -158,7 +156,7 @@ internal fun DiscussionsScreen(
                         label = { Text("Search discussions") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = TextSecondary) }
+                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
                     )
                 }
                 item {
@@ -205,18 +203,18 @@ internal fun DiscussionsScreen(
 private fun DiscussionsSummaryCard(discussions: List<GHDiscussion>, categories: List<GHDiscussionCategory>) {
     val answered = discussions.count { it.isAnswered }
     val closed = discussions.count { it.state == "closed" }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.Forum, null, Modifier.size(18.dp), tint = Blue)
+            Icon(Icons.Rounded.Forum, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
             Column(Modifier.weight(1f)) {
-                Text("${discussions.size} discussions", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                Text("${categories.size} categories", fontSize = 11.sp, color = TextTertiary)
+                Text("${discussions.size} discussions", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
+                Text("${categories.size} categories", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             CountChip("Answered", answered, Color(0xFF34C759))
-            CountChip("Closed", closed, TextSecondary)
-            CountChip("Open", discussions.size - closed, Blue)
+            CountChip("Closed", closed, AiModuleTheme.colors.textSecondary)
+            CountChip("Open", discussions.size - closed, AiModuleTheme.colors.accent)
         }
     }
 }
@@ -240,30 +238,30 @@ private fun DiscussionCategoryFilters(
 @Composable
 private fun DiscussionCard(discussion: GHDiscussion, onClick: () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).clickable(onClick = onClick).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).clickable(onClick = onClick).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(if (discussion.isAnswerable) Icons.Rounded.QuestionAnswer else Icons.Rounded.Forum, null, Modifier.size(20.dp), tint = Blue)
-            Text(discussion.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (discussion.locked) Icon(Icons.Rounded.Lock, null, Modifier.size(15.dp), tint = TextTertiary)
+            Icon(if (discussion.isAnswerable) Icons.Rounded.QuestionAnswer else Icons.Rounded.Forum, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent)
+            Text(discussion.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (discussion.locked) Icon(Icons.Rounded.Lock, null, Modifier.size(15.dp), tint = AiModuleTheme.colors.textMuted)
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (discussion.categoryName.isNotBlank()) CountChip("${discussion.categoryEmoji} ${discussion.categoryName}".trim(), 0, Blue, showCount = false)
+            if (discussion.categoryName.isNotBlank()) CountChip("${discussion.categoryEmoji} ${discussion.categoryName}".trim(), 0, AiModuleTheme.colors.accent, showCount = false)
             if (discussion.isAnswered) CountChip("Answered", 0, Color(0xFF34C759), showCount = false)
-            if (discussion.state == "closed") CountChip("Closed", 0, TextSecondary, showCount = false)
+            if (discussion.state == "closed") CountChip("Closed", 0, AiModuleTheme.colors.textSecondary, showCount = false)
         }
         if (discussion.body.isNotBlank()) {
-            Text(discussion.body, fontSize = 12.sp, color = TextSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(discussion.body, fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(discussion.author.ifBlank { "Unknown" }, fontSize = 12.sp, color = Blue)
-            Text(discussion.updatedAt.ifBlank { discussion.createdAt }.take(10), fontSize = 11.sp, color = TextTertiary)
-            Text("${discussion.comments} comments", fontSize = 11.sp, color = TextSecondary)
+            Text(discussion.author.ifBlank { "Unknown" }, fontSize = 12.sp, color = AiModuleTheme.colors.accent)
+            Text(discussion.updatedAt.ifBlank { discussion.createdAt }.take(10), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
+            Text("${discussion.comments} comments", fontSize = 11.sp, color = AiModuleTheme.colors.textSecondary)
             if (discussion.upvotes > 0) {
                 Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.ThumbUp, null, Modifier.size(12.dp), tint = TextTertiary)
-                    Text("${discussion.upvotes}", fontSize = 11.sp, color = TextTertiary)
+                    Icon(Icons.Rounded.ThumbUp, null, Modifier.size(12.dp), tint = AiModuleTheme.colors.textMuted)
+                    Text("${discussion.upvotes}", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                 }
             }
         }
@@ -305,24 +303,26 @@ private fun DiscussionDetailScreen(
 
     LaunchedEffect(initialDiscussion.number) { loadDetail() }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "#${discussion.number}",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> #${discussion.number}",
             subtitle = discussion.title,
             onBack = onBack,
-            actions = {
-                if (discussion.htmlUrl.isNotBlank()) {
-                    IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(discussion.htmlUrl))) }) {
-                        Icon(Icons.Rounded.Language, null, Modifier.size(20.dp), tint = TextSecondary)
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (discussion.htmlUrl.isNotBlank()) {
+                        IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(discussion.htmlUrl))) }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Rounded.Language, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary)
+                        }
+                    }
+                    IconButton(onClick = { showEditDialog = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                    }
+                    IconButton(onClick = { showDeleteDialog = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.error)
                     }
                 }
-                IconButton(onClick = { showEditDialog = true }) {
-                    Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = Blue)
-                }
-                IconButton(onClick = { showDeleteDialog = true }) {
-                    Icon(Icons.Rounded.Delete, null, Modifier.size(20.dp), tint = Color(0xFFFF3B30))
-                }
-            }
+            },
         )
 
         LazyColumn(
@@ -332,7 +332,7 @@ private fun DiscussionDetailScreen(
         ) {
             item { DiscussionBodyCard(discussion) }
             item {
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = newComment,
                         onValueChange = { newComment = it },
@@ -365,7 +365,7 @@ private fun DiscussionDetailScreen(
             if (loading) {
                 item {
                     Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                     }
                 }
             } else {
@@ -404,9 +404,9 @@ private fun DiscussionDetailScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            containerColor = SurfaceWhite,
-            title = { Text("Delete Discussion?", fontWeight = FontWeight.Bold, color = TextPrimary) },
-            text = { Text("Delete #${discussion.number} and all replies?", fontSize = 14.sp, color = TextSecondary) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Delete Discussion?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
+            text = { Text("Delete #${discussion.number} and all replies?", fontSize = 14.sp, color = AiModuleTheme.colors.textSecondary) },
             confirmButton = {
                 TextButton(
                     enabled = !actionInFlight && discussion.id.isNotBlank(),
@@ -426,7 +426,7 @@ private fun DiscussionDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
                 }
             }
         )
@@ -435,44 +435,44 @@ private fun DiscussionDetailScreen(
 
 @Composable
 private fun DiscussionBodyCard(discussion: GHDiscussion) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (discussion.avatarUrl.isNotBlank()) {
                 AsyncImage(discussion.avatarUrl, discussion.author, Modifier.size(34.dp).clip(CircleShape))
             } else {
-                Box(Modifier.size(34.dp).clip(CircleShape).background(Blue.copy(0.12f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Forum, null, Modifier.size(18.dp), tint = Blue)
+                Box(Modifier.size(34.dp).clip(CircleShape).background(AiModuleTheme.colors.accent.copy(0.12f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Forum, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
                 }
             }
             Column(Modifier.weight(1f)) {
-                Text(discussion.title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                Text("${discussion.author.ifBlank { "Unknown" }} - ${discussion.createdAt.take(10)}", fontSize = 11.sp, color = TextTertiary)
+                Text(discussion.title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
+                Text("${discussion.author.ifBlank { "Unknown" }} - ${discussion.createdAt.take(10)}", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (discussion.categoryName.isNotBlank()) CountChip("${discussion.categoryEmoji} ${discussion.categoryName}".trim(), 0, Blue, showCount = false)
-            CountChip("${discussion.comments} comments", 0, TextSecondary, showCount = false)
-            if (discussion.upvotes > 0) CountChip("${discussion.upvotes} upvotes", 0, TextSecondary, showCount = false)
+            if (discussion.categoryName.isNotBlank()) CountChip("${discussion.categoryEmoji} ${discussion.categoryName}".trim(), 0, AiModuleTheme.colors.accent, showCount = false)
+            CountChip("${discussion.comments} comments", 0, AiModuleTheme.colors.textSecondary, showCount = false)
+            if (discussion.upvotes > 0) CountChip("${discussion.upvotes} upvotes", 0, AiModuleTheme.colors.textSecondary, showCount = false)
             if (discussion.isAnswered) CountChip("Answered", 0, Color(0xFF34C759), showCount = false)
             if (discussion.locked) CountChip("Locked", 0, Color(0xFFFF9500), showCount = false)
         }
-        Text(discussion.body.ifBlank { "No description." }, fontSize = 13.sp, color = TextPrimary, lineHeight = 20.sp)
+        Text(discussion.body.ifBlank { "No description." }, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, lineHeight = 20.sp)
     }
 }
 
 @Composable
 private fun DiscussionCommentCard(comment: GHComment) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (comment.avatarUrl.isNotBlank()) {
                 AsyncImage(comment.avatarUrl, comment.author, Modifier.size(28.dp).clip(CircleShape))
             }
             Column {
-                Text(comment.author.ifBlank { "Unknown" }, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Blue)
-                Text(comment.createdAt.take(10), fontSize = 10.sp, color = TextTertiary)
+                Text(comment.author.ifBlank { "Unknown" }, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.accent)
+                Text(comment.createdAt.take(10), fontSize = 10.sp, color = AiModuleTheme.colors.textMuted)
             }
         }
-        Text(comment.body, fontSize = 13.sp, color = TextPrimary, lineHeight = 18.sp)
+        Text(comment.body, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, lineHeight = 18.sp)
     }
 }
 
@@ -493,8 +493,8 @@ private fun DiscussionEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text(title, color = TextPrimary, fontWeight = FontWeight.Bold) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text(title, color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -512,7 +512,7 @@ private fun DiscussionEditorDialog(
                     minLines = 5,
                     maxLines = 8
                 )
-                Text("Category", fontSize = 12.sp, color = TextSecondary)
+                Text("Category", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     categories.forEach { category ->
                         SelectChip("${category.emoji} ${category.name}".trim(), categoryId == category.id) {
@@ -521,7 +521,7 @@ private fun DiscussionEditorDialog(
                     }
                 }
                 if (categories.isEmpty()) {
-                    Text("No discussion categories returned for this repository.", fontSize = 12.sp, color = TextTertiary)
+                    Text("No discussion categories returned for this repository.", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
                 }
             }
         },
@@ -530,12 +530,12 @@ private fun DiscussionEditorDialog(
                 enabled = draftTitle.isNotBlank() && draftBody.isNotBlank() && categoryId.isNotBlank(),
                 onClick = { onSave(draftTitle, draftBody, categoryId) }
             ) {
-                Text(confirmLabel, color = Blue)
+                Text(confirmLabel, color = AiModuleTheme.colors.accent)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = TextSecondary)
+                Text("Cancel", color = AiModuleTheme.colors.textSecondary)
             }
         }
     )
@@ -545,11 +545,11 @@ private fun DiscussionEditorDialog(
 private fun SelectChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Blue.copy(0.15f) else SurfaceWhite)
+            .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.surface)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
-        Text(label, fontSize = 12.sp, color = if (selected) Blue else TextPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(label, fontSize = 12.sp, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
@@ -568,9 +568,9 @@ private fun CountChip(label: String, count: Int, color: Color, showCount: Boolea
 @Composable
 private fun EmptyDiscussionsCard(message: String) {
     Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(28.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(28.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(message, fontSize = 14.sp, color = TextTertiary)
+        Text(message, fontSize = 14.sp, color = AiModuleTheme.colors.textMuted)
     }
 }

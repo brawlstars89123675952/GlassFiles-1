@@ -31,10 +31,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
 import com.glassfiles.data.github.GHAsset
 import com.glassfiles.data.github.GHRepo
 import com.glassfiles.data.github.GHRelease
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
 import java.io.File
@@ -61,23 +65,23 @@ fun ReleasesScreen(
         loading = false
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        GHTopBar(
-            title = "Releases",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> releases",
             subtitle = repoName,
             onBack = onBack,
-            actions = {
-                if (canWrite) {
-                    IconButton(onClick = { showCreate = true }) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+            trailing = if (canWrite) {
+                {
+                    IconButton(onClick = { showCreate = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
                     }
                 }
-            }
+            } else null,
         )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent)
             }
             return@Column
         }
@@ -253,18 +257,18 @@ private fun ReleaseCard(
                     ReleaseActionButton(
                         icon = Icons.Rounded.UploadFile,
                         label = "Asset",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = AiModuleTheme.colors.textSecondary,
                         enabled = !uploadingAsset && release.id > 0L,
                         loading = uploadingAsset,
                         onClick = { assetPicker.launch("*/*") }
                     )
                 }
                 if (release.htmlUrl.isNotBlank()) {
-                    ReleaseActionButton(Icons.Rounded.OpenInNew, "Open", MaterialTheme.colorScheme.onSurfaceVariant) { openGitHubUrl(context, release.htmlUrl) }
+                    ReleaseActionButton(Icons.Rounded.OpenInNew, "Open", AiModuleTheme.colors.textSecondary) { openGitHubUrl(context, release.htmlUrl) }
                 }
                 if (canWrite) {
-                    ReleaseActionButton(Icons.Rounded.Edit, "Edit", MaterialTheme.colorScheme.onSurfaceVariant) { showEdit = true }
-                    ReleaseActionButton(Icons.Rounded.Delete, "Delete", MaterialTheme.colorScheme.error) { showDelete = true }
+                    ReleaseActionButton(Icons.Rounded.Edit, "Edit", AiModuleTheme.colors.textSecondary) { showEdit = true }
+                    ReleaseActionButton(Icons.Rounded.Delete, "Delete", AiModuleTheme.colors.error) { showDelete = true }
                 }
             }
         }
@@ -303,7 +307,7 @@ private fun ReleaseCard(
                         }
                     }
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text("Delete", color = AiModuleTheme.colors.error)
                 }
             },
             dismissButton = {
@@ -333,7 +337,7 @@ private fun ReleaseCard(
                         }
                     }
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text("Delete", color = AiModuleTheme.colors.error)
                 }
             },
             dismissButton = {
@@ -426,8 +430,8 @@ private fun CreateReleaseDialog(
                             }
                         }
                     ) {
-                        if (generating) CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
-                        else Text("Generate changelog", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                        if (generating) CircularProgressIndicator(Modifier.size(14.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
+                        else Text("Generate changelog", color = AiModuleTheme.colors.accent, fontSize = 12.sp)
                     }
                 }
                 Spacer(Modifier.height(8.dp))

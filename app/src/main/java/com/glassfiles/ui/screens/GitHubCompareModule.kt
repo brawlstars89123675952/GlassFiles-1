@@ -63,17 +63,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.data.github.GHCommit
 import com.glassfiles.data.github.GHCompareResult
 import com.glassfiles.data.github.GHDiffFile
 import com.glassfiles.data.github.GitHubManager
-import com.glassfiles.ui.theme.Blue
-import com.glassfiles.ui.theme.SeparatorColor
-import com.glassfiles.ui.theme.SurfaceLight
-import com.glassfiles.ui.theme.SurfaceWhite
-import com.glassfiles.ui.theme.TextPrimary
-import com.glassfiles.ui.theme.TextSecondary
-import com.glassfiles.ui.theme.TextTertiary
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -118,12 +115,12 @@ internal fun CompareCommitsScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Compare",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> compare",
             subtitle = "$repoOwner/$repoName",
             onBack = onBack,
-            actions = {
+            trailing = {
                 IconButton(
                     onClick = {
                         val oldBase = baseBranch
@@ -131,11 +128,12 @@ internal fun CompareCommitsScreen(
                         headBranch = oldBase
                         compareResult = null
                     },
-                    enabled = baseBranch.isNotBlank() && headBranch.isNotBlank()
+                    enabled = baseBranch.isNotBlank() && headBranch.isNotBlank(),
+                    modifier = Modifier.size(36.dp),
                 ) {
-                    Icon(Icons.Rounded.SwapHoriz, null, Modifier.size(20.dp), tint = Blue)
+                    Icon(Icons.Rounded.SwapHoriz, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
                 }
-            }
+            },
         )
 
         Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -215,20 +213,20 @@ private fun CompareSelectorCard(
     onCompare: () -> Unit
 ) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text("Compare branches", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+        Text("Compare branches", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
         BranchSelectorDropdown(branches, baseBranch, onBaseChange, "Base")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            Icon(Icons.Rounded.ArrowForward, null, Modifier.size(18.dp), tint = TextTertiary)
+            Icon(Icons.Rounded.ArrowForward, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textMuted)
         }
         BranchSelectorDropdown(branches, headBranch, onHeadChange, "Compare")
         Button(
             onClick = onCompare,
             enabled = branches.isNotEmpty() && baseBranch.isNotBlank() && headBranch.isNotBlank() && baseBranch != headBranch && !loading,
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = Blue, contentColor = Color.White),
+            colors = ButtonDefaults.buttonColors(containerColor = AiModuleTheme.colors.accent, contentColor = Color.White),
             shape = RoundedCornerShape(10.dp)
         ) {
             if (loading) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
@@ -244,11 +242,11 @@ private fun CompareSelectorCard(
 @Composable
 private fun CompareEmptyState() {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(16.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text("Choose two branches", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-        Text("Use compare before creating a PR to see commits and changed files.", fontSize = 12.sp, color = TextSecondary)
+        Text("Choose two branches", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
+        Text("Use compare before creating a PR to see commits and changed files.", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
     }
 }
 
@@ -263,26 +261,26 @@ private fun CompareResultPanel(
 ) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CompareMetric("${result.aheadBy}", "ahead", Color(0xFF34C759))
                 CompareMetric("${result.behindBy}", "behind", Color(0xFFFF3B30))
-                CompareMetric("${result.totalCommits}", "commits", Blue)
-                CompareMetric("${result.files.size}", "files", TextSecondary)
+                CompareMetric("${result.totalCommits}", "commits", AiModuleTheme.colors.accent)
+                CompareMetric("${result.files.size}", "files", AiModuleTheme.colors.textSecondary)
             }
             Text(
                 compareStatusText(result.status, baseBranch, headBranch),
                 fontSize = 12.sp,
-                color = TextSecondary,
+                color = AiModuleTheme.colors.textSecondary,
                 lineHeight = 16.sp
             )
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onOpenDiff, enabled = result.files.isNotEmpty()) {
-                    Icon(Icons.Rounded.Visibility, null, Modifier.size(16.dp), tint = Blue)
+                    Icon(Icons.Rounded.Visibility, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.accent)
                     Spacer(Modifier.width(4.dp))
-                    Text("View diff", color = Blue, fontSize = 12.sp)
+                    Text("View diff", color = AiModuleTheme.colors.accent, fontSize = 12.sp)
                 }
                 TextButton(onClick = onCreatePr, enabled = result.aheadBy > 0) {
                     Icon(Icons.Rounded.MergeType, null, Modifier.size(16.dp), tint = Color(0xFF34C759))
@@ -290,9 +288,9 @@ private fun CompareResultPanel(
                     Text("Create PR", color = Color(0xFF34C759), fontSize = 12.sp)
                 }
                 TextButton(onClick = onOpenWeb, enabled = result.htmlUrl.isNotBlank()) {
-                    Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = TextSecondary)
+                    Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textSecondary)
                     Spacer(Modifier.width(4.dp))
-                    Text("GitHub", color = TextSecondary, fontSize = 12.sp)
+                    Text("GitHub", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp)
                 }
             }
         }
@@ -300,24 +298,24 @@ private fun CompareResultPanel(
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
             if (result.commits.isNotEmpty()) {
                 item {
-                    Text("Commits", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text("Commits", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
                 }
                 items(result.commits.take(8)) { commit ->
                     CompareCommitRow(commit)
                 }
                 if (result.commits.size > 8) {
                     item {
-                        Text("+${result.commits.size - 8} more commits", fontSize = 11.sp, color = TextTertiary, modifier = Modifier.padding(horizontal = 4.dp))
+                        Text("+${result.commits.size - 8} more commits", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, modifier = Modifier.padding(horizontal = 4.dp))
                     }
                 }
             }
 
             item {
-                Text("Changed files", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text("Changed files", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
             }
             if (result.files.isEmpty()) {
                 item {
-                    Text("No file changes", fontSize = 13.sp, color = TextTertiary, modifier = Modifier.padding(4.dp))
+                    Text("No file changes", fontSize = 13.sp, color = AiModuleTheme.colors.textMuted, modifier = Modifier.padding(4.dp))
                 }
             } else {
                 items(result.files) { file ->
@@ -343,13 +341,13 @@ private fun CompareMetric(value: String, label: String, color: Color) {
 @Composable
 private fun CompareCommitRow(commit: GHCommit) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).padding(12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.surface).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text(commit.message.lineSequence().firstOrNull().orEmpty(), fontSize = 13.sp, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(commit.message.lineSequence().firstOrNull().orEmpty(), fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(commit.sha.take(7), fontSize = 11.sp, color = Blue, fontWeight = FontWeight.Medium)
-            if (commit.author.isNotBlank()) Text(commit.author, fontSize = 11.sp, color = TextSecondary)
+            Text(commit.sha.take(7), fontSize = 11.sp, color = AiModuleTheme.colors.accent, fontWeight = FontWeight.Medium)
+            if (commit.author.isNotBlank()) Text(commit.author, fontSize = 11.sp, color = AiModuleTheme.colors.textSecondary)
         }
     }
 }
@@ -358,20 +356,20 @@ private fun CompareCommitRow(commit: GHCommit) {
 private fun CompareFileCard(file: GHDiffFile) {
     val statusColor = diffStatusColor(file.status)
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceWhite).padding(12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.surface).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor))
-            Text(file.filename, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(file.filename, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(file.status.replaceFirstChar { it.uppercase() }, fontSize = 11.sp, color = statusColor, fontWeight = FontWeight.Medium)
             Text("+${file.additions}", fontSize = 11.sp, color = Color(0xFF34C759))
             Text("-${file.deletions}", fontSize = 11.sp, color = Color(0xFFFF3B30))
             if (file.patch.isBlank()) {
-                Icon(Icons.Rounded.Description, null, Modifier.size(12.dp), tint = TextTertiary)
-                Text("No patch preview", fontSize = 11.sp, color = TextTertiary)
+                Icon(Icons.Rounded.Description, null, Modifier.size(12.dp), tint = AiModuleTheme.colors.textMuted)
+                Text("No patch preview", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
         }
     }
@@ -407,7 +405,7 @@ private fun CreateComparePRDialog(
         title = { Text("Create pull request") },
         text = {
             Column(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("$headBranch -> $baseBranch", fontSize = 12.sp, color = TextSecondary)
+                Text("$headBranch -> $baseBranch", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                 OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(body, { body = it }, label = { Text("Description") }, minLines = 6, maxLines = 10, modifier = Modifier.fillMaxWidth())
             }
@@ -424,11 +422,11 @@ private fun CreateComparePRDialog(
                     }
                 }
             ) {
-                if (creating) CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
+                if (creating) CircularProgressIndicator(Modifier.size(16.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
                 else {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(16.dp), tint = Blue)
+                    Icon(Icons.Rounded.Add, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.accent)
                     Spacer(Modifier.width(4.dp))
-                    Text("Create", color = Blue)
+                    Text("Create", color = AiModuleTheme.colors.accent)
                 }
             }
         },
@@ -455,12 +453,12 @@ private fun BranchSelectorDropdown(
             label = { Text(placeholder) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.fillMaxWidth().menuAnchor(),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Blue, unfocusedBorderColor = SeparatorColor)
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AiModuleTheme.colors.accent, unfocusedBorderColor = AiModuleTheme.colors.border)
         )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(SurfaceWhite)) {
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(AiModuleTheme.colors.surface)) {
             branches.forEach { branch ->
                 DropdownMenuItem(
-                    text = { Text(branch, fontSize = 13.sp, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    text = { Text(branch, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     onClick = {
                         onSelect(branch)
                         expanded = false
@@ -471,12 +469,13 @@ private fun BranchSelectorDropdown(
     }
 }
 
+@Composable
 private fun diffStatusColor(status: String): Color = when (status.lowercase(Locale.US)) {
     "added" -> Color(0xFF34C759)
     "removed" -> Color(0xFFFF3B30)
     "modified" -> Color(0xFFFF9500)
     "renamed" -> Color(0xFF5856D6)
-    else -> TextSecondary
+    else -> AiModuleTheme.colors.textSecondary
 }
 
 private fun compareStatusText(status: String, baseBranch: String, headBranch: String): String = when (status) {

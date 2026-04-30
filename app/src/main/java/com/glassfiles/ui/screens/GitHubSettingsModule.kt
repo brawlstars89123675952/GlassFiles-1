@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Business
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
@@ -68,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.glassfiles.data.Strings
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.data.github.GHBlockedEntry
 import com.glassfiles.data.github.GHEmailEntry
 import com.glassfiles.data.github.GHFollowerEntry
@@ -80,13 +82,9 @@ import com.glassfiles.data.github.GHUser
 import com.glassfiles.data.github.GHUserKeyEntry
 import com.glassfiles.data.github.GHUserProfile
 import com.glassfiles.data.github.GitHubManager
-import com.glassfiles.ui.theme.Blue
-import com.glassfiles.ui.theme.SeparatorColor
-import com.glassfiles.ui.theme.SurfaceLight
-import com.glassfiles.ui.theme.SurfaceWhite
-import com.glassfiles.ui.theme.TextPrimary
-import com.glassfiles.ui.theme.TextSecondary
-import com.glassfiles.ui.theme.TextTertiary
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
 import kotlinx.coroutines.launch
 
 private enum class SettingsSection(val title: String, val subtitle: String) {
@@ -200,21 +198,27 @@ internal fun GitHubSettingsScreen(
 
     LaunchedEffect(currentSection) { refreshSection(currentSection) }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = currentSection?.title ?: "GitHub Settings",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> ${(currentSection?.title ?: "settings").lowercase()}",
             subtitle = currentSection?.let { user?.name?.takeIf { n -> n.isNotBlank() } ?: user?.login },
             onBack = { if (currentSection == null) onBack() else currentSection = null },
-            onClose = onClose,
-            actions = {
-                if (loading) {
-                    CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
-                } else {
-                    IconButton(onClick = { scope.launch { refreshSection(currentSection) } }) {
-                        Icon(Icons.Rounded.Refresh, null, tint = Blue)
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (loading) {
+                        CircularProgressIndicator(Modifier.size(16.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
+                    } else {
+                        IconButton(onClick = { scope.launch { refreshSection(currentSection) } }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                        }
+                    }
+                    if (onClose != null) {
+                        IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.error)
+                        }
                     }
                 }
-            }
+            },
         )
 
         if (currentSection == null) {
@@ -266,14 +270,14 @@ internal fun GitHubSettingsScreen(
                         }
                         SettingsSection.NOTIFICATIONS -> SectionCard("Notifications") {
                             Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Unread only", color = TextPrimary, fontSize = 14.sp)
+                                Text("Unread only", color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp)
                                 Switch(
                                     checked = notificationsUnreadOnly,
                                     onCheckedChange = {
                                         notificationsUnreadOnly = it
                                         scope.launch { refreshSection(SettingsSection.NOTIFICATIONS) }
                                     },
-                                    colors = SwitchDefaults.colors(checkedTrackColor = Blue)
+                                    colors = SwitchDefaults.colors(checkedTrackColor = AiModuleTheme.colors.accent)
                                 )
                             }
                             ActionRow(Icons.Rounded.Check, "Mark all read") {
@@ -319,8 +323,8 @@ internal fun GitHubSettingsScreen(
                             }
                         }
                         SettingsSection.PEOPLE -> SectionCard("People") {
-                            Text("Followers", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            if (followers.isEmpty()) Text("No followers", color = TextTertiary, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                            Text("Followers", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            if (followers.isEmpty()) Text("No followers", color = AiModuleTheme.colors.textMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                             followers.forEach { person ->
                                 CompactPersonRow(person.login, person.avatarUrl, "Follow") {
                                     scope.launch {
@@ -331,8 +335,8 @@ internal fun GitHubSettingsScreen(
                                 }
                             }
                             Spacer(Modifier.height(8.dp))
-                            Text("Following", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            if (following.isEmpty()) Text("Not following anyone", color = TextTertiary, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                            Text("Following", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            if (following.isEmpty()) Text("Not following anyone", color = AiModuleTheme.colors.textMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                             following.forEach { person ->
                                 CompactPersonRow(person.login, person.avatarUrl, "Unfollow") {
                                     scope.launch {
@@ -357,7 +361,7 @@ internal fun GitHubSettingsScreen(
                             }
                         }
                         SettingsSection.INTERACTION -> SectionCard("Interaction limits") {
-                            Text(interactionLimit?.let { "Current: ${it.limit}${it.expiry?.let { exp -> " • $exp" } ?: ""}" } ?: "No active interaction limit", color = TextSecondary, fontSize = 12.sp)
+                            Text(interactionLimit?.let { "Current: ${it.limit}${it.expiry?.let { exp -> " • $exp" } ?: ""}" } ?: "No active interaction limit", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp)
                             ActionRow(Icons.Rounded.Warning, "Existing users for 24h") {
                                 scope.launch {
                                     val ok = GitHubManager.setInteractionLimitNative(context, "existing_users", "one_day")
@@ -392,11 +396,11 @@ internal fun GitHubSettingsScreen(
                             }
                         }
                         SettingsSection.ORGANIZATIONS -> SectionCard("Organizations") {
-                            if (organizations.isEmpty()) Text("No organizations", color = TextTertiary, fontSize = 12.sp)
+                            if (organizations.isEmpty()) Text("No organizations", color = AiModuleTheme.colors.textMuted, fontSize = 12.sp)
                             organizations.forEach { org -> CompactOrgRow(org) }
                         }
                         SettingsSection.REPOSITORIES -> SectionCard("Repositories") {
-                            if (starredRepos.isEmpty()) Text("No starred repositories", color = TextTertiary, fontSize = 12.sp)
+                            if (starredRepos.isEmpty()) Text("No starred repositories", color = AiModuleTheme.colors.textMuted, fontSize = 12.sp)
                             starredRepos.forEach { repo ->
                                 CompactRepoRow(repo) {
                                     scope.launch {
@@ -423,8 +427,8 @@ internal fun GitHubSettingsScreen(
                             }
                             if (actionLog.isNotEmpty()) {
                                 Spacer(Modifier.height(8.dp))
-                                Text("Recent actions", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                actionLog.forEach { line -> Text(line, color = TextTertiary, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp)) }
+                                Text("Recent actions", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                actionLog.forEach { line -> Text(line, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp)) }
                             }
                         }
                     
@@ -513,8 +517,8 @@ internal fun GitHubSettingsScreen(
     if (showChangeToken) {
         AlertDialog(
             onDismissRequest = { showChangeToken = false },
-            containerColor = SurfaceWhite,
-            title = { Text("Change token", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Change token", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
             text = { CompactField("Personal access token", newToken, password = true) { newToken = it } },
             confirmButton = {
                 TextButton(onClick = {
@@ -523,10 +527,10 @@ internal fun GitHubSettingsScreen(
                     newToken = ""
                     showChangeToken = false
                     scope.launch { refreshSection(SettingsSection.DEVELOPER) }
-                }) { Text(Strings.done, color = Blue) }
+                }) { Text(Strings.done, color = AiModuleTheme.colors.accent) }
             },
             dismissButton = {
-                TextButton(onClick = { showChangeToken = false }) { Text(Strings.cancel, color = TextSecondary) }
+                TextButton(onClick = { showChangeToken = false }) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) }
             }
         )
     }
@@ -587,8 +591,8 @@ private fun HeaderCard(user: GHUser?) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             AsyncImage(model = user?.avatarUrl, contentDescription = user?.login, modifier = Modifier.size(52.dp).clip(CircleShape))
             Column(Modifier.weight(1f)) {
-                Text(user?.name?.takeIf { it.isNotBlank() } ?: user?.login ?: "GitHub", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("@${user?.login ?: "unknown"}", color = TextSecondary, fontSize = 12.sp)
+                Text(user?.name?.takeIf { it.isNotBlank() } ?: user?.login ?: "GitHub", color = AiModuleTheme.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("@${user?.login ?: "unknown"}", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp)
             }
         }
     }
@@ -597,7 +601,7 @@ private fun HeaderCard(user: GHUser?) {
 @Composable
 private fun CompactCard(content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(SurfaceWhite).padding(horizontal = 14.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AiModuleTheme.colors.surface).padding(horizontal = 14.dp, vertical = 12.dp),
         content = content
     )
 }
@@ -605,7 +609,7 @@ private fun CompactCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
     CompactCard {
-        Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(title, color = AiModuleTheme.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         content()
     }
@@ -613,7 +617,7 @@ private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Un
 
 @Composable
 private fun SectionHeader(title: String) {
-    Text(title, color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    Text(title, color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(6.dp))
 }
 
@@ -624,17 +628,17 @@ private fun MenuRow(icon: androidx.compose.ui.graphics.vector.ImageVector, secti
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Icon(icon, null, tint = Blue, modifier = Modifier.size(18.dp))
+        Icon(icon, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp))
         Column(Modifier.weight(1f)) {
-            Text(section.title, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Text(section.subtitle, color = TextTertiary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(section.title, color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(section.subtitle, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
 @Composable
 private fun MenuDivider() {
-    Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor))
+    Box(Modifier.fillMaxWidth().height(0.5.dp).background(AiModuleTheme.colors.border))
 }
 
 @Composable
@@ -654,19 +658,19 @@ private fun CompactField(
         minLines = minLines,
         visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 13.sp),
+        textStyle = androidx.compose.ui.text.TextStyle(color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Blue,
-            unfocusedBorderColor = SeparatorColor,
-            focusedLabelColor = Blue,
-            unfocusedLabelColor = TextTertiary,
-            cursorColor = Blue
+            focusedBorderColor = AiModuleTheme.colors.accent,
+            unfocusedBorderColor = AiModuleTheme.colors.border,
+            focusedLabelColor = AiModuleTheme.colors.accent,
+            unfocusedLabelColor = AiModuleTheme.colors.textMuted,
+            cursorColor = AiModuleTheme.colors.accent
         )
     )
 }
 
 @Composable
-private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, tint: Color = Blue, onClick: () -> Unit) {
+private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, tint: Color = AiModuleTheme.colors.accent, onClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -688,9 +692,9 @@ private fun VisibilityChooser(current: String, onSet: (String) -> Unit) {
 @Composable
 private fun VisibilityChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
-        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (selected) Blue.copy(alpha = 0.12f) else SurfaceLight).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp)
+        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (selected) AiModuleTheme.colors.accent.copy(alpha = 0.12f) else AiModuleTheme.colors.background).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
-        Text(label, color = if (selected) Blue else TextSecondary, fontSize = 12.sp)
+        Text(label, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary, fontSize = 12.sp)
     }
 }
 
@@ -706,16 +710,16 @@ private fun KeyModeRow(mode: KeyMode, onSet: (KeyMode) -> Unit) {
 @Composable
 private fun EmailRow(email: GHEmailEntry, onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Rounded.Email, null, tint = Blue, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Email, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(email.email, color = TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(email.email, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val tags = buildList {
                 if (email.primary) add("primary")
                 if (email.verified) add("verified")
                 add(email.visibility.ifBlank { "private" })
             }.joinToString(" • ")
-            Text(tags, color = TextTertiary, fontSize = 11.sp)
+            Text(tags, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
         }
         TextButton(onClick = onDelete) { Text("Delete", color = Color(0xFFFF3B30), fontSize = 12.sp) }
     }
@@ -724,24 +728,24 @@ private fun EmailRow(email: GHEmailEntry, onDelete: () -> Unit) {
 @Composable
 private fun NotificationRow(item: GHNotification, onMarkRead: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Icon(Icons.Rounded.Notifications, null, tint = if (item.unread) Blue else TextTertiary, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Notifications, null, tint = if (item.unread) AiModuleTheme.colors.accent else AiModuleTheme.colors.textMuted, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(item.title, color = TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${item.repoName} • ${item.reason}", color = TextTertiary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.title, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${item.repoName} • ${item.reason}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (item.unread) TextButton(onClick = onMarkRead) { Text("Read", color = Blue, fontSize = 12.sp) }
+        if (item.unread) TextButton(onClick = onMarkRead) { Text("Read", color = AiModuleTheme.colors.accent, fontSize = 12.sp) }
     }
 }
 
 @Composable
 private fun KeyRow(key: GHUserKeyEntry, onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Rounded.Key, null, tint = Blue, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Key, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(key.title.ifBlank { "Key ${key.id}" }, color = TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${key.kind} • ${key.createdAt.take(10)}", color = TextTertiary, fontSize = 11.sp)
+            Text(key.title.ifBlank { "Key ${key.id}" }, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${key.kind} • ${key.createdAt.take(10)}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
         }
         TextButton(onClick = onDelete) { Text("Delete", color = Color(0xFFFF3B30), fontSize = 12.sp) }
     }
@@ -750,11 +754,11 @@ private fun KeyRow(key: GHUserKeyEntry, onDelete: () -> Unit) {
 @Composable
 private fun SocialRow(acc: GHSocialAccountEntry, onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Rounded.Public, null, tint = Blue, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Public, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(acc.provider.ifBlank { "Social account" }, color = TextPrimary, fontSize = 13.sp)
-            Text(acc.url, color = TextTertiary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(acc.provider.ifBlank { "Social account" }, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp)
+            Text(acc.url, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         TextButton(onClick = onDelete) { Text("Delete", color = Color(0xFFFF3B30), fontSize = 12.sp) }
     }
@@ -765,8 +769,8 @@ private fun CompactPersonRow(login: String, avatarUrl: String, action: String, o
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(model = avatarUrl, contentDescription = login, modifier = Modifier.size(28.dp).clip(CircleShape))
         Spacer(Modifier.width(10.dp))
-        Text(login, color = TextPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f))
-        TextButton(onClick = onAction) { Text(action, color = Blue, fontSize = 12.sp) }
+        Text(login, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        TextButton(onClick = onAction) { Text(action, color = AiModuleTheme.colors.accent, fontSize = 12.sp) }
     }
 }
 
@@ -775,7 +779,7 @@ private fun BlockedRow(entry: GHBlockedEntry, onUnblock: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(model = entry.avatarUrl, contentDescription = entry.login, modifier = Modifier.size(28.dp).clip(CircleShape))
         Spacer(Modifier.width(10.dp))
-        Text(entry.login, color = TextPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        Text(entry.login, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f))
         TextButton(onClick = onUnblock) { Text("Unblock", color = Color(0xFFFF3B30), fontSize = 12.sp) }
     }
 }
@@ -786,8 +790,8 @@ private fun CompactOrgRow(org: GHOrg) {
         AsyncImage(model = org.avatarUrl, contentDescription = org.login, modifier = Modifier.size(28.dp).clip(CircleShape))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(org.login, color = TextPrimary, fontSize = 13.sp)
-            if (org.description.isNotBlank()) Text(org.description, color = TextTertiary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(org.login, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp)
+            if (org.description.isNotBlank()) Text(org.description, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -795,12 +799,12 @@ private fun CompactOrgRow(org: GHOrg) {
 @Composable
 private fun CompactRepoRow(repo: GHRepo, onUnstar: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Rounded.Description, null, tint = Blue, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Description, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(repo.fullName, color = TextPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(repo.fullName, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val sub = listOfNotNull(repo.language.takeIf { it.isNotBlank() }, repo.updatedAt.takeIf { it.isNotBlank() }?.take(10)).joinToString(" • ")
-            if (sub.isNotBlank()) Text(sub, color = TextTertiary, fontSize = 11.sp)
+            if (sub.isNotBlank()) Text(sub, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
         }
         TextButton(onClick = onUnstar) { Text("Unstar", color = Color(0xFFFF3B30), fontSize = 12.sp) }
     }
@@ -809,8 +813,8 @@ private fun CompactRepoRow(repo: GHRepo, onUnstar: () -> Unit) {
 @Composable
 private fun InfoLine(label: String, value: String) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(label, color = TextSecondary, fontSize = 11.sp)
-        Text(value, color = TextPrimary, fontSize = 13.sp)
+        Text(label, color = AiModuleTheme.colors.textSecondary, fontSize = 11.sp)
+        Text(value, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp)
     }
 }
 

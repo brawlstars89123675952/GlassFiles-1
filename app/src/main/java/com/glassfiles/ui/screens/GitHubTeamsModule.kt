@@ -52,14 +52,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHOrgTeam
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.data.github.GHRepoTeam
 import com.glassfiles.data.github.GitHubManager
-import com.glassfiles.ui.theme.Blue
-import com.glassfiles.ui.theme.SurfaceLight
-import com.glassfiles.ui.theme.SurfaceWhite
-import com.glassfiles.ui.theme.TextPrimary
-import com.glassfiles.ui.theme.TextSecondary
-import com.glassfiles.ui.theme.TextTertiary
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
 import kotlinx.coroutines.launch
 
 private val TEAM_PERMISSIONS = listOf(
@@ -106,21 +104,21 @@ internal fun RepoTeamsScreen(
 
     LaunchedEffect(repoOwner, repoName) { loadTeams() }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Repository Teams",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> teams",
             subtitle = "$repoOwner/$repoName",
             onBack = onBack,
-            actions = {
-                IconButton(onClick = { showAddDialog = true }) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue)
+            trailing = {
+                IconButton(onClick = { showAddDialog = true }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
                 }
-            }
+            },
         )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
         } else {
             val visibleTeams = repoTeams.filter {
@@ -142,7 +140,7 @@ internal fun RepoTeamsScreen(
                         label = { Text("Search teams") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = TextSecondary) }
+                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
                     )
                 }
                 items(visibleTeams) { team ->
@@ -168,8 +166,8 @@ internal fun RepoTeamsScreen(
         val selectedAvailableTeam = availableTeams.firstOrNull { it.slug == selectedTeamSlug }
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            containerColor = SurfaceWhite,
-            title = { Text("Add Team", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Add Team", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (availableTeams.isEmpty()) {
@@ -177,10 +175,10 @@ internal fun RepoTeamsScreen(
                             if (orgTeams.isEmpty()) "No organization teams were returned for $repoOwner."
                             else "All organization teams already have access to this repository.",
                             fontSize = 13.sp,
-                            color = TextSecondary
+                            color = AiModuleTheme.colors.textSecondary
                         )
                     } else {
-                        Text("Team", fontSize = 12.sp, color = TextSecondary)
+                        Text("Team", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                         Column(
                             Modifier.height(260.dp).verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -193,7 +191,7 @@ internal fun RepoTeamsScreen(
                                 )
                             }
                         }
-                        Text("Permission level", fontSize = 12.sp, color = TextSecondary)
+                        Text("Permission level", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                         PermissionChipRow(selectedPermission) { selectedPermission = it }
                     }
                 }
@@ -215,12 +213,12 @@ internal fun RepoTeamsScreen(
                         }
                     }
                 ) {
-                    Text("Add", color = Blue)
+                    Text("Add", color = AiModuleTheme.colors.accent)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAddDialog = false }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
                 }
             }
         )
@@ -230,12 +228,12 @@ internal fun RepoTeamsScreen(
         var editPermission by remember(teamToEdit?.slug) { mutableStateOf(normalizeTeamPermission(teamToEdit!!.permission)) }
         AlertDialog(
             onDismissRequest = { teamToEdit = null },
-            containerColor = SurfaceWhite,
-            title = { Text("Change Team Permission", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Change Team Permission", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(teamToEdit!!.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                    Text("@${teamToEdit!!.slug}", fontSize = 12.sp, color = TextTertiary)
+                    Text(teamToEdit!!.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
+                    Text("@${teamToEdit!!.slug}", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
                     PermissionChipRow(editPermission) { editPermission = it }
                 }
             },
@@ -254,12 +252,12 @@ internal fun RepoTeamsScreen(
                         }
                     }
                 ) {
-                    Text("Save", color = Blue)
+                    Text("Save", color = AiModuleTheme.colors.accent)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { teamToEdit = null }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
                 }
             }
         )
@@ -268,10 +266,10 @@ internal fun RepoTeamsScreen(
     if (teamToRemove != null) {
         AlertDialog(
             onDismissRequest = { teamToRemove = null },
-            containerColor = SurfaceWhite,
-            title = { Text("Remove Team?", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Remove Team?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
             text = {
-                Text("Remove ${teamToRemove!!.name} from this repository?", fontSize = 14.sp, color = TextSecondary)
+                Text("Remove ${teamToRemove!!.name} from this repository?", fontSize = 14.sp, color = AiModuleTheme.colors.textSecondary)
             },
             confirmButton = {
                 TextButton(
@@ -293,7 +291,7 @@ internal fun RepoTeamsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { teamToRemove = null }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
                 }
             }
         )
@@ -303,12 +301,12 @@ internal fun RepoTeamsScreen(
 @Composable
 private fun RepoTeamsSummaryCard(repoTeams: List<GHRepoTeam>, orgTeams: List<GHOrgTeam>) {
     val grouped = repoTeams.groupingBy { normalizeTeamPermission(it.permission) }.eachCount()
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.Group, null, Modifier.size(18.dp), tint = Blue)
+            Icon(Icons.Rounded.Group, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
             Column(Modifier.weight(1f)) {
-                Text("${repoTeams.size} repository teams", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                Text("${orgTeams.size} organization teams available", fontSize = 11.sp, color = TextTertiary)
+                Text("${repoTeams.size} repository teams", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
+                Text("${orgTeams.size} organization teams available", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -329,7 +327,7 @@ private fun RepoTeamCard(
     val permission = normalizeTeamPermission(team.permission)
     val color = teamPermissionColor(permission)
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -337,21 +335,21 @@ private fun RepoTeamCard(
             Icon(Icons.Rounded.Group, null, Modifier.size(22.dp), tint = color)
         }
         Column(Modifier.weight(1f)) {
-            Text(team.name.ifBlank { team.slug }, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(team.name.ifBlank { team.slug }, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("@${team.slug}", fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Box(Modifier.size(5.dp).clip(CircleShape).background(TextTertiary.copy(0.5f)))
-                Icon(if (team.privacy == "closed" || team.privacy == "secret") Icons.Rounded.Lock else Icons.Rounded.Group, null, Modifier.size(12.dp), tint = TextTertiary)
-                Text(team.privacy.ifBlank { "team" }, fontSize = 11.sp, color = TextTertiary)
+                Text("@${team.slug}", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Box(Modifier.size(5.dp).clip(CircleShape).background(AiModuleTheme.colors.textMuted.copy(0.5f)))
+                Icon(if (team.privacy == "closed" || team.privacy == "secret") Icons.Rounded.Lock else Icons.Rounded.Group, null, Modifier.size(12.dp), tint = AiModuleTheme.colors.textMuted)
+                Text(team.privacy.ifBlank { "team" }, fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
             if (team.description.isNotBlank()) {
-                Text(team.description, fontSize = 12.sp, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(team.description, fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.height(4.dp))
             Text(teamPermissionLabel(permission), fontSize = 12.sp, color = color, fontWeight = FontWeight.Medium)
         }
         IconButton(onClick = onPermissionChange) {
-            Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = Blue)
+            Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
         }
         IconButton(onClick = onRemove) {
             Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30))
@@ -363,16 +361,16 @@ private fun RepoTeamCard(
 private fun SelectableTeamRow(team: GHOrgTeam, selected: Boolean, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp))
-            .background(if (selected) Blue.copy(0.12f) else SurfaceLight)
+            .background(if (selected) AiModuleTheme.colors.accent.copy(0.12f) else AiModuleTheme.colors.background)
             .clickable(onClick = onClick)
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(Icons.Rounded.Group, null, Modifier.size(18.dp), tint = if (selected) Blue else TextSecondary)
+        Icon(Icons.Rounded.Group, null, Modifier.size(18.dp), tint = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
         Column(Modifier.weight(1f)) {
-            Text(team.name.ifBlank { team.slug }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${team.membersCount} members - ${team.reposCount} repos", fontSize = 11.sp, color = TextTertiary)
+            Text(team.name.ifBlank { team.slug }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${team.membersCount} members - ${team.reposCount} repos", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
         }
     }
 }
@@ -397,7 +395,7 @@ private fun PermissionChipRow(selectedPermission: String, onSelect: (String) -> 
 private fun TeamPermissionChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Blue.copy(0.15f) else SurfaceLight)
+            .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
@@ -405,7 +403,7 @@ private fun TeamPermissionChip(label: String, selected: Boolean, onClick: () -> 
             label,
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) Blue else TextPrimary
+            color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textPrimary
         )
     }
 }
@@ -425,10 +423,10 @@ private fun TeamPermissionCountChip(label: String, count: Int, color: Color) {
 @Composable
 private fun EmptyTeamsCard(message: String) {
     Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(28.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(28.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(message, fontSize = 14.sp, color = TextTertiary)
+        Text(message, fontSize = 14.sp, color = AiModuleTheme.colors.textMuted)
     }
 }
 
@@ -442,10 +440,11 @@ private fun normalizeTeamPermission(permission: String): String = when (permissi
 private fun teamPermissionLabel(permission: String): String =
     TEAM_PERMISSIONS.firstOrNull { it.first == normalizeTeamPermission(permission) }?.second ?: permission.replaceFirstChar { it.uppercase() }
 
+@Composable
 private fun teamPermissionColor(permission: String): Color = when (normalizeTeamPermission(permission)) {
     "admin" -> Color(0xFFFF3B30)
     "maintain" -> Color(0xFFFF9F0A)
     "push" -> Color(0xFF34C759)
-    "triage" -> Blue
-    else -> TextSecondary
+    "triage" -> AiModuleTheme.colors.accent
+    else -> AiModuleTheme.colors.textSecondary
 }

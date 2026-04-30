@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHProject
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.data.github.GHProjectCard
 import com.glassfiles.data.github.GHProjectColumn
 import com.glassfiles.data.github.GHProjectV2
@@ -70,12 +71,9 @@ import com.glassfiles.data.github.GHProjectV2Workflow
 import com.glassfiles.data.github.GHRepo
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.data.github.canWrite
-import com.glassfiles.ui.theme.Blue
-import com.glassfiles.ui.theme.SurfaceLight
-import com.glassfiles.ui.theme.SurfaceWhite
-import com.glassfiles.ui.theme.TextPrimary
-import com.glassfiles.ui.theme.TextSecondary
-import com.glassfiles.ui.theme.TextTertiary
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
 import kotlinx.coroutines.launch
 
 private enum class ProjectsKind { CLASSIC, V2 }
@@ -128,7 +126,7 @@ internal fun ProjectsTab(repo: GHRepo) {
 
     if (loading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+            CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
         }
         return
     }
@@ -154,11 +152,11 @@ internal fun ProjectsTab(repo: GHRepo) {
                     label = { Text("Search projects") },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
-                    leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = TextSecondary) }
+                    leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
                 )
                 if (repo.canWrite()) {
                     IconButton(onClick = { showCreateDialog = true }) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = Blue)
+                        Icon(Icons.Rounded.Add, null, Modifier.size(22.dp), tint = AiModuleTheme.colors.accent)
                     }
                 }
             }
@@ -210,16 +208,16 @@ private fun ProjectsSummaryCard(classicProjects: List<GHProject>, v2Projects: Li
     val openV2 = v2Projects.count { !it.closed }
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.Dashboard, null, Modifier.size(18.dp), tint = Blue)
+            Icon(Icons.Rounded.Dashboard, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
             Column(Modifier.weight(1f)) {
-                Text("Projects", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                Text("${classicProjects.size} classic - ${v2Projects.size} v2", fontSize = 11.sp, color = TextTertiary)
+                Text("Projects", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
+                Text("${classicProjects.size} classic - ${v2Projects.size} v2", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            CountPill("Open classic", openClassic, Blue)
+            CountPill("Open classic", openClassic, AiModuleTheme.colors.accent)
             CountPill("Open V2", openV2, Color(0xFF34C759))
-            CountPill("Closed", classicProjects.size - openClassic + v2Projects.size - openV2, TextSecondary)
+            CountPill("Closed", classicProjects.size - openClassic + v2Projects.size - openV2, AiModuleTheme.colors.textSecondary)
         }
     }
 }
@@ -231,15 +229,15 @@ private fun ClassicProjectCard(project: GHProject, onClick: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Rounded.ViewColumn, null, Modifier.size(20.dp), tint = if (project.state == "open") Blue else TextSecondary)
-            Text(project.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            CountPill(project.state, 0, if (project.state == "open") Color(0xFF34C759) else TextSecondary, showCount = false)
+            Icon(Icons.Rounded.ViewColumn, null, Modifier.size(20.dp), tint = if (project.state == "open") AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
+            Text(project.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            CountPill(project.state, 0, if (project.state == "open") Color(0xFF34C759) else AiModuleTheme.colors.textSecondary, showCount = false)
         }
-        if (project.body.isNotBlank()) Text(project.body, fontSize = 12.sp, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (project.body.isNotBlank()) Text(project.body, fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("#${project.number}", fontSize = 11.sp, color = TextTertiary)
-            Text(project.updatedAt.take(10), fontSize = 11.sp, color = TextTertiary)
-            if (project.creator.isNotBlank()) Text(project.creator, fontSize = 11.sp, color = Blue)
+            Text("#${project.number}", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
+            Text(project.updatedAt.take(10), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
+            if (project.creator.isNotBlank()) Text(project.creator, fontSize = 11.sp, color = AiModuleTheme.colors.accent)
         }
     }
 }
@@ -252,19 +250,19 @@ private fun ProjectV2Card(project: GHProjectV2, onClick: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Rounded.Dashboard, null, Modifier.size(20.dp), tint = if (!project.closed) Blue else TextSecondary)
-            Text(project.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Icon(Icons.Rounded.Dashboard, null, Modifier.size(20.dp), tint = if (!project.closed) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
+            Text(project.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (project.url.isNotBlank()) {
                 IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(project.url))) }) {
-                    Icon(Icons.Rounded.Language, null, Modifier.size(18.dp), tint = TextSecondary)
+                    Icon(Icons.Rounded.Language, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary)
                 }
             }
         }
-        if (project.shortDescription.isNotBlank()) Text(project.shortDescription, fontSize = 12.sp, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (project.shortDescription.isNotBlank()) Text(project.shortDescription, fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            CountPill("${project.itemsCount} items", 0, Blue, showCount = false)
-            CountPill(if (project.closed) "Closed" else "Open", 0, if (project.closed) TextSecondary else Color(0xFF34C759), showCount = false)
-            CountPill(if (project.isPublic) "Public" else "Private", 0, TextSecondary, showCount = false)
+            CountPill("${project.itemsCount} items", 0, AiModuleTheme.colors.accent, showCount = false)
+            CountPill(if (project.closed) "Closed" else "Open", 0, if (project.closed) AiModuleTheme.colors.textSecondary else Color(0xFF34C759), showCount = false)
+            CountPill(if (project.isPublic) "Public" else "Private", 0, AiModuleTheme.colors.textSecondary, showCount = false)
         }
     }
 }
@@ -296,33 +294,35 @@ private fun ProjectV2DetailScreen(project: GHProjectV2, onBack: () -> Unit) {
 
     LaunchedEffect(project.id) { loadDetail() }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = detail?.title ?: project.title,
-            subtitle = "Project V2 #${project.number}",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> ${(detail?.title ?: project.title).lowercase()}",
+            subtitle = "project v2 #${project.number}",
             onBack = onBack,
-            actions = {
-                IconButton(onClick = { loadDetail() }) {
-                    Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
-                }
-                detail?.url?.takeIf { it.isNotBlank() }?.let { url ->
-                    IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }) {
-                        Icon(Icons.Rounded.Language, null, Modifier.size(20.dp), tint = TextSecondary)
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { loadDetail() }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                    }
+                    detail?.url?.takeIf { it.isNotBlank() }?.let { url ->
+                        IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Rounded.Language, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary)
+                        }
+                    }
+                    IconButton(onClick = { showEditProject = true }, enabled = detail != null, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                    }
+                    IconButton(onClick = { showAddDraft = true }, enabled = detail != null, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
                     }
                 }
-                IconButton(onClick = { showEditProject = true }, enabled = detail != null) {
-                    Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = Blue)
-                }
-                IconButton(onClick = { showAddDraft = true }, enabled = detail != null) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(20.dp), tint = Blue)
-                }
-            }
+            },
         )
 
         val current = detail
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
         } else if (current == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -469,9 +469,9 @@ private fun ProjectV2DetailScreen(project: GHProjectV2, onBack: () -> Unit) {
         deleteSchemaField?.let { field ->
             AlertDialog(
                 onDismissRequest = { deleteSchemaField = null },
-                containerColor = SurfaceWhite,
-                title = { Text("Delete Field?", fontWeight = FontWeight.Bold, color = TextPrimary) },
-                text = { Text("Delete ${field.name}? Existing values for this field will be removed from the project.", fontSize = 14.sp, color = TextSecondary) },
+                containerColor = AiModuleTheme.colors.surface,
+                title = { Text("Delete Field?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
+                text = { Text("Delete ${field.name}? Existing values for this field will be removed from the project.", fontSize = 14.sp, color = AiModuleTheme.colors.textSecondary) },
                 confirmButton = {
                     TextButton(
                         enabled = !actionInFlight,
@@ -487,7 +487,7 @@ private fun ProjectV2DetailScreen(project: GHProjectV2, onBack: () -> Unit) {
                         }
                     ) { Text("Delete", color = Color(0xFFFF3B30)) }
                 },
-                dismissButton = { TextButton(onClick = { deleteSchemaField = null }) { Text("Cancel", color = TextSecondary) } }
+                dismissButton = { TextButton(onClick = { deleteSchemaField = null }) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
             )
         }
         editDraft?.let { item ->
@@ -533,9 +533,9 @@ private fun ProjectV2DetailScreen(project: GHProjectV2, onBack: () -> Unit) {
         deleteItem?.let { item ->
             AlertDialog(
                 onDismissRequest = { deleteItem = null },
-                containerColor = SurfaceWhite,
-                title = { Text("Delete Item?", fontWeight = FontWeight.Bold, color = TextPrimary) },
-                text = { Text("Remove ${item.title.ifBlank { "this item" }} from the project?", fontSize = 14.sp, color = TextSecondary) },
+                containerColor = AiModuleTheme.colors.surface,
+                title = { Text("Delete Item?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
+                text = { Text("Remove ${item.title.ifBlank { "this item" }} from the project?", fontSize = 14.sp, color = AiModuleTheme.colors.textSecondary) },
                 confirmButton = {
                     TextButton(
                         enabled = !actionInFlight,
@@ -551,7 +551,7 @@ private fun ProjectV2DetailScreen(project: GHProjectV2, onBack: () -> Unit) {
                         }
                     ) { Text("Delete", color = Color(0xFFFF3B30)) }
                 },
-                dismissButton = { TextButton(onClick = { deleteItem = null }) { Text("Cancel", color = TextSecondary) } }
+                dismissButton = { TextButton(onClick = { deleteItem = null }) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
             )
         }
     }
@@ -561,20 +561,20 @@ private fun ProjectV2DetailScreen(project: GHProjectV2, onBack: () -> Unit) {
 private fun ProjectV2Summary(project: GHProjectV2Detail) {
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Rounded.Dashboard, null, Modifier.size(20.dp), tint = Blue)
+            Icon(Icons.Rounded.Dashboard, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent)
             Column(Modifier.weight(1f)) {
-                Text(project.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                Text(project.updatedAt.take(10), fontSize = 11.sp, color = TextTertiary)
+                Text(project.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
+                Text(project.updatedAt.take(10), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
-            CountPill(if (project.closed) "Closed" else "Open", 0, if (project.closed) TextSecondary else Color(0xFF34C759), showCount = false)
+            CountPill(if (project.closed) "Closed" else "Open", 0, if (project.closed) AiModuleTheme.colors.textSecondary else Color(0xFF34C759), showCount = false)
         }
-        if (project.shortDescription.isNotBlank()) Text(project.shortDescription, fontSize = 13.sp, color = TextSecondary)
+        if (project.shortDescription.isNotBlank()) Text(project.shortDescription, fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            CountPill("Items", project.itemsCount, Blue)
+            CountPill("Items", project.itemsCount, AiModuleTheme.colors.accent)
             CountPill("Fields", project.fields.size, Color(0xFF34C759))
-            CountPill("Views", project.views.size, TextSecondary)
-            CountPill("Workflows", project.workflows.size, TextSecondary)
-            CountPill(if (project.isPublic) "Public" else "Private", 0, TextSecondary, showCount = false)
+            CountPill("Views", project.views.size, AiModuleTheme.colors.textSecondary)
+            CountPill("Workflows", project.workflows.size, AiModuleTheme.colors.textSecondary)
+            CountPill(if (project.isPublic) "Public" else "Private", 0, AiModuleTheme.colors.textSecondary, showCount = false)
         }
     }
 }
@@ -588,27 +588,27 @@ private fun ProjectV2FieldsCard(
 ) {
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.ViewColumn, null, Modifier.size(18.dp), tint = Blue)
-            Text("Fields", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
+            Icon(Icons.Rounded.ViewColumn, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+            Text("Fields", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f))
             IconButton(onClick = onAdd, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = Blue)
+                Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
             }
         }
         if (fields.isEmpty()) {
-            Text("No Project V2 fields returned", fontSize = 12.sp, color = TextTertiary)
+            Text("No Project V2 fields returned", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
         } else {
             fields.forEach { field ->
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp),
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.background).padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(field.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(projectV2FieldMeta(field), fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(field.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(projectV2FieldMeta(field), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     IconButton(onClick = { onEdit(field) }, modifier = Modifier.size(34.dp)) {
-                        Icon(Icons.Rounded.Edit, null, Modifier.size(17.dp), tint = Blue)
+                        Icon(Icons.Rounded.Edit, null, Modifier.size(17.dp), tint = AiModuleTheme.colors.accent)
                     }
                     IconButton(onClick = { onDelete(field) }, modifier = Modifier.size(34.dp)) {
                         Icon(Icons.Rounded.Delete, null, Modifier.size(17.dp), tint = Color(0xFFFF3B30))
@@ -623,24 +623,24 @@ private fun ProjectV2FieldsCard(
 private fun ProjectV2ViewsCard(views: List<GHProjectV2View>) {
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.Dashboard, null, Modifier.size(18.dp), tint = Blue)
-            Text("Views", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
-            CountPill("${views.size}", 0, TextSecondary, showCount = false)
+            Icon(Icons.Rounded.Dashboard, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+            Text("Views", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f))
+            CountPill("${views.size}", 0, AiModuleTheme.colors.textSecondary, showCount = false)
         }
         if (views.isEmpty()) {
-            Text("No Project V2 views returned", fontSize = 12.sp, color = TextTertiary)
+            Text("No Project V2 views returned", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
         } else {
             views.forEach { view ->
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.background).padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(view.name.ifBlank { "View #${view.number}" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        CountPill(view.layout.ifBlank { "layout" }, 0, Blue, showCount = false)
+                        Text(view.name.ifBlank { "View #${view.number}" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        CountPill(view.layout.ifBlank { "layout" }, 0, AiModuleTheme.colors.accent, showCount = false)
                     }
                     val meta = cleanProjectText(listOf(view.filter, view.updatedAt.take(10)))
-                    if (meta.isNotBlank()) Text(meta, fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (meta.isNotBlank()) Text(meta, fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (view.fields.isNotEmpty()) {
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            view.fields.take(8).forEach { CountPill(it, 0, TextSecondary, showCount = false) }
+                            view.fields.take(8).forEach { CountPill(it, 0, AiModuleTheme.colors.textSecondary, showCount = false) }
                         }
                     }
                 }
@@ -653,25 +653,25 @@ private fun ProjectV2ViewsCard(views: List<GHProjectV2View>) {
 private fun ProjectV2WorkflowsCard(workflows: List<GHProjectV2Workflow>) {
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.ArrowForward, null, Modifier.size(18.dp), tint = Blue)
-            Text("Workflows", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
+            Icon(Icons.Rounded.ArrowForward, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+            Text("Workflows", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f))
             CountPill("${workflows.count { it.enabled }} enabled", 0, Color(0xFF34C759), showCount = false)
         }
         if (workflows.isEmpty()) {
-            Text("No Project V2 workflows returned", fontSize = 12.sp, color = TextTertiary)
+            Text("No Project V2 workflows returned", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
         } else {
             workflows.forEach { workflow ->
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SurfaceLight).padding(10.dp),
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.background).padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(Modifier.size(9.dp).clip(CircleShape).background(if (workflow.enabled) Color(0xFF34C759) else TextTertiary))
+                    Box(Modifier.size(9.dp).clip(CircleShape).background(if (workflow.enabled) Color(0xFF34C759) else AiModuleTheme.colors.textMuted))
                     Column(Modifier.weight(1f)) {
-                        Text(workflow.name.ifBlank { "Workflow #${workflow.number}" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(workflow.updatedAt.take(10), fontSize = 11.sp, color = TextTertiary)
+                        Text(workflow.name.ifBlank { "Workflow #${workflow.number}" }, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(workflow.updatedAt.take(10), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                     }
-                    CountPill(if (workflow.enabled) "enabled" else "disabled", 0, if (workflow.enabled) Color(0xFF34C759) else TextSecondary, showCount = false)
+                    CountPill(if (workflow.enabled) "enabled" else "disabled", 0, if (workflow.enabled) Color(0xFF34C759) else AiModuleTheme.colors.textSecondary, showCount = false)
                 }
             }
         }
@@ -691,18 +691,18 @@ private fun ProjectV2ItemCard(
 ) {
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.size(9.dp).clip(CircleShape).background(if (item.archived) TextTertiary else Blue))
+            Box(Modifier.size(9.dp).clip(CircleShape).background(if (item.archived) AiModuleTheme.colors.textMuted else AiModuleTheme.colors.accent))
             Column(Modifier.weight(1f)) {
-                Text(item.title.ifBlank { item.type }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(projectV2ItemSubtitle(item), fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.title.ifBlank { item.type }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(projectV2ItemSubtitle(item), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (item.url.isNotBlank()) IconButton(onClick = onOpen) { Icon(Icons.Rounded.Language, null, Modifier.size(18.dp), tint = TextSecondary) }
-            if (item.contentType == "DraftIssue" && item.contentId.isNotBlank()) IconButton(onClick = onEditDraft) { Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = Blue) }
+            if (item.url.isNotBlank()) IconButton(onClick = onOpen) { Icon(Icons.Rounded.Language, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
+            if (item.contentType == "DraftIssue" && item.contentId.isNotBlank()) IconButton(onClick = onEditDraft) { Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent) }
         }
-        if (item.body.isNotBlank()) Text(item.body, fontSize = 12.sp, color = TextSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        if (item.body.isNotBlank()) Text(item.body, fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             item.fieldValues.take(8).forEach { value -> FieldValuePill(value) }
-            if (item.fieldValues.isEmpty()) CountPill("No field values", 0, TextTertiary, showCount = false)
+            if (item.fieldValues.isEmpty()) CountPill("No field values", 0, AiModuleTheme.colors.textMuted, showCount = false)
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ProjectChip("Fields", false, onEditField)
@@ -727,8 +727,8 @@ private fun ProjectV2EditorDialog(
     var isPublic by remember(project.id) { mutableStateOf(project.isPublic) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Edit Project V2", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Edit Project V2", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -741,8 +741,8 @@ private fun ProjectV2EditorDialog(
                 }
             }
         },
-        confirmButton = { TextButton(enabled = title.isNotBlank(), onClick = { onSave(title, description, readme, closed, isPublic) }) { Text("Save", color = Blue) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+        confirmButton = { TextButton(enabled = title.isNotBlank(), onClick = { onSave(title, description, readme, closed, isPublic) }) { Text("Save", color = AiModuleTheme.colors.accent) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -759,16 +759,16 @@ private fun DraftIssueDialog(
     var body by remember(initialBody) { mutableStateOf(initialBody) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text(title, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text(title, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(itemTitle, { itemTitle = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(body, { body = it }, label = { Text("Body") }, minLines = 4, maxLines = 8, modifier = Modifier.fillMaxWidth())
             }
         },
-        confirmButton = { TextButton(enabled = itemTitle.isNotBlank(), onClick = { onSave(itemTitle, body) }) { Text(confirmLabel, color = Blue) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+        confirmButton = { TextButton(enabled = itemTitle.isNotBlank(), onClick = { onSave(itemTitle, body) }) { Text(confirmLabel, color = AiModuleTheme.colors.accent) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -786,12 +786,12 @@ private fun ProjectV2FieldDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Edit Field", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Edit Field", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (editableFields.isEmpty()) {
-                    Text("No editable Project V2 fields returned", fontSize = 13.sp, color = TextSecondary)
+                    Text("No editable Project V2 fields returned", fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary)
                 } else {
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         editableFields.forEach { field ->
@@ -823,9 +823,9 @@ private fun ProjectV2FieldDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = selectedField != null, onClick = { selectedField?.let { onSave(it, value) } }) { Text("Save", color = Blue) }
+            TextButton(enabled = selectedField != null, onClick = { selectedField?.let { onSave(it, value) } }) { Text("Save", color = AiModuleTheme.colors.accent) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -846,8 +846,8 @@ private fun ProjectV2SchemaFieldDialog(
     val canSave = name.isNotBlank() && (dataType != "SINGLE_SELECT" || optionList.isNotEmpty())
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text(title, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text(title, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(name, { name = it }, label = { Text("Field name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -865,22 +865,22 @@ private fun ProjectV2SchemaFieldDialog(
                         maxLines = 8,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Text("One option per line. Saving replaces the current option set.", fontSize = 11.sp, color = TextTertiary)
+                    Text("One option per line. Saving replaces the current option set.", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                 } else if (initialField != null) {
-                    Text("GitHub does not allow changing a field data type after creation.", fontSize = 11.sp, color = TextTertiary)
+                    Text("GitHub does not allow changing a field data type after creation.", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                 }
             }
         },
         confirmButton = {
-            TextButton(enabled = canSave, onClick = { onSave(name.trim(), dataType, optionList) }) { Text(confirmLabel, color = Blue) }
+            TextButton(enabled = canSave, onClick = { onSave(name.trim(), dataType, optionList) }) { Text(confirmLabel, color = AiModuleTheme.colors.accent) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
 @Composable
 private fun FieldValuePill(value: GHProjectV2ItemFieldValue) {
-    CountPill("${value.fieldName}: ${value.value.ifBlank { "-" }}", 0, TextSecondary, showCount = false)
+    CountPill("${value.fieldName}: ${value.value.ifBlank { "-" }}", 0, AiModuleTheme.colors.textSecondary, showCount = false)
 }
 
 private fun projectV2FieldMeta(field: GHProjectV2Field): String {
@@ -943,29 +943,31 @@ private fun ClassicProjectDetail(
 
     LaunchedEffect(project.id) { loadProject() }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = currentProject.name,
-            subtitle = "Classic project #${currentProject.number}",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> ${currentProject.name.lowercase()}",
+            subtitle = "classic project #${currentProject.number}",
             onBack = onBack,
-            actions = {
-                if (currentProject.htmlUrl.isNotBlank()) {
-                    IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentProject.htmlUrl))) }) {
-                        Icon(Icons.Rounded.Language, null, Modifier.size(20.dp), tint = TextSecondary)
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (currentProject.htmlUrl.isNotBlank()) {
+                        IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentProject.htmlUrl))) }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Rounded.Language, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary)
+                        }
+                    }
+                    IconButton(onClick = { showEditDialog = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                    }
+                    IconButton(onClick = { showDeleteDialog = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.error)
                     }
                 }
-                IconButton(onClick = { showEditDialog = true }) {
-                    Icon(Icons.Rounded.Edit, null, Modifier.size(20.dp), tint = Blue)
-                }
-                IconButton(onClick = { showDeleteDialog = true }) {
-                    Icon(Icons.Rounded.Delete, null, Modifier.size(20.dp), tint = Color(0xFFFF3B30))
-                }
-            }
+            },
         )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
         } else {
             LazyColumn(
@@ -1030,9 +1032,9 @@ private fun ClassicProjectDetail(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            containerColor = SurfaceWhite,
-            title = { Text("Delete Project?", fontWeight = FontWeight.Bold, color = TextPrimary) },
-            text = { Text("Delete ${currentProject.name} and its cards?", fontSize = 14.sp, color = TextSecondary) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Delete Project?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
+            text = { Text("Delete ${currentProject.name} and its cards?", fontSize = 14.sp, color = AiModuleTheme.colors.textSecondary) },
             confirmButton = {
                 TextButton(
                     enabled = !actionInFlight,
@@ -1048,7 +1050,7 @@ private fun ClassicProjectDetail(
                     }
                 ) { Text("Delete", color = Color(0xFFFF3B30)) }
             },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel", color = TextSecondary) } }
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
         )
     }
 
@@ -1115,16 +1117,16 @@ private fun ClassicProjectDetail(
 private fun ProjectDetailSummary(project: GHProject, columns: List<GHProjectColumn>, cards: Int) {
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Rounded.ViewColumn, null, Modifier.size(20.dp), tint = Blue)
+            Icon(Icons.Rounded.ViewColumn, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent)
             Column(Modifier.weight(1f)) {
-                Text(project.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                Text(project.updatedAt.take(10), fontSize = 11.sp, color = TextTertiary)
+                Text(project.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
+                Text(project.updatedAt.take(10), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
-            CountPill(project.state, 0, if (project.state == "open") Color(0xFF34C759) else TextSecondary, showCount = false)
+            CountPill(project.state, 0, if (project.state == "open") Color(0xFF34C759) else AiModuleTheme.colors.textSecondary, showCount = false)
         }
-        if (project.body.isNotBlank()) Text(project.body, fontSize = 13.sp, color = TextSecondary)
+        if (project.body.isNotBlank()) Text(project.body, fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            CountPill("Columns", columns.size, Blue)
+            CountPill("Columns", columns.size, AiModuleTheme.colors.accent)
             CountPill("Cards", cards, Color(0xFF34C759))
         }
     }
@@ -1141,14 +1143,14 @@ private fun ProjectColumnCard(
 ) {
     Column(Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.ViewColumn, null, Modifier.size(18.dp), tint = Blue)
-            Text(column.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
-            CountPill("Cards", cards.size, TextSecondary)
-            IconButton(onClick = onAddCard) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = Blue) }
+            Icon(Icons.Rounded.ViewColumn, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+            Text(column.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f))
+            CountPill("Cards", cards.size, AiModuleTheme.colors.textSecondary)
+            IconButton(onClick = onAddCard) { Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent) }
         }
         if (cards.isEmpty()) {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SurfaceLight).padding(16.dp), contentAlignment = Alignment.Center) {
-                Text("No cards", fontSize = 12.sp, color = TextTertiary)
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.background).padding(16.dp), contentAlignment = Alignment.Center) {
+                Text("No cards", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
             }
         } else {
             cards.forEach { card ->
@@ -1161,16 +1163,16 @@ private fun ProjectColumnCard(
 @Composable
 private fun ProjectCardRow(card: GHProjectCard, canMove: Boolean, onMove: () -> Unit, onDelete: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).background(SurfaceLight).padding(10.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).background(AiModuleTheme.colors.background).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(if (card.archived) TextTertiary else Blue))
+        Box(Modifier.size(8.dp).clip(CircleShape).background(if (card.archived) AiModuleTheme.colors.textMuted else AiModuleTheme.colors.accent))
         Column(Modifier.weight(1f)) {
-            Text(card.note.ifBlank { card.contentUrl.ifBlank { "Linked card" } }, fontSize = 13.sp, color = TextPrimary, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            Text(card.updatedAt.take(10), fontSize = 10.sp, color = TextTertiary)
+            Text(card.note.ifBlank { card.contentUrl.ifBlank { "Linked card" } }, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(card.updatedAt.take(10), fontSize = 10.sp, color = AiModuleTheme.colors.textMuted)
         }
-        if (canMove) IconButton(onClick = onMove) { Icon(Icons.Rounded.ArrowForward, null, Modifier.size(18.dp), tint = Blue) }
+        if (canMove) IconButton(onClick = onMove) { Icon(Icons.Rounded.ArrowForward, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent) }
         IconButton(onClick = onDelete) { Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30)) }
     }
 }
@@ -1191,8 +1193,8 @@ private fun ProjectEditorDialog(
     var state by remember(initialState) { mutableStateOf(initialState.ifBlank { "open" }) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text(title, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text(title, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -1206,9 +1208,9 @@ private fun ProjectEditorDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = name.isNotBlank(), onClick = { onSave(name, body, state) }) { Text(confirmLabel, color = Blue) }
+            TextButton(enabled = name.isNotBlank(), onClick = { onSave(name, body, state) }) { Text(confirmLabel, color = AiModuleTheme.colors.accent) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -1224,8 +1226,8 @@ private fun TextInputDialog(
     var value by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text(title, fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text(title, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             OutlinedTextField(
                 value = value,
@@ -1236,8 +1238,8 @@ private fun TextInputDialog(
                 modifier = Modifier.fillMaxWidth()
             )
         },
-        confirmButton = { TextButton(enabled = value.isNotBlank(), onClick = { onConfirm(value) }) { Text(confirmLabel, color = Blue) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+        confirmButton = { TextButton(enabled = value.isNotBlank(), onClick = { onConfirm(value) }) { Text(confirmLabel, color = AiModuleTheme.colors.accent) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -1251,25 +1253,25 @@ private fun MoveCardDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Move Card", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Move Card", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(card.note.ifBlank { "Linked card" }, fontSize = 13.sp, color = TextSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(card.note.ifBlank { "Linked card" }, fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 columns.filter { it.id != fromColumn.id }.forEach { column ->
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SurfaceLight).clickable { onMove(column) }.padding(10.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.background).clickable { onMove(column) }.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Rounded.ArrowForward, null, Modifier.size(16.dp), tint = Blue)
-                        Text(column.name, fontSize = 13.sp, color = TextPrimary)
+                        Icon(Icons.Rounded.ArrowForward, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.accent)
+                        Text(column.name, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary)
                     }
                 }
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -1282,11 +1284,11 @@ private fun ProjectChip(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun ProjectChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Blue.copy(0.15f) else SurfaceWhite)
+            .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.surface)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
-        Text(label, fontSize = 12.sp, color = if (!enabled) TextTertiary else if (selected) Blue else TextPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(label, fontSize = 12.sp, color = if (!enabled) AiModuleTheme.colors.textMuted else if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textPrimary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
@@ -1308,6 +1310,6 @@ private fun EmptyProjectsCard(message: String) {
         Modifier.fillMaxWidth().ghGlassCard(14.dp).padding(28.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(message, fontSize = 14.sp, color = TextTertiary)
+        Text(message, fontSize = 14.sp, color = AiModuleTheme.colors.textMuted)
     }
 }

@@ -53,15 +53,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHOrg
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.data.github.GHPackage
 import com.glassfiles.data.github.GHPackageVersion
 import com.glassfiles.data.github.GitHubManager
-import com.glassfiles.ui.theme.Blue
-import com.glassfiles.ui.theme.SurfaceLight
-import com.glassfiles.ui.theme.SurfaceWhite
-import com.glassfiles.ui.theme.TextPrimary
-import com.glassfiles.ui.theme.TextSecondary
-import com.glassfiles.ui.theme.TextTertiary
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
 import kotlinx.coroutines.launch
 
 private data class PackageOwner(val type: String, val login: String)
@@ -116,12 +114,16 @@ internal fun PackagesScreen(userLogin: String, onBack: () -> Unit) {
             it.repositoryName.contains(query, ignoreCase = true)
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar("Packages", onBack = onBack) {
-            IconButton(onClick = { loadPackages() }) {
-                Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
-            }
-        }
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> packages",
+            onBack = onBack,
+            trailing = {
+                IconButton(onClick = { loadPackages() }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                }
+            },
+        )
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
@@ -154,13 +156,13 @@ internal fun PackagesScreen(userLogin: String, onBack: () -> Unit) {
                     label = { Text("Search packages") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = TextSecondary) }
+                    leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
                 )
             }
             if (loading) {
                 item {
                     Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                        CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
                     }
                 }
             } else {
@@ -200,20 +202,26 @@ private fun PackageDetailScreen(owner: PackageOwner, pkg: GHPackage, onBack: () 
 
     LaunchedEffect(owner, pkg.id) { loadDetail() }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(detail.name.ifBlank { "Package" }, onBack = onBack) {
-            IconButton(onClick = { loadDetail() }) {
-                Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
-            }
-            if (detail.htmlUrl.isNotBlank()) {
-                IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(detail.htmlUrl))) }) {
-                    Icon(Icons.Rounded.OpenInNew, null, Modifier.size(20.dp), tint = Blue)
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> ${detail.name.ifBlank { "package" }.lowercase()}",
+            onBack = onBack,
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { loadDetail() }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                    }
+                    if (detail.htmlUrl.isNotBlank()) {
+                        IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(detail.htmlUrl))) }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                        }
+                    }
+                    IconButton(onClick = { deletePackageConfirm = true }, enabled = !actionInFlight, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.error)
+                    }
                 }
-            }
-            IconButton(onClick = { deletePackageConfirm = true }, enabled = !actionInFlight) {
-                Icon(Icons.Rounded.Delete, null, Modifier.size(20.dp), tint = Color(0xFFFF3B30))
-            }
-        }
+            },
+        )
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
@@ -221,12 +229,12 @@ private fun PackageDetailScreen(owner: PackageOwner, pkg: GHPackage, onBack: () 
         ) {
             item { PackageHeaderCard(detail, owner) }
             item {
-                Text("Versions", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text("Versions", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
             }
             if (loading) {
                 item {
                     Box(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                        CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
                     }
                 }
             } else {
@@ -298,37 +306,37 @@ private fun PackageDetailScreen(owner: PackageOwner, pkg: GHPackage, onBack: () 
 private fun PackagesSummaryCard(packages: List<GHPackage>) {
     val publicCount = packages.count { it.visibility == "public" }
     val privateCount = packages.count { it.visibility == "private" }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Rounded.Archive, null, Modifier.size(18.dp), tint = Blue)
+            Icon(Icons.Rounded.Archive, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
             Column(Modifier.weight(1f)) {
-                Text("GitHub Packages", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                Text("${packages.size} packages loaded", fontSize = 11.sp, color = TextTertiary)
+                Text("GitHub Packages", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
+                Text("${packages.size} packages loaded", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             PackageStatPill("Public", publicCount, Color(0xFF34C759))
-            PackageStatPill("Private", privateCount, TextSecondary)
-            PackageStatPill("Versions", packages.sumOf { it.versionCount }, Blue)
+            PackageStatPill("Private", privateCount, AiModuleTheme.colors.textSecondary)
+            PackageStatPill("Versions", packages.sumOf { it.versionCount }, AiModuleTheme.colors.accent)
         }
     }
 }
 
 @Composable
 private fun PackageHeaderCard(pkg: GHPackage, owner: PackageOwner) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Rounded.Archive, null, Modifier.size(22.dp), tint = Blue)
+            Icon(Icons.Rounded.Archive, null, Modifier.size(22.dp), tint = AiModuleTheme.colors.accent)
             Column(Modifier.weight(1f)) {
-                Text(pkg.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("${owner.login} - ${pkg.packageType.ifBlank { "package" }}", fontSize = 12.sp, color = TextTertiary)
+                Text(pkg.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text("${owner.login} - ${pkg.packageType.ifBlank { "package" }}", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
             }
-            PackagePill(pkg.visibility.ifBlank { "unknown" }, if (pkg.visibility == "public") Color(0xFF34C759) else TextSecondary)
+            PackagePill(pkg.visibility.ifBlank { "unknown" }, if (pkg.visibility == "public") Color(0xFF34C759) else AiModuleTheme.colors.textSecondary)
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            PackageStatPill("Versions", pkg.versionCount, Blue)
-            if (pkg.repositoryName.isNotBlank()) PackagePill(pkg.repositoryName, TextSecondary)
-            PackagePill("Updated ${pkg.updatedAt.shortDate()}", TextTertiary)
+            PackageStatPill("Versions", pkg.versionCount, AiModuleTheme.colors.accent)
+            if (pkg.repositoryName.isNotBlank()) PackagePill(pkg.repositoryName, AiModuleTheme.colors.textSecondary)
+            PackagePill("Updated ${pkg.updatedAt.shortDate()}", AiModuleTheme.colors.textMuted)
         }
     }
 }
@@ -336,36 +344,36 @@ private fun PackageHeaderCard(pkg: GHPackage, owner: PackageOwner) {
 @Composable
 private fun PackageCard(pkg: GHPackage, onClick: () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).clickable(onClick = onClick).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).clickable(onClick = onClick).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Rounded.Archive, null, Modifier.size(20.dp), tint = Blue)
+            Icon(Icons.Rounded.Archive, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent)
             Column(Modifier.weight(1f)) {
-                Text(pkg.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(listOf(pkg.packageType, pkg.repositoryName).filter { it.isNotBlank() }.joinToString(" - "), fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(pkg.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(listOf(pkg.packageType, pkg.repositoryName).filter { it.isNotBlank() }.joinToString(" - "), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = TextTertiary)
+            Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textMuted)
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            PackagePill(pkg.visibility.ifBlank { "unknown" }, if (pkg.visibility == "public") Color(0xFF34C759) else TextSecondary)
-            PackageStatPill("Versions", pkg.versionCount, Blue)
-            PackagePill(pkg.updatedAt.shortDate(), TextTertiary)
+            PackagePill(pkg.visibility.ifBlank { "unknown" }, if (pkg.visibility == "public") Color(0xFF34C759) else AiModuleTheme.colors.textSecondary)
+            PackageStatPill("Versions", pkg.versionCount, AiModuleTheme.colors.accent)
+            PackagePill(pkg.updatedAt.shortDate(), AiModuleTheme.colors.textMuted)
         }
     }
 }
 
 @Composable
 private fun PackageVersionCard(version: GHPackageVersion, onOpen: () -> Unit, onDelete: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Rounded.Archive, null, Modifier.size(18.dp), tint = TextSecondary)
+            Icon(Icons.Rounded.Archive, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary)
             Column(Modifier.weight(1f)) {
-                Text(version.displayName(), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("Updated ${version.updatedAt.shortDate()}", fontSize = 11.sp, color = TextTertiary)
+                Text(version.displayName(), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Updated ${version.updatedAt.shortDate()}", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
             IconButton(onClick = onOpen) {
-                Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = Blue)
+                Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30))
@@ -373,8 +381,8 @@ private fun PackageVersionCard(version: GHPackageVersion, onOpen: () -> Unit, on
         }
         if (version.tags.isNotEmpty()) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                version.tags.take(8).forEach { tag -> PackagePill(tag, Blue) }
-                if (version.tags.size > 8) PackagePill("+${version.tags.size - 8}", TextSecondary)
+                version.tags.take(8).forEach { tag -> PackagePill(tag, AiModuleTheme.colors.accent) }
+                if (version.tags.size > 8) PackagePill("+${version.tags.size - 8}", AiModuleTheme.colors.textSecondary)
             }
         }
     }
@@ -383,21 +391,21 @@ private fun PackageVersionCard(version: GHPackageVersion, onOpen: () -> Unit, on
 @Composable
 private fun OwnerChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(10.dp)).background(if (selected) Blue.copy(alpha = 0.14f) else SurfaceWhite).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp),
+        Modifier.clip(RoundedCornerShape(10.dp)).background(if (selected) AiModuleTheme.colors.accent.copy(alpha = 0.14f) else AiModuleTheme.colors.surface).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Icon(icon, null, Modifier.size(16.dp), tint = if (selected) Blue else TextSecondary)
-        Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = if (selected) Blue else TextPrimary)
+        Icon(icon, null, Modifier.size(16.dp), tint = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
+        Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textPrimary)
     }
 }
 
 @Composable
 private fun PackageFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.clip(RoundedCornerShape(999.dp)).background(if (selected) Blue.copy(alpha = 0.14f) else SurfaceWhite).clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 7.dp)
+        Modifier.clip(RoundedCornerShape(999.dp)).background(if (selected) AiModuleTheme.colors.accent.copy(alpha = 0.14f) else AiModuleTheme.colors.surface).clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 7.dp)
     ) {
-        Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = if (selected) Blue else TextSecondary)
+        Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
     }
 }
 
@@ -416,12 +424,12 @@ private fun PackagePill(label: String, color: Color) {
 @Composable
 private fun EmptyPackagesCard(text: String) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(22.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(22.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(Icons.Rounded.Archive, null, Modifier.size(28.dp), tint = TextTertiary)
-        Text(text, fontSize = 13.sp, color = TextSecondary)
+        Icon(Icons.Rounded.Archive, null, Modifier.size(28.dp), tint = AiModuleTheme.colors.textMuted)
+        Text(text, fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary)
     }
 }
 

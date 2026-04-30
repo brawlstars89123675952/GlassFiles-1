@@ -46,24 +46,148 @@ import java.io.File
 
 @Composable
 internal fun LoginScreen(onBack: () -> Unit, onMinimize: () -> Unit, onClose: (() -> Unit)? = null, onLogin: (String) -> Unit) {
-    var token by remember { mutableStateOf("") }; var testing by remember { mutableStateOf(false) }; var error by remember { mutableStateOf("") }
-    val context = LocalContext.current; val scope = rememberCoroutineScope()
-    val colors = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxSize().background(colors.background)) {
-        GHTopBar("GitHub", onBack = onBack, onMinimize = onMinimize, onClose = onClose)
-        Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Box(Modifier.size(80.dp).clip(CircleShape).background(colors.onSurface), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Code, null, Modifier.size(40.dp), tint = colors.surface) }
-            Spacer(Modifier.height(24.dp)); Text("GitHub", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
-            Spacer(Modifier.height(8.dp)); Text(Strings.ghLoginDesc, fontSize = 14.sp, color = colors.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp), textAlign = TextAlign.Center)
-            Spacer(Modifier.height(24.dp))
-            OutlinedTextField(token, { token = it; error = "" }, label = { Text("Personal Access Token") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), isError = error.isNotBlank())
-            if (error.isNotBlank()) Text(error, color = GitHubErrorRed, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-            Spacer(Modifier.height(8.dp)); Text(Strings.ghTokenHint, fontSize = 11.sp, color = colors.onSurfaceVariant, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(20.dp))
-            Button(onClick = { if (token.isBlank()) { error = "Token required"; return@Button }; testing = true; error = ""
-                scope.launch { GitHubManager.saveToken(context, token); val u = GitHubManager.getUser(context); if (u != null) onLogin(token) else { error = "Invalid token"; GitHubManager.logout(context) }; testing = false }
-            }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = colors.primary), enabled = !testing) {
-                if (testing) CircularProgressIndicator(Modifier.size(20.dp), color = colors.onPrimary, strokeWidth = 2.dp) else Text(Strings.ghSignIn, color = colors.onPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+    var token by remember { mutableStateOf("") }
+    var testing by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val palette = AiModuleTheme.colors
+
+    AiModuleSurface {
+        Column(Modifier.fillMaxSize()) {
+            AiModulePageBar(
+                title = "> github",
+                subtitle = "sign in",
+                onBack = onBack,
+                trailing = {
+                    IconButton(onClick = onMinimize, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.PictureInPictureAlt, null, Modifier.size(18.dp), tint = palette.textSecondary)
+                    }
+                    if (onClose != null) {
+                        IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = palette.error)
+                        }
+                    }
+                },
+            )
+            Column(
+                Modifier.fillMaxSize().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = "[ github ]",
+                    color = palette.accent,
+                    fontFamily = JetBrainsMono,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 22.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    Strings.ghLoginDesc,
+                    fontSize = 12.sp,
+                    color = palette.textMuted,
+                    fontFamily = JetBrainsMono,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    "personal access token",
+                    color = palette.textSecondary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(4.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .border(1.dp, if (error.isNotBlank()) palette.error else palette.border, RoundedCornerShape(6.dp))
+                        .background(palette.surface)
+                        .padding(horizontal = 10.dp, vertical = 10.dp),
+                ) {
+                    if (token.isEmpty()) {
+                        Text(
+                            "ghp_…",
+                            color = palette.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 13.sp,
+                        )
+                    }
+                    BasicTextField(
+                        value = token,
+                        onValueChange = { token = it; error = "" },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = palette.textPrimary,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 13.sp,
+                        ),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(palette.accent),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (error.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        error,
+                        color = palette.error,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    Strings.ghTokenHint,
+                    fontSize = 10.sp,
+                    color = palette.textMuted,
+                    fontFamily = JetBrainsMono,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(20.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .border(1.dp, palette.accent, RoundedCornerShape(6.dp))
+                        .background(if (!testing) palette.accent else palette.surface)
+                        .clickable(enabled = !testing) {
+                            if (token.isBlank()) {
+                                error = "Token required"
+                                return@clickable
+                            }
+                            testing = true
+                            error = ""
+                            scope.launch {
+                                GitHubManager.saveToken(context, token)
+                                val u = GitHubManager.getUser(context)
+                                if (u != null) onLogin(token)
+                                else {
+                                    error = "Invalid token"
+                                    GitHubManager.logout(context)
+                                }
+                                testing = false
+                            }
+                        }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (testing) {
+                        AiModuleSpinner(label = "verifying…")
+                    } else {
+                        Text(
+                            "[ ${Strings.ghSignIn.lowercase()} ]",
+                            color = palette.background,
+                            fontFamily = JetBrainsMono,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
             }
         }
     }
