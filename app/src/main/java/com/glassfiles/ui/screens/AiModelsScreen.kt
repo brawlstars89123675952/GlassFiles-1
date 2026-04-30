@@ -271,7 +271,7 @@ private fun ModelsBody(
 
 @Composable
 private fun ModelRow(model: AiModel) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     Column(
         Modifier
             .fillMaxWidth()
