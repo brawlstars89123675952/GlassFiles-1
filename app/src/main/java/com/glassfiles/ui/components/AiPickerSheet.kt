@@ -45,8 +45,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.glassfiles.ui.screens.ai.terminal.AgentTerminalDarkColors
-import com.glassfiles.ui.screens.ai.terminal.JetBrainsMono
+import com.glassfiles.ui.theme.AiModuleDarkColors
+import com.glassfiles.ui.theme.JetBrainsMono
 
 /**
  * Terminal-themed picker rendered as a bottom sheet for the AI module.
