@@ -9,9 +9,25 @@ import com.glassfiles.ui.components.CodeColors
 import com.glassfiles.ui.theme.JetBrainsMono
 
 /**
- * Terminal-mode palette and typography used by the entire AI module
- * (Agent, Chat, Coding, ImageGen, VideoGen, Hub, Keys, Models, Usage,
- * Settings). The palette is intentionally hand-picked (not derived from
+ * Terminal-mode palette and typography for the AI Agent and Coding
+ * screens only.
+ *
+ * Namespace boundary (do not violate):
+ *  - This package, `com.glassfiles.ui.screens.ai.terminal`, is reserved
+ *    for [com.glassfiles.ui.screens.AiAgentScreen] and
+ *    [com.glassfiles.ui.screens.AiCodingScreen].
+ *  - Every other AI-module screen (Chat, Hub, Models, Keys, Usage,
+ *    Settings, ImageGen, VideoGen) must read its palette from
+ *    [com.glassfiles.ui.theme.AiModuleTheme] / `AiModuleSurface`
+ *    instead — that theme intentionally duplicates the same HEX values
+ *    so the visuals stay aligned without cross-package imports.
+ *  - Adding any `import com.glassfiles.ui.screens.ai.terminal.*` to a
+ *    screen outside Agent/Coding is a regression. Use the
+ *    `AiModule*` twins under `com.glassfiles.ui.components` /
+ *    `com.glassfiles.ui.theme` (e.g. [com.glassfiles.ui.components.AiModuleBlinkingCursor],
+ *    [com.glassfiles.ui.components.AiModuleCodeBlock]).
+ *
+ * The palette is intentionally hand-picked (not derived from
  * [androidx.compose.material3.MaterialTheme.colorScheme]) so the AI
  * surfaces stay a visually obscured "engineering surface" regardless of
  * the user's chosen accent color elsewhere in the app. Outside the AI
