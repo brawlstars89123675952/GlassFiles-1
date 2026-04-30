@@ -24,8 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.glassfiles.ui.screens.ai.terminal.AgentTerminalDarkColors
-import com.glassfiles.ui.screens.ai.terminal.JetBrainsMono
+import com.glassfiles.ui.theme.AiModuleDarkColors
+import com.glassfiles.ui.theme.JetBrainsMono
 
 /**
  * Compact terminal-style picker chip used across the AI module.
