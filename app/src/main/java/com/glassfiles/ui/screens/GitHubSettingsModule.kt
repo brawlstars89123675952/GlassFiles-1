@@ -271,15 +271,28 @@ internal fun GitHubSettingsScreen(
                             }
                         }
                         SettingsSection.NOTIFICATIONS -> SectionCard("Notifications") {
-                            Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Unread only", color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp)
-                                Switch(
-                                    checked = notificationsUnreadOnly,
-                                    onCheckedChange = {
-                                        notificationsUnreadOnly = it
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        notificationsUnreadOnly = !notificationsUnreadOnly
                                         scope.launch { refreshSection(SettingsSection.NOTIFICATIONS) }
-                                    },
-                                    colors = SwitchDefaults.colors(checkedTrackColor = AiModuleTheme.colors.accent)
+                                    }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    if (notificationsUnreadOnly) "[x]" else "[ ]",
+                                    color = AiModuleTheme.colors.accent,
+                                    fontSize = 13.sp,
+                                    fontFamily = JetBrainsMono,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "unread only",
+                                    color = AiModuleTheme.colors.textPrimary,
+                                    fontSize = 13.sp,
+                                    fontFamily = JetBrainsMono,
                                 )
                             }
                             ActionRow(Icons.Rounded.Check, "Mark all read") {
@@ -388,7 +401,7 @@ internal fun GitHubSettingsScreen(
                                     refreshSection(SettingsSection.INTERACTION)
                                 }
                             }
-                            ActionRow(Icons.Rounded.Delete, "Remove interaction limit", tint = Color(0xFFFF3B30)) {
+                            ActionRow(Icons.Rounded.Delete, "Remove interaction limit", tint = AiModuleTheme.colors.error) {
                                 scope.launch {
                                     val ok = GitHubManager.removeInteractionLimitNative(context)
                                     addLog("Remove interaction limit: $ok")
@@ -423,14 +436,29 @@ internal fun GitHubSettingsScreen(
                                 addLog("Cleared GitHub cache")
                                 Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
                             }
-                            ActionRow(Icons.Rounded.Logout, "Sign out", tint = Color(0xFFFF3B30)) {
+                            ActionRow(Icons.Rounded.Logout, "Sign out", tint = AiModuleTheme.colors.error) {
                                 GitHubManager.logout(context)
                                 onLogout()
                             }
                             if (actionLog.isNotEmpty()) {
-                                Spacer(Modifier.height(8.dp))
-                                Text("Recent actions", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                actionLog.forEach { line -> Text(line, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp)) }
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    "// recent actions",
+                                    color = AiModuleTheme.colors.textMuted,
+                                    fontSize = 11.sp,
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                actionLog.forEach { line ->
+                                    Text(
+                                        line,
+                                        color = AiModuleTheme.colors.textMuted,
+                                        fontSize = 11.sp,
+                                        fontFamily = JetBrainsMono,
+                                        modifier = Modifier.padding(top = 2.dp),
+                                    )
+                                }
                             }
                         }
                     
@@ -520,7 +548,15 @@ internal fun GitHubSettingsScreen(
         AlertDialog(
             onDismissRequest = { showChangeToken = false },
             containerColor = AiModuleTheme.colors.surface,
-            title = { Text("Change token", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    "> change token",
+                    color = AiModuleTheme.colors.textPrimary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            },
             text = { CompactField("Personal access token", newToken, password = true) { newToken = it } },
             confirmButton = {
                 TextButton(onClick = {
@@ -529,11 +565,11 @@ internal fun GitHubSettingsScreen(
                     newToken = ""
                     showChangeToken = false
                     scope.launch { refreshSection(SettingsSection.DEVELOPER) }
-                }) { Text(Strings.done, color = AiModuleTheme.colors.accent) }
+                }) { Text(Strings.done.lowercase(), color = AiModuleTheme.colors.accent, fontFamily = JetBrainsMono) }
             },
             dismissButton = {
-                TextButton(onClick = { showChangeToken = false }) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) }
-            }
+                TextButton(onClick = { showChangeToken = false }) { Text(Strings.cancel.lowercase(), color = AiModuleTheme.colors.textSecondary, fontFamily = JetBrainsMono) }
+            },
         )
     }
 }
@@ -612,16 +648,23 @@ private fun TerminalSectionHeader(title: String) {
 
 @Composable
 private fun CompactCard(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AiModuleTheme.colors.surface).padding(horizontal = 14.dp, vertical = 12.dp),
-        content = content
-    )
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        content()
+        Spacer(Modifier.height(8.dp))
+        AiModuleHairline()
+    }
 }
 
 @Composable
 private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    CompactCard {
-        Text(title, color = AiModuleTheme.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text(
+            "// ${title.lowercase()}",
+            color = AiModuleTheme.colors.textMuted,
+            fontSize = 11.sp,
+            fontFamily = JetBrainsMono,
+            fontWeight = FontWeight.Medium,
+        )
         Spacer(Modifier.height(8.dp))
         content()
     }
@@ -685,34 +728,46 @@ private fun CompactField(
     password: Boolean = false,
     onValueChange: (String) -> Unit
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        singleLine = singleLine,
-        minLines = minLines,
-        visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        textStyle = androidx.compose.ui.text.TextStyle(color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = AiModuleTheme.colors.accent,
-            unfocusedBorderColor = AiModuleTheme.colors.border,
-            focusedLabelColor = AiModuleTheme.colors.accent,
-            unfocusedLabelColor = AiModuleTheme.colors.textMuted,
-            cursorColor = AiModuleTheme.colors.accent
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text(
+            "> ${label.lowercase()}",
+            color = AiModuleTheme.colors.textMuted,
+            fontSize = 11.sp,
+            fontFamily = JetBrainsMono,
         )
-    )
+        Spacer(Modifier.height(4.dp))
+        androidx.compose.foundation.text.BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = singleLine,
+            minLines = minLines,
+            visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+            textStyle = androidx.compose.ui.text.TextStyle(
+                color = AiModuleTheme.colors.textPrimary,
+                fontSize = 13.sp,
+                fontFamily = JetBrainsMono,
+            ),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(AiModuleTheme.colors.accent),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        )
+        AiModuleHairline()
+    }
 }
 
 @Composable
 private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, tint: Color = AiModuleTheme.colors.accent, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 9.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
-        Text(title, color = tint, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
+        Text(
+            "> ${title.lowercase()}",
+            color = tint,
+            fontSize = 13.sp,
+            fontFamily = JetBrainsMono,
+        )
     }
 }
 
@@ -727,9 +782,16 @@ private fun VisibilityChooser(current: String, onSet: (String) -> Unit) {
 @Composable
 private fun VisibilityChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
-        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (selected) AiModuleTheme.colors.accent.copy(alpha = 0.12f) else AiModuleTheme.colors.background).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp)
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 6.dp),
     ) {
-        Text(label, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary, fontSize = 12.sp)
+        Text(
+            if (selected) "[${label.lowercase()}]" else " ${label.lowercase()} ",
+            color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textMuted,
+            fontSize = 12.sp,
+            fontFamily = JetBrainsMono,
+        )
     }
 }
 
@@ -745,88 +807,88 @@ private fun KeyModeRow(mode: KeyMode, onSet: (KeyMode) -> Unit) {
 @Composable
 private fun EmailRow(email: GHEmailEntry, onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Rounded.Email, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Email, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(email.email, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(email.email, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val tags = buildList {
                 if (email.primary) add("primary")
                 if (email.verified) add("verified")
                 add(email.visibility.ifBlank { "private" })
             }.joinToString(" • ")
-            Text(tags, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
+            Text(tags, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono)
         }
-        TextButton(onClick = onDelete) { Text("Delete", color = Color(0xFFFF3B30), fontSize = 12.sp) }
+        TextButton(onClick = onDelete) { Text("delete", color = AiModuleTheme.colors.error, fontSize = 12.sp, fontFamily = JetBrainsMono) }
     }
 }
 
 @Composable
 private fun NotificationRow(item: GHNotification, onMarkRead: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Icon(Icons.Rounded.Notifications, null, tint = if (item.unread) AiModuleTheme.colors.accent else AiModuleTheme.colors.textMuted, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Notifications, null, tint = if (item.unread) AiModuleTheme.colors.accent else AiModuleTheme.colors.textMuted, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(item.title, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${item.repoName} • ${item.reason}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.title, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${item.repoName} • ${item.reason}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (item.unread) TextButton(onClick = onMarkRead) { Text("Read", color = AiModuleTheme.colors.accent, fontSize = 12.sp) }
+        if (item.unread) TextButton(onClick = onMarkRead) { Text("read", color = AiModuleTheme.colors.accent, fontSize = 12.sp, fontFamily = JetBrainsMono) }
     }
 }
 
 @Composable
 private fun KeyRow(key: GHUserKeyEntry, onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Rounded.Key, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Key, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(key.title.ifBlank { "Key ${key.id}" }, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${key.kind} • ${key.createdAt.take(10)}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
+            Text(key.title.ifBlank { "Key ${key.id}" }, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${key.kind} • ${key.createdAt.take(10)}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono)
         }
-        TextButton(onClick = onDelete) { Text("Delete", color = Color(0xFFFF3B30), fontSize = 12.sp) }
+        TextButton(onClick = onDelete) { Text("delete", color = AiModuleTheme.colors.error, fontSize = 12.sp, fontFamily = JetBrainsMono) }
     }
 }
 
 @Composable
 private fun SocialRow(acc: GHSocialAccountEntry, onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Rounded.Public, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Public, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(acc.provider.ifBlank { "Social account" }, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp)
-            Text(acc.url, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(acc.provider.ifBlank { "Social account" }, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono)
+            Text(acc.url, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        TextButton(onClick = onDelete) { Text("Delete", color = Color(0xFFFF3B30), fontSize = 12.sp) }
+        TextButton(onClick = onDelete) { Text("delete", color = AiModuleTheme.colors.error, fontSize = 12.sp, fontFamily = JetBrainsMono) }
     }
 }
 
 @Composable
 private fun CompactPersonRow(login: String, avatarUrl: String, action: String, onAction: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        AsyncImage(model = avatarUrl, contentDescription = login, modifier = Modifier.size(28.dp).clip(CircleShape))
+        AsyncImage(model = avatarUrl, contentDescription = login, modifier = Modifier.size(24.dp).clip(CircleShape))
         Spacer(Modifier.width(10.dp))
-        Text(login, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f))
-        TextButton(onClick = onAction) { Text(action, color = AiModuleTheme.colors.accent, fontSize = 12.sp) }
+        Text(login, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono, modifier = Modifier.weight(1f))
+        TextButton(onClick = onAction) { Text(action.lowercase(), color = AiModuleTheme.colors.accent, fontSize = 12.sp, fontFamily = JetBrainsMono) }
     }
 }
 
 @Composable
 private fun BlockedRow(entry: GHBlockedEntry, onUnblock: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        AsyncImage(model = entry.avatarUrl, contentDescription = entry.login, modifier = Modifier.size(28.dp).clip(CircleShape))
+        AsyncImage(model = entry.avatarUrl, contentDescription = entry.login, modifier = Modifier.size(24.dp).clip(CircleShape))
         Spacer(Modifier.width(10.dp))
-        Text(entry.login, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f))
-        TextButton(onClick = onUnblock) { Text("Unblock", color = Color(0xFFFF3B30), fontSize = 12.sp) }
+        Text(entry.login, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono, modifier = Modifier.weight(1f))
+        TextButton(onClick = onUnblock) { Text("unblock", color = AiModuleTheme.colors.error, fontSize = 12.sp, fontFamily = JetBrainsMono) }
     }
 }
 
 @Composable
 private fun CompactOrgRow(org: GHOrg) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        AsyncImage(model = org.avatarUrl, contentDescription = org.login, modifier = Modifier.size(28.dp).clip(CircleShape))
+        AsyncImage(model = org.avatarUrl, contentDescription = org.login, modifier = Modifier.size(24.dp).clip(CircleShape))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(org.login, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp)
-            if (org.description.isNotBlank()) Text(org.description, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(org.login, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono)
+            if (org.description.isNotBlank()) Text(org.description, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -834,22 +896,22 @@ private fun CompactOrgRow(org: GHOrg) {
 @Composable
 private fun CompactRepoRow(repo: GHRepo, onUnstar: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Rounded.Description, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Description, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(repo.fullName, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(repo.fullName, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val sub = listOfNotNull(repo.language.takeIf { it.isNotBlank() }, repo.updatedAt.takeIf { it.isNotBlank() }?.take(10)).joinToString(" • ")
-            if (sub.isNotBlank()) Text(sub, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
+            if (sub.isNotBlank()) Text(sub, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono)
         }
-        TextButton(onClick = onUnstar) { Text("Unstar", color = Color(0xFFFF3B30), fontSize = 12.sp) }
+        TextButton(onClick = onUnstar) { Text("unstar", color = AiModuleTheme.colors.error, fontSize = 12.sp, fontFamily = JetBrainsMono) }
     }
 }
 
 @Composable
 private fun InfoLine(label: String, value: String) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(label, color = AiModuleTheme.colors.textSecondary, fontSize = 11.sp)
-        Text(value, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp)
+        Text("> ${label.lowercase()}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono)
+        Text(value, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono)
     }
 }
 
