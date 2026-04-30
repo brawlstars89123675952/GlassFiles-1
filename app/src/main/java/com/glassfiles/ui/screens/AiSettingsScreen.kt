@@ -71,11 +71,12 @@ fun AiSettingsScreen(onBack: () -> Unit) {
     var streamScroll by remember { mutableStateOf(AiSettingsStore.isStreamAutoScroll(context)) }
     var cacheCleared by remember { mutableStateOf(false) }
 
-    TerminalScreenScaffold(
+    AiModuleScreenScaffold(
         title = Strings.aiSettings,
         onBack = onBack,
         subtitle = "ai.cfg",
     ) {
+        val colors = AiModuleTheme.colors
         LazyColumn(
             contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
