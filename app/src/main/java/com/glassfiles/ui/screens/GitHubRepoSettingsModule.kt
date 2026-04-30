@@ -24,9 +24,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
-import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModulePillButton
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleTextAction
+import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.data.github.GHRepoSettings
 import com.glassfiles.data.github.GHTag
 import com.glassfiles.data.github.GitHubManager
@@ -185,21 +189,18 @@ internal fun RepoSettingsScreen(
                     SettingsCard {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             // Description
-                            OutlinedTextField(
+                            AiModuleTextField(
                                 value = description,
                                 onValueChange = { description = it },
-                                label = { Text("Description") },
-                                modifier = Modifier.fillMaxWidth(),
-                                maxLines = 3
+                                label = "Description",
+                                maxLines = 3,
                             )
 
                             // Homepage
-                            OutlinedTextField(
+                            AiModuleTextField(
                                 value = homepage,
                                 onValueChange = { homepage = it },
-                                label = { Text("Homepage URL") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
+                                label = "Homepage URL",
                             )
                         }
                     }
@@ -427,14 +428,16 @@ internal fun RepoSettingsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                OutlinedTextField(
-                                    value = newTopic,
-                                    onValueChange = { newTopic = normalizeRepoTopic(it) },
-                                    label = { Text("Add topic") },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                Button(
+                                Box(Modifier.weight(1f)) {
+                                    AiModuleTextField(
+                                        value = newTopic,
+                                        onValueChange = { newTopic = normalizeRepoTopic(it) },
+                                        label = "Add topic",
+                                    )
+                                }
+                                AiModulePillButton(
+                                    label = "+ add",
+                                    enabled = newTopic.isNotBlank() && topics.size < 20,
                                     onClick = {
                                         val normalized = normalizeRepoTopic(newTopic)
                                         if (normalized.isNotBlank() && normalized !in topics.map(::normalizeRepoTopic) && topics.size < 20) {
@@ -442,10 +445,7 @@ internal fun RepoSettingsScreen(
                                             newTopic = ""
                                         }
                                     },
-                                    enabled = newTopic.isNotBlank() && topics.size < 20
-                                ) {
-                                    Text("Add")
-                                }
+                                )
                             }
                             Text("${topics.size}/20 topics", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                         }
@@ -478,30 +478,35 @@ internal fun RepoSettingsScreen(
 
     val archiveTarget = showArchiveConfirm
     if (archiveTarget != null) {
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { showArchiveConfirm = null },
-            containerColor = AiModuleTheme.colors.surface,
-            title = { Text(if (archiveTarget) "Archive repository" else "Unarchive repository", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    if (archiveTarget) "Archiving makes the repository read-only until it is unarchived. Save settings after confirming."
-                    else "Unarchiving restores normal repository writes after you save settings.",
-                    color = AiModuleTheme.colors.textSecondary,
-                    fontSize = 13.sp
+            title = if (archiveTarget) "archive repository" else "unarchive repository",
+            confirmButton = {
+                AiModuleTextAction(
+                    label = if (archiveTarget) "archive" else "unarchive",
+                    onClick = {
+                        archived = archiveTarget
+                        showArchiveConfirm = null
+                    },
+                    tint = if (archiveTarget) AiModuleTheme.colors.error else AiModuleTheme.colors.accent,
                 )
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    archived = archiveTarget
-                    showArchiveConfirm = null
-                }) {
-                    Text(if (archiveTarget) "Archive" else "Unarchive", color = if (archiveTarget) Color(0xFFFF3B30) else AiModuleTheme.colors.accent)
-                }
-            },
             dismissButton = {
-                TextButton(onClick = { showArchiveConfirm = null }) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) }
-            }
-        )
+                AiModuleTextAction(
+                    label = Strings.cancel.lowercase(),
+                    onClick = { showArchiveConfirm = null },
+                    tint = AiModuleTheme.colors.textSecondary,
+                )
+            },
+        ) {
+            Text(
+                if (archiveTarget) "Archiving makes the repository read-only until it is unarchived. Save settings after confirming."
+                else "Unarchiving restores normal repository writes after you save settings.",
+                color = AiModuleTheme.colors.textSecondary,
+                fontSize = 13.sp,
+                fontFamily = JetBrainsMono,
+            )
+        }
     }
 }
 

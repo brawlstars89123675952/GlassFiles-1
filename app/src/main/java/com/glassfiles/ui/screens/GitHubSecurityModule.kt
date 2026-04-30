@@ -26,9 +26,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHCodeScanningAlert
-import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleSearchField
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleTextAction
+import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.data.github.GHCommunityProfile
 import com.glassfiles.data.github.GHDependabotAlert
 import com.glassfiles.data.github.GHRepositorySecurityAdvisory
@@ -132,13 +136,10 @@ internal fun RulesetsScreen(
             ) {
                 item { RulesetsSummaryCard(rulesets) }
                 item {
-                    OutlinedTextField(
+                    AiModuleSearchField(
                         value = query,
                         onValueChange = { query = it },
-                        label = { Text("Search rulesets") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
+                        placeholder = "search rulesets",
                     )
                 }
                 item {
@@ -350,14 +351,14 @@ private fun RulesetDetailScreen(
             )
         }
         if (showDeleteDialog) {
-            AlertDialog(
+            AiModuleAlertDialog(
                 onDismissRequest = { showDeleteDialog = false },
-                containerColor = AiModuleTheme.colors.surface,
-                title = { Text("Delete Ruleset?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-                text = { Text("Delete ${current.name.ifBlank { "ruleset #${current.id}" }}?", fontSize = 14.sp, color = AiModuleTheme.colors.textSecondary) },
+                title = "delete ruleset?",
                 confirmButton = {
-                    TextButton(
+                    AiModuleTextAction(
+                        label = "delete",
                         enabled = !actionInFlight,
+                        tint = AiModuleTheme.colors.error,
                         onClick = {
                             actionInFlight = true
                             scope.launch {
@@ -366,11 +367,20 @@ private fun RulesetDetailScreen(
                                 showDeleteDialog = false
                                 if (ok) onDeleted()
                             }
-                        }
-                    ) { Text("Delete", color = Color(0xFFFF3B30)) }
+                        },
+                    )
                 },
-                dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
-            )
+                dismissButton = {
+                    AiModuleTextAction(label = "cancel", onClick = { showDeleteDialog = false }, tint = AiModuleTheme.colors.textSecondary)
+                },
+            ) {
+                Text(
+                    "Delete ${current.name.ifBlank { "ruleset #${current.id}" }}?",
+                    fontSize = 13.sp,
+                    color = AiModuleTheme.colors.textSecondary,
+                    fontFamily = JetBrainsMono,
+                )
+            }
         }
     }
 
@@ -404,45 +414,39 @@ private fun RulesetEditorDialog(
     var rulesJson by remember(initialRulesJson) { mutableStateOf(initialRulesJson.ifBlank { "[{\"type\":\"non_fast_forward\"}]" }) }
     val rulesJsonValid = remember(rulesJson) { isJsonArray(rulesJson) }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text(title, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    listOf("branch", "tag", "push").forEach { value ->
-                        GitHubSmallChoice(value, target == value) { target = value }
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    listOf("active", "evaluate", "disabled").forEach { value ->
-                        GitHubSmallChoice(value, enforcement == value) { enforcement = value }
-                    }
-                }
-                OutlinedTextField(includeRefs, { includeRefs = it }, label = { Text("Include refs") }, minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(excludeRefs, { excludeRefs = it }, label = { Text("Exclude refs") }, minLines = 1, maxLines = 3, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
-                    rulesJson,
-                    { rulesJson = it },
-                    label = { Text("Rules JSON array") },
-                    minLines = 5,
-                    maxLines = 10,
-                    isError = !rulesJsonValid,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (!rulesJsonValid) Text("Rules must be a JSON array", fontSize = 12.sp, color = Color(0xFFFF3B30))
-            }
-        },
+        title = title.lowercase(),
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = confirmLabel.lowercase(),
                 enabled = enabled && name.isNotBlank() && rulesJsonValid,
-                onClick = { onSave(name, target, enforcement, refList(includeRefs), refList(excludeRefs), rulesJson) }
-            ) { Text(confirmLabel, color = AiModuleTheme.colors.accent) }
+                onClick = { onSave(name, target, enforcement, refList(includeRefs), refList(excludeRefs), rulesJson) },
+                tint = AiModuleTheme.colors.accent,
+            )
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
-    )
+        dismissButton = {
+            AiModuleTextAction(label = "cancel", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+        },
+    ) {
+        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            AiModuleTextField(name, { name = it }, label = "Name")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                listOf("branch", "tag", "push").forEach { value ->
+                    GitHubSmallChoice(value, target == value) { target = value }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                listOf("active", "evaluate", "disabled").forEach { value ->
+                    GitHubSmallChoice(value, enforcement == value) { enforcement = value }
+                }
+            }
+            AiModuleTextField(includeRefs, { includeRefs = it }, label = "Include refs", minLines = 2, maxLines = 4)
+            AiModuleTextField(excludeRefs, { excludeRefs = it }, label = "Exclude refs", minLines = 1, maxLines = 3)
+            AiModuleTextField(rulesJson, { rulesJson = it }, label = "Rules JSON array", minLines = 5, maxLines = 10)
+            if (!rulesJsonValid) Text("Rules must be a JSON array", fontSize = 12.sp, color = AiModuleTheme.colors.error, fontFamily = JetBrainsMono)
+        }
+    }
 }
 
 @Composable
@@ -549,30 +553,31 @@ private fun RuleSuitesCard(suites: List<GHRuleSuite>, onOpen: (GHRuleSuite) -> U
 
 @Composable
 private fun RuleSuiteDetailDialog(suite: GHRuleSuite, onDismiss: () -> Unit) {
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text("Rule suite #${suite.id}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    SecurityPill(ruleSuiteLabel(suite), ruleSuiteColor(suite))
-                    suite.status.takeIf { it.isNotBlank() }?.let { SecurityPill(it, AiModuleTheme.colors.textSecondary) }
-                    suite.evaluationResult.takeIf { it.isNotBlank() }?.let { SecurityPill(it, AiModuleTheme.colors.textSecondary) }
-                }
-                SecurityDetailLine("Actor", suite.actor)
-                SecurityDetailLine("Ref", suite.ref)
-                SecurityDetailLine("Before SHA", suite.beforeSha)
-                SecurityDetailLine("After SHA", suite.afterSha)
-                SecurityDetailLine("Status", suite.status)
-                SecurityDetailLine("Result", suite.result)
-                SecurityDetailLine("Evaluation", suite.evaluationResult)
-                SecurityDetailLine("Created", suite.createdAt.take(19).replace('T', ' '))
-                SecurityDetailLine("Updated", suite.updatedAt.take(19).replace('T', ' '))
-            }
+        title = "rule suite #${suite.id}",
+        confirmButton = {
+            AiModuleTextAction(label = "close", onClick = onDismiss, tint = AiModuleTheme.colors.accent)
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.accent) } }
-    )
+        dismissButton = {},
+    ) {
+        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                SecurityPill(ruleSuiteLabel(suite), ruleSuiteColor(suite))
+                suite.status.takeIf { it.isNotBlank() }?.let { SecurityPill(it, AiModuleTheme.colors.textSecondary) }
+                suite.evaluationResult.takeIf { it.isNotBlank() }?.let { SecurityPill(it, AiModuleTheme.colors.textSecondary) }
+            }
+            SecurityDetailLine("Actor", suite.actor)
+            SecurityDetailLine("Ref", suite.ref)
+            SecurityDetailLine("Before SHA", suite.beforeSha)
+            SecurityDetailLine("After SHA", suite.afterSha)
+            SecurityDetailLine("Status", suite.status)
+            SecurityDetailLine("Result", suite.result)
+            SecurityDetailLine("Evaluation", suite.evaluationResult)
+            SecurityDetailLine("Created", suite.createdAt.take(19).replace('T', ' '))
+            SecurityDetailLine("Updated", suite.updatedAt.take(19).replace('T', ' '))
+        }
+    }
 }
 
 @Composable
@@ -745,13 +750,10 @@ internal fun SecurityScreen(
                 }
                 val searchableTab = selectedTab != "Settings" && selectedTab != "Community"
                 if (searchableTab) item {
-                    OutlinedTextField(
+                    AiModuleSearchField(
                         value = query,
                         onValueChange = { query = it },
-                        label = { Text(securitySearchLabel(selectedTab)) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
+                        placeholder = securitySearchLabel(selectedTab),
                     )
                 }
                 if (searchableTab) item {
@@ -1273,86 +1275,97 @@ private fun SecretScanningAlertCard(alert: GHSecretScanningAlert, onOpen: () -> 
 
 @Composable
 private fun CodeScanningDetailDialog(alert: GHCodeScanningAlert, onDismiss: () -> Unit, onOpen: () -> Unit) {
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text("Code alert #${alert.number}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SecurityDetailLine("Rule", cleanJoin(listOf(alert.ruleName, alert.ruleId)))
-                SecurityDetailLine("Tool", alert.toolName)
-                SecurityDetailLine("Location", alert.pathWithLine())
-                SecurityDetailLine("Ref", alert.ref)
-                SecurityDetailLine("Category", alert.category)
-                SecurityDetailLine("Status", cleanJoin(listOf(alert.state, alert.severity)))
-                SecurityDetailLine("Message", alert.message.ifBlank { alert.description })
-                SecurityDetailLine("Created", alert.createdAt.take(19).replace('T', ' '))
-                SecurityDetailLine("Fixed", alert.fixedAt.take(19).replace('T', ' '))
-                SecurityDetailLine("Dismissed", cleanJoin(listOf(alert.dismissedAt.take(19).replace('T', ' '), alert.dismissedReason)))
-            }
+        title = "code alert #${alert.number}",
+        confirmButton = {
+            AiModuleTextAction(label = "open", enabled = alert.htmlUrl.isNotBlank(), onClick = onOpen, tint = AiModuleTheme.colors.accent)
         },
-        confirmButton = { TextButton(onClick = onOpen, enabled = alert.htmlUrl.isNotBlank()) { Text("Open", color = AiModuleTheme.colors.accent) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.textSecondary) } }
-    )
+        dismissButton = {
+            AiModuleTextAction(label = "close", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+        },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecurityDetailLine("Rule", cleanJoin(listOf(alert.ruleName, alert.ruleId)))
+            SecurityDetailLine("Tool", alert.toolName)
+            SecurityDetailLine("Location", alert.pathWithLine())
+            SecurityDetailLine("Ref", alert.ref)
+            SecurityDetailLine("Category", alert.category)
+            SecurityDetailLine("Status", cleanJoin(listOf(alert.state, alert.severity)))
+            SecurityDetailLine("Message", alert.message.ifBlank { alert.description })
+            SecurityDetailLine("Created", alert.createdAt.take(19).replace('T', ' '))
+            SecurityDetailLine("Fixed", alert.fixedAt.take(19).replace('T', ' '))
+            SecurityDetailLine("Dismissed", cleanJoin(listOf(alert.dismissedAt.take(19).replace('T', ' '), alert.dismissedReason)))
+        }
+    }
 }
 
 @Composable
 private fun SecretScanningDetailDialog(alert: GHSecretScanningAlert, onDismiss: () -> Unit, onOpen: () -> Unit) {
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text("Secret alert #${alert.number}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SecurityDetailLine("Type", alert.secretTypeDisplayName.ifBlank { alert.secretType })
-                SecurityDetailLine("Secret", maskSecret(alert.secret))
-                SecurityDetailLine("State", alert.state)
-                SecurityDetailLine("Resolution", alert.resolution)
-                SecurityDetailLine("Validity", alert.validity)
-                SecurityDetailLine("Public", if (alert.public) "Yes" else "No")
-                SecurityDetailLine("Push protection bypassed", if (alert.pushProtectionBypassed) "Yes" else "No")
-                SecurityDetailLine("Created", alert.createdAt.take(19).replace('T', ' '))
-                SecurityDetailLine("Resolved", alert.resolvedAt.take(19).replace('T', ' '))
-            }
+        title = "secret alert #${alert.number}",
+        confirmButton = {
+            AiModuleTextAction(label = "open", enabled = alert.htmlUrl.isNotBlank(), onClick = onOpen, tint = AiModuleTheme.colors.accent)
         },
-        confirmButton = { TextButton(onClick = onOpen, enabled = alert.htmlUrl.isNotBlank()) { Text("Open", color = AiModuleTheme.colors.accent) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.textSecondary) } }
-    )
+        dismissButton = {
+            AiModuleTextAction(label = "close", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+        },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecurityDetailLine("Type", alert.secretTypeDisplayName.ifBlank { alert.secretType })
+            SecurityDetailLine("Secret", maskSecret(alert.secret))
+            SecurityDetailLine("State", alert.state)
+            SecurityDetailLine("Resolution", alert.resolution)
+            SecurityDetailLine("Validity", alert.validity)
+            SecurityDetailLine("Public", if (alert.public) "Yes" else "No")
+            SecurityDetailLine("Push protection bypassed", if (alert.pushProtectionBypassed) "Yes" else "No")
+            SecurityDetailLine("Created", alert.createdAt.take(19).replace('T', ' '))
+            SecurityDetailLine("Resolved", alert.resolvedAt.take(19).replace('T', ' '))
+        }
+    }
 }
 
 @Composable
 private fun DependabotDetailDialog(alert: GHDependabotAlert, onDismiss: () -> Unit, onOpen: () -> Unit) {
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text("Dependabot alert #${alert.number}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SecurityDetailLine("Package", cleanJoin(listOf(alert.ecosystem, alert.packageName)))
-                SecurityDetailLine("Manifest", alert.manifestPath)
-                SecurityDetailLine("Status", cleanJoin(listOf(alert.state, alert.severity)))
-                SecurityDetailLine("Advisory", cleanJoin(listOf(alert.ghsaId, alert.cveId)))
-                SecurityDetailLine("Summary", alert.summary)
-                SecurityDetailLine("Description", alert.description)
-                SecurityDetailLine("Vulnerable requirements", alert.vulnerableRequirements)
-                SecurityDetailLine("Fixed in", alert.fixedIn.joinToString(", "))
-                SecurityDetailLine("Created", alert.createdAt.take(19).replace('T', ' '))
-                SecurityDetailLine("Updated", alert.updatedAt.take(19).replace('T', ' '))
-            }
+        title = "dependabot alert #${alert.number}",
+        confirmButton = {
+            AiModuleTextAction(label = "open", enabled = alert.htmlUrl.isNotBlank(), onClick = onOpen, tint = AiModuleTheme.colors.accent)
         },
-        confirmButton = { TextButton(onClick = onOpen, enabled = alert.htmlUrl.isNotBlank()) { Text("Open", color = AiModuleTheme.colors.accent) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.textSecondary) } }
-    )
+        dismissButton = {
+            AiModuleTextAction(label = "close", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+        },
+    ) {
+        Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecurityDetailLine("Package", cleanJoin(listOf(alert.ecosystem, alert.packageName)))
+            SecurityDetailLine("Manifest", alert.manifestPath)
+            SecurityDetailLine("Status", cleanJoin(listOf(alert.state, alert.severity)))
+            SecurityDetailLine("Advisory", cleanJoin(listOf(alert.ghsaId, alert.cveId)))
+            SecurityDetailLine("Summary", alert.summary)
+            SecurityDetailLine("Description", alert.description)
+            SecurityDetailLine("Vulnerable requirements", alert.vulnerableRequirements)
+            SecurityDetailLine("Fixed in", alert.fixedIn.joinToString(", "))
+            SecurityDetailLine("Created", alert.createdAt.take(19).replace('T', ' '))
+            SecurityDetailLine("Updated", alert.updatedAt.take(19).replace('T', ' '))
+        }
+    }
 }
 
 @Composable
 private fun RepositoryAdvisoryDetailDialog(advisory: GHRepositorySecurityAdvisory, onDismiss: () -> Unit, onOpen: () -> Unit) {
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text(advisory.ghsaId.ifBlank { "Repository advisory" }, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        title = advisory.ghsaId.ifBlank { "repository advisory" },
+        confirmButton = {
+            AiModuleTextAction(label = "open", enabled = advisory.htmlUrl.isNotBlank() || advisory.url.isNotBlank(), onClick = onOpen, tint = AiModuleTheme.colors.accent)
+        },
+        dismissButton = {
+            AiModuleTextAction(label = "close", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+        },
+    ) {
+        Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SecurityDetailLine("Status", cleanJoin(listOf(advisory.state, advisory.severity)))
                 SecurityDetailLine("CVE", advisory.cveId)
                 SecurityDetailLine("Summary", advisory.summary)
@@ -1362,24 +1375,22 @@ private fun RepositoryAdvisoryDetailDialog(advisory: GHRepositorySecurityAdvisor
                 SecurityDetailLine("Published", advisory.publishedAt.take(19).replace('T', ' '))
                 SecurityDetailLine("Updated", advisory.updatedAt.take(19).replace('T', ' '))
                 SecurityDetailLine("Withdrawn", advisory.withdrawnAt.take(19).replace('T', ' '))
-                if (advisory.vulnerabilities.isNotEmpty()) {
-                    Text("Vulnerabilities", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted, fontWeight = FontWeight.Medium)
-                    advisory.vulnerabilities.forEach { vulnerability ->
-                        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.background).padding(8.dp)) {
-                            Text(
-                                cleanJoin(listOf(vulnerability.ecosystem, vulnerability.packageName, vulnerability.vulnerableRange, vulnerability.patchedVersions.takeIf { it.isNotBlank() }?.let { "patched $it" } ?: "")),
-                                fontSize = 12.sp,
-                                color = AiModuleTheme.colors.textPrimary,
-                                lineHeight = 16.sp
-                            )
-                        }
+            if (advisory.vulnerabilities.isNotEmpty()) {
+                Text("Vulnerabilities", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted, fontWeight = FontWeight.Medium, fontFamily = JetBrainsMono)
+                advisory.vulnerabilities.forEach { vulnerability ->
+                    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.background).padding(8.dp)) {
+                        Text(
+                            cleanJoin(listOf(vulnerability.ecosystem, vulnerability.packageName, vulnerability.vulnerableRange, vulnerability.patchedVersions.takeIf { it.isNotBlank() }?.let { "patched $it" } ?: "")),
+                            fontSize = 12.sp,
+                            color = AiModuleTheme.colors.textPrimary,
+                            fontFamily = JetBrainsMono,
+                            lineHeight = 16.sp,
+                        )
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onOpen, enabled = advisory.htmlUrl.isNotBlank() || advisory.url.isNotBlank()) { Text("Open", color = AiModuleTheme.colors.accent) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.textSecondary) } }
-    )
+        }
+    }
 }
 
 @Composable

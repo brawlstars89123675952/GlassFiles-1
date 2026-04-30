@@ -24,9 +24,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHWebhook
-import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleSearchField
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleTextAction
+import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.data.github.GHWebhookConfig
 import com.glassfiles.data.github.GHWebhookDelivery
 import com.glassfiles.data.github.GitHubManager
@@ -114,13 +118,10 @@ internal fun WebhooksScreen(
             ) {
                 item { WebhooksSummaryCard(webhooks) }
                 item {
-                    OutlinedTextField(
+                    AiModuleSearchField(
                         value = query,
                         onValueChange = { query = it },
-                        label = { Text("Search URL, event or status") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
+                        placeholder = "search URL, event or status",
                     )
                 }
 
@@ -238,14 +239,14 @@ internal fun WebhooksScreen(
     }
 
     deleteTarget?.let { hook ->
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { deleteTarget = null },
-            containerColor = AiModuleTheme.colors.surface,
-            title = { Text("Delete webhook", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-            text = { Text(hook.url.ifBlank { "Webhook #${hook.id}" }, color = AiModuleTheme.colors.textSecondary, fontSize = 13.sp) },
+            title = "delete webhook",
             confirmButton = {
-                TextButton(
+                AiModuleTextAction(
+                    label = "delete",
                     enabled = !actionInFlight,
+                    tint = AiModuleTheme.colors.error,
                     onClick = {
                         actionInFlight = true
                         scope.launch {
@@ -255,11 +256,15 @@ internal fun WebhooksScreen(
                             deleteTarget = null
                             actionInFlight = false
                         }
-                    }
-                ) { Text("Delete", color = Color(0xFFFF3B30)) }
+                    },
+                )
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
-        )
+            dismissButton = {
+                AiModuleTextAction(label = "cancel", onClick = { deleteTarget = null }, tint = AiModuleTheme.colors.textSecondary)
+            },
+        ) {
+            Text(hook.url.ifBlank { "Webhook #${hook.id}" }, color = AiModuleTheme.colors.textSecondary, fontSize = 13.sp, fontFamily = JetBrainsMono)
+        }
     }
 }
 
@@ -365,36 +370,36 @@ private fun WebhookDetailDialog(
     onDeliveries: () -> Unit,
     onConfig: () -> Unit
 ) {
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text("Webhook #${hook.id}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    WebhookPill(if (hook.active) "Active" else "Inactive", if (hook.active) Color(0xFF34C759) else AiModuleTheme.colors.textMuted)
-                    WebhookPill(hook.contentType.ifBlank { "json" }, AiModuleTheme.colors.textSecondary)
-                    if (hook.insecureSsl == "1") WebhookPill("SSL off", Color(0xFFFF9500))
-                    WebhookPill(webhookLastResponseLabel(hook), webhookResponseColor(hook))
-                }
-                WebhookDetailRow("Payload URL", hook.url)
-                WebhookDetailRow("Name", hook.name.ifBlank { "web" })
-                WebhookDetailRow("Events", hook.events.joinToString(", ").ifBlank { "No events" })
-                WebhookDetailRow("Created", hook.createdAt.ifBlank { "-" })
-                WebhookDetailRow("Updated", hook.updatedAt.ifBlank { "-" })
-                if (hook.lastResponseMessage.isNotBlank()) {
-                    DeliveryBlock("Last response", hook.lastResponseMessage)
-                }
-            }
+        title = "webhook #${hook.id}",
+        confirmButton = {
+            AiModuleTextAction(label = "config", onClick = onConfig, tint = AiModuleTheme.colors.accent)
         },
-        confirmButton = { TextButton(onClick = onConfig) { Text("Config", color = AiModuleTheme.colors.accent) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onDeliveries) { Text("Deliveries", color = AiModuleTheme.colors.textSecondary) }
-                TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.textSecondary) }
+                AiModuleTextAction(label = "deliveries", onClick = onDeliveries, tint = AiModuleTheme.colors.textSecondary)
+                AiModuleTextAction(label = "close", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+            }
+        },
+    ) {
+        Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                WebhookPill(if (hook.active) "Active" else "Inactive", if (hook.active) Color(0xFF34C759) else AiModuleTheme.colors.textMuted)
+                WebhookPill(hook.contentType.ifBlank { "json" }, AiModuleTheme.colors.textSecondary)
+                if (hook.insecureSsl == "1") WebhookPill("SSL off", Color(0xFFFF9500))
+                WebhookPill(webhookLastResponseLabel(hook), webhookResponseColor(hook))
+            }
+            WebhookDetailRow("Payload URL", hook.url)
+            WebhookDetailRow("Name", hook.name.ifBlank { "web" })
+            WebhookDetailRow("Events", hook.events.joinToString(", ").ifBlank { "No events" })
+            WebhookDetailRow("Created", hook.createdAt.ifBlank { "-" })
+            WebhookDetailRow("Updated", hook.updatedAt.ifBlank { "-" })
+            if (hook.lastResponseMessage.isNotBlank()) {
+                DeliveryBlock("Last response", hook.lastResponseMessage)
             }
         }
-    )
+    }
 }
 
 @Composable
@@ -420,31 +425,32 @@ private fun WebhookEditorDialog(
     val events = eventsRaw.split(",").map { it.trim() }.filter { it.isNotBlank() }.distinct()
     val canSave = url.startsWith("http://") || url.startsWith("https://")
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text(if (webhook == null) "Add webhook" else "Edit webhook", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text("Payload URL") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    listOf("json", "form").forEach { type ->
-                        WebhookChoiceChip(type, selected = contentType == type) { contentType = type }
-                    }
+        title = if (webhook == null) "add webhook" else "edit webhook",
+        confirmButton = {
+            AiModuleTextAction(
+                label = "save",
+                enabled = canSave,
+                onClick = {
+                    if (!canSave) return@AiModuleTextAction
+                    onSave(webhook, url.trim(), events.ifEmpty { listOf("push") }, secret, active, contentType, insecureSsl)
+                },
+                tint = AiModuleTheme.colors.accent,
+            )
+        },
+        dismissButton = {
+            AiModuleTextAction(label = "cancel", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+        },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AiModuleTextField(value = url, onValueChange = { url = it }, label = "Payload URL")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                listOf("json", "form").forEach { type ->
+                    WebhookChoiceChip(type, selected = contentType == type) { contentType = type }
                 }
-                OutlinedTextField(
-                    value = eventsRaw,
-                    onValueChange = { eventsRaw = it },
-                    label = { Text("Events") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+            }
+            AiModuleTextField(value = eventsRaw, onValueChange = { eventsRaw = it }, label = "Events")
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     WEBHOOK_EVENT_PRESETS.forEach { event ->
                         WebhookChoiceChip(event, selected = event in events) {
@@ -456,35 +462,18 @@ private fun WebhookEditorDialog(
                         }
                     }
                 }
-                OutlinedTextField(
-                    value = secret,
-                    onValueChange = { secret = it },
-                    label = { Text(if (webhook == null) "Secret (optional)" else "New secret (leave blank to keep)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Text("GitHub never returns existing webhook secrets.", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Switch(checked = active, onCheckedChange = { active = it }, colors = SwitchDefaults.colors(checkedThumbColor = AiModuleTheme.colors.accent))
-                    Text("Active", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Checkbox(checked = insecureSsl, onCheckedChange = { insecureSsl = it })
-                    Text("Disable SSL verification", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary)
-                }
+            AiModuleTextField(value = secret, onValueChange = { secret = it }, label = if (webhook == null) "Secret (optional)" else "New secret (leave blank to keep)")
+            Text("GitHub never returns existing webhook secrets.", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, fontFamily = JetBrainsMono)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Switch(checked = active, onCheckedChange = { active = it }, colors = SwitchDefaults.colors(checkedThumbColor = AiModuleTheme.colors.accent))
+                Text("Active", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono)
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (!canSave) return@TextButton
-                    onSave(webhook, url.trim(), events.ifEmpty { listOf("push") }, secret, active, contentType, insecureSsl)
-                },
-                enabled = canSave
-            ) { Text("Save", color = AiModuleTheme.colors.accent) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
-    )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Checkbox(checked = insecureSsl, onCheckedChange = { insecureSsl = it })
+                Text("Disable SSL verification", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono)
+            }
+        }
+    }
 }
 
 @Composable
@@ -519,60 +508,21 @@ private fun WebhookConfigDialog(
         loading = false
     }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text("Webhook config", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (loading) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text("Loading config", fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary)
-                    }
-                }
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text("Payload URL") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    listOf("json", "form").forEach { type ->
-                        WebhookChoiceChip(type, selected = contentType == type) { contentType = type }
-                    }
-                }
-                OutlinedTextField(
-                    value = secret,
-                    onValueChange = { secret = it },
-                    label = { Text("New secret (leave blank to keep)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                val remoteSecret = config?.secret.orEmpty()
-                Text(
-                    if (remoteSecret.isNotBlank()) "Existing secret is write-only and stays unchanged unless replaced." else "GitHub does not expose existing webhook secrets.",
-                    fontSize = 11.sp,
-                    color = AiModuleTheme.colors.textMuted
-                )
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Checkbox(checked = insecureSsl, onCheckedChange = { insecureSsl = it })
-                    Text("Disable SSL verification", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary)
-                }
-            }
-        },
+        title = "webhook config",
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = if (saving) "saving" else "save config",
                 enabled = canSave,
                 onClick = {
-                    if (!canSave) return@TextButton
+                    if (!canSave) return@AiModuleTextAction
                     saving = true
                     scope.launch {
                         val payload = mutableMapOf(
                             "url" to url.trim(),
                             "content_type" to contentType,
-                            "insecure_ssl" to if (insecureSsl) "1" else "0"
+                            "insecure_ssl" to if (insecureSsl) "1" else "0",
                         )
                         if (secret.isNotBlank()) payload["secret"] = secret
                         val ok = GitHubManager.updateWebhookConfig(context, repoOwner, repoName, webhook.id, payload)
@@ -580,11 +530,41 @@ private fun WebhookConfigDialog(
                         if (ok) onSaved(GitHubManager.getWebhooks(context, repoOwner, repoName))
                         saving = false
                     }
-                }
-            ) { Text(if (saving) "Saving" else "Save config", color = AiModuleTheme.colors.accent) }
+                },
+                tint = AiModuleTheme.colors.accent,
+            )
         },
-        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
-    )
+        dismissButton = {
+            AiModuleTextAction(label = "cancel", enabled = !saving, onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+        },
+    ) {
+        Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (loading) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text("Loading config", fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary, fontFamily = JetBrainsMono)
+                }
+            }
+            AiModuleTextField(value = url, onValueChange = { url = it }, label = "Payload URL")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                listOf("json", "form").forEach { type ->
+                    WebhookChoiceChip(type, selected = contentType == type) { contentType = type }
+                }
+            }
+            AiModuleTextField(value = secret, onValueChange = { secret = it }, label = "New secret (leave blank to keep)")
+            val remoteSecret = config?.secret.orEmpty()
+            Text(
+                if (remoteSecret.isNotBlank()) "Existing secret is write-only and stays unchanged unless replaced." else "GitHub does not expose existing webhook secrets.",
+                fontSize = 11.sp,
+                color = AiModuleTheme.colors.textMuted,
+                fontFamily = JetBrainsMono,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Checkbox(checked = insecureSsl, onCheckedChange = { insecureSsl = it })
+                Text("Disable SSL verification", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono)
+            }
+        }
+    }
 }
 
 @Composable
@@ -655,13 +635,10 @@ private fun WebhookDeliveriesScreen(
             ) {
                 item { DeliverySummaryCard(deliveries) }
                 item {
-                    OutlinedTextField(
+                    AiModuleSearchField(
                         value = query,
                         onValueChange = { query = it },
-                        label = { Text("Search event, guid or status") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
+                        placeholder = "search event, guid or status",
                     )
                 }
                 item {
@@ -782,28 +759,28 @@ private fun DeliveryDetailDialog(
     onDismiss: () -> Unit,
     onRedeliver: () -> Unit
 ) {
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text("Delivery ${delivery.id}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    WebhookPill(delivery.event.ifBlank { "event" }, AiModuleTheme.colors.textSecondary)
-                    WebhookPill(deliveryStatusLabel(delivery), deliveryStatusColor(delivery))
-                    if (delivery.redelivery) WebhookPill("redelivery", Color(0xFFFF9500))
-                }
-                DeliveryBlock("Request headers", formatHeaders(delivery.requestHeaders))
-                DeliveryBlock("Request payload", prettyPayload(delivery.requestPayload))
-                DeliveryBlock("Response headers", formatHeaders(delivery.responseHeaders))
-                DeliveryBlock("Response payload", prettyPayload(delivery.responsePayload))
-            }
-        },
+        title = "delivery ${delivery.id}",
         confirmButton = {
-            TextButton(onClick = onRedeliver) { Text("Redeliver", color = Color(0xFFFF9500)) }
+            AiModuleTextAction(label = "redeliver", onClick = onRedeliver, tint = AiModuleTheme.colors.warning)
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.textSecondary) } }
-    )
+        dismissButton = {
+            AiModuleTextAction(label = "close", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+        },
+    ) {
+        Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                WebhookPill(delivery.event.ifBlank { "event" }, AiModuleTheme.colors.textSecondary)
+                WebhookPill(deliveryStatusLabel(delivery), deliveryStatusColor(delivery))
+                if (delivery.redelivery) WebhookPill("redelivery", Color(0xFFFF9500))
+            }
+            DeliveryBlock("Request headers", formatHeaders(delivery.requestHeaders))
+            DeliveryBlock("Request payload", prettyPayload(delivery.requestPayload))
+            DeliveryBlock("Response headers", formatHeaders(delivery.responseHeaders))
+            DeliveryBlock("Response payload", prettyPayload(delivery.responsePayload))
+        }
+    }
 }
 
 @Composable

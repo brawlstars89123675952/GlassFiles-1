@@ -55,6 +55,14 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.glassfiles.ui.components.AiModuleAlertDialog
+import com.glassfiles.ui.components.AiModuleGlyph
+import com.glassfiles.ui.components.AiModuleGlyphAction
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModulePillButton
+import com.glassfiles.ui.components.AiModuleTextAction
+import com.glassfiles.ui.components.AiModuleTextField
+import com.glassfiles.ui.theme.JetBrainsMono
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -412,23 +420,17 @@ private fun RepoSettingsTopBar(
     onBack: () -> Unit,
     onRefresh: () -> Unit
 ) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(AiModuleTheme.colors.surface)
-            .padding(top = 48.dp, start = 4.dp, end = 8.dp, bottom = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
+    AiModulePageBar(
+        title = title,
+        subtitle = subtitle.ifBlank { null },
+        onBack = onBack,
     ) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(22.dp), tint = AiModuleTheme.colors.accent)
-        }
-        Column(Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary, fontSize = 24.sp)
-            Text(subtitle, fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        IconButton(onClick = onRefresh) {
-            Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent)
-        }
+        AiModuleGlyphAction(
+            glyph = GhGlyphs.REFRESH,
+            onClick = onRefresh,
+            tint = AiModuleTheme.colors.accent,
+            contentDescription = "refresh",
+        )
     }
 }
 
@@ -465,13 +467,13 @@ private fun GeneralTab(
                 SettingsInfo("Owner", general.owner)
                 SettingsInfo("Visibility", general.visibility)
                 Spacer(Modifier.height(6.dp))
-                OutlinedTextField(name, { name = it }, label = { Text("Repository name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(name, { name = it }, label = "Repository name")
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(description, { description = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(description, { description = it }, label = "Description", maxLines = 4)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(homepage, { homepage = it }, label = { Text("Homepage") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(homepage, { homepage = it }, label = "Homepage")
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(defaultBranch, { defaultBranch = it }, label = { Text("Default branch") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(defaultBranch, { defaultBranch = it }, label = "Default branch")
             }
         }
         item {
@@ -493,7 +495,8 @@ private fun GeneralTab(
             }
         }
         item {
-            Button(
+            AiModulePillButton(
+                label = "${GhGlyphs.SAVE}  save general settings",
                 onClick = {
                     onSave(
                         general.copy(
@@ -507,17 +510,12 @@ private fun GeneralTab(
                             hasWiki = hasWiki,
                             hasDiscussions = hasDiscussions,
                             allowForking = allowForking,
-                            webCommitSignoffRequired = webCommitSignoffRequired
-                        )
+                            webCommitSignoffRequired = webCommitSignoffRequired,
+                        ),
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AiModuleTheme.colors.accent)
-            ) {
-                Icon(Icons.Rounded.Save, null, Modifier.size(18.dp), tint = Color.White)
-                Spacer(Modifier.width(8.dp))
-                Text("Save general settings", color = Color.White)
-            }
+            )
         }
     }
 }
@@ -534,11 +532,10 @@ private fun AccessTab(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = AiModuleTheme.colors.accent)) {
-                Icon(Icons.Rounded.PersonAdd, null, Modifier.size(18.dp), tint = Color.White)
-                Spacer(Modifier.width(8.dp))
-                Text("Add collaborator", color = Color.White)
-            }
+            AiModulePillButton(
+                label = "${GhGlyphs.PLUS}  add collaborator",
+                onClick = onAdd,
+            )
         }
         if (collaborators.isEmpty()) {
             item { EmptyCard("No collaborators returned or token has no access.") }
@@ -554,9 +551,11 @@ private fun AccessTab(
                                 Text(item.permissionSummary, color = AiModuleTheme.colors.textMuted, fontSize = 10.sp)
                             }
                         }
-                        TextButton(onClick = { onRemove(item.login) }) {
-                            Text("Remove", color = Color(0xFFFF3B30))
-                        }
+                        AiModuleTextAction(
+                            label = "remove",
+                            onClick = { onRemove(item.login) },
+                            tint = AiModuleTheme.colors.error,
+                        )
                     }
                 }
             }
@@ -577,11 +576,10 @@ private fun VariablesTab(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = AiModuleTheme.colors.accent)) {
-                Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = Color.White)
-                Spacer(Modifier.width(8.dp))
-                Text("Add variable", color = Color.White)
-            }
+            AiModulePillButton(
+                label = "${GhGlyphs.PLUS}  add variable",
+                onClick = onAdd,
+            )
         }
         if (variables.isEmpty()) {
             item { EmptyCard("No repository variables found.") }
@@ -593,12 +591,18 @@ private fun VariablesTab(
                             Text(item.name, color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             Text("Updated ${dateLabel(item.updatedAt)}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
                         }
-                        IconButton(onClick = { onEdit(item) }) {
-                            Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                        }
-                        IconButton(onClick = { onDelete(item) }) {
-                            Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30))
-                        }
+                        AiModuleGlyphAction(
+                            glyph = GhGlyphs.EDIT,
+                            onClick = { onEdit(item) },
+                            tint = AiModuleTheme.colors.accent,
+                            contentDescription = "edit",
+                        )
+                        AiModuleGlyphAction(
+                            glyph = GhGlyphs.DELETE,
+                            onClick = { onDelete(item) },
+                            tint = AiModuleTheme.colors.error,
+                            contentDescription = "delete",
+                        )
                     }
                 }
             }
@@ -636,9 +640,12 @@ private fun SecretsTab(
                             Text(item.name, color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             Text("Updated ${dateLabel(item.updatedAt)}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
                         }
-                        IconButton(onClick = { onDelete(item) }) {
-                            Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30))
-                        }
+                        AiModuleGlyphAction(
+                            glyph = GhGlyphs.DELETE,
+                            onClick = { onDelete(item) },
+                            tint = AiModuleTheme.colors.error,
+                            contentDescription = "delete",
+                        )
                     }
                 }
             }
@@ -660,11 +667,10 @@ private fun WebhooksTab(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = AiModuleTheme.colors.accent)) {
-                Icon(Icons.Rounded.Link, null, Modifier.size(18.dp), tint = Color.White)
-                Spacer(Modifier.width(8.dp))
-                Text("Add webhook", color = Color.White)
-            }
+            AiModulePillButton(
+                label = "${GhGlyphs.PLUS}  add webhook",
+                onClick = onAdd,
+            )
         }
         if (hooks.isEmpty()) {
             item { EmptyCard("No repository webhooks found.") }
@@ -703,12 +709,10 @@ private fun RulesTab(
         item {
             SettingsCard {
                 Text("Branch to inspect", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                OutlinedTextField(
+                AiModuleTextField(
                     value = rulesBranch,
                     onValueChange = onBranchChange,
-                    singleLine = true,
-                    label = { Text("Branch name") },
-                    modifier = Modifier.fillMaxWidth()
+                    label = "Branch name",
                 )
             }
         }
@@ -870,40 +874,46 @@ private fun AddCollaboratorDialog(
     var permission by remember { mutableStateOf("push") }
     val options = listOf("pull", "triage", "push", "maintain", "admin")
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text("Add collaborator", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(username, { username = it }, label = { Text("GitHub username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    options.forEach { item ->
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (permission == item) AiModuleTheme.colors.accent.copy(0.12f) else AiModuleTheme.colors.background)
-                                .border(1.dp, if (permission == item) AiModuleTheme.colors.accent.copy(0.35f) else AiModuleTheme.colors.border, RoundedCornerShape(8.dp))
-                                .clickable { permission = item }
-                                .padding(horizontal = 8.dp, vertical = 5.dp)
-                        ) {
-                            Text(item, color = if (permission == item) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary, fontSize = 11.sp)
-                        }
+        title = "add collaborator",
+        confirmButton = {
+            AiModuleTextAction(
+                label = "add",
+                onClick = { if (username.isNotBlank()) onConfirm(username.trim(), permission) },
+                tint = AiModuleTheme.colors.accent,
+            )
+        },
+        dismissButton = {
+            AiModuleTextAction(label = "cancel", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+        },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiModuleTextField(username, { username = it }, label = "GitHub username")
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                options.forEach { item ->
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (permission == item) AiModuleTheme.colors.accent.copy(0.12f) else AiModuleTheme.colors.background)
+                            .border(1.dp, if (permission == item) AiModuleTheme.colors.accent.copy(0.35f) else AiModuleTheme.colors.border, RoundedCornerShape(8.dp))
+                            .clickable { permission = item }
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                    ) {
+                        Text(
+                            item,
+                            color = if (permission == item) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary,
+                            fontSize = 11.sp,
+                            fontFamily = JetBrainsMono,
+                        )
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { if (username.isNotBlank()) onConfirm(username.trim(), permission) }) {
-                Text("Add", color = AiModuleTheme.colors.accent)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = AiModuleTheme.colors.textSecondary)
-            }
         }
-    )
+    }
 }
 
 @Composable
@@ -916,27 +926,30 @@ private fun VariableDialog(
     var name by remember(initialName) { mutableStateOf(initialName ?: "") }
     var value by remember(initialName, initialValue) { mutableStateOf(initialValue) }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text(if (initialName == null) "Add variable" else "Edit variable", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { if (initialName == null) name = it.uppercase() }, enabled = initialName == null, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value, { value = it }, label = { Text("Value") }, modifier = Modifier.fillMaxWidth())
-            }
-        },
+        title = if (initialName == null) "add variable" else "edit variable",
         confirmButton = {
-            TextButton(onClick = { if (name.isNotBlank()) onSave(name.trim(), value) }) {
-                Text("Save", color = AiModuleTheme.colors.accent)
-            }
+            AiModuleTextAction(
+                label = "save",
+                onClick = { if (name.isNotBlank()) onSave(name.trim(), value) },
+                tint = AiModuleTheme.colors.accent,
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = AiModuleTheme.colors.textSecondary)
-            }
+            AiModuleTextAction(label = "cancel", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+        },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiModuleTextField(
+                name,
+                { if (initialName == null) name = it.uppercase() },
+                enabled = initialName == null,
+                label = "Name",
+            )
+            AiModuleTextField(value, { value = it }, label = "Value", maxLines = 5)
         }
-    )
+    }
 }
 
 @Composable
@@ -950,36 +963,32 @@ private fun WebhookDialog(
     var secret by remember { mutableStateOf("") }
     var active by remember(webhook) { mutableStateOf(webhook?.active ?: true) }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text(if (webhook == null) "Add webhook" else "Edit webhook", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(url, { url = it }, label = { Text("Webhook URL") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(eventsRaw, { eventsRaw = it }, label = { Text("Events (comma separated)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(secret, { secret = it }, label = { Text("Secret (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                SettingsSwitchRow("Active", active) { active = it }
-            }
-        },
+        title = if (webhook == null) "add webhook" else "edit webhook",
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = "save",
                 onClick = {
                     val events = eventsRaw.split(",").map { it.trim() }.filter { it.isNotBlank() }
                     if (url.isNotBlank() && events.isNotEmpty()) {
                         onSave(url.trim(), events, secret, active)
                     }
-                }
-            ) {
-                Text("Save", color = AiModuleTheme.colors.accent)
-            }
+                },
+                tint = AiModuleTheme.colors.accent,
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = AiModuleTheme.colors.textSecondary)
-            }
+            AiModuleTextAction(label = "cancel", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
+        },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiModuleTextField(url, { url = it }, label = "Webhook URL")
+            AiModuleTextField(eventsRaw, { eventsRaw = it }, label = "Events (comma separated)", maxLines = 3)
+            AiModuleTextField(secret, { secret = it }, label = "Secret (optional)")
+            SettingsSwitchRow("Active", active) { active = it }
         }
-    )
+    }
 }
 
 private fun yesNo(value: Boolean): String = if (value) "Yes" else "No"
