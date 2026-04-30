@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
 import com.glassfiles.data.ai.AiSettingsStore
 import com.glassfiles.data.ai.AiSyntaxTheme
-import com.glassfiles.ui.screens.ai.terminal.AgentTerminal
+import com.glassfiles.ui.screens.ai.terminal.AgentTerminalDarkColors
 import com.glassfiles.ui.screens.ai.terminal.JetBrainsMono
 import com.glassfiles.ui.screens.ai.terminal.TerminalCheckRow
 import com.glassfiles.ui.screens.ai.terminal.TerminalHairline
