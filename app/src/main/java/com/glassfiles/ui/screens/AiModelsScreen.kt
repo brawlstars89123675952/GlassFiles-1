@@ -327,7 +327,7 @@ private fun ModelRow(model: AiModel) {
 
 @Composable
 private fun capabilityStyle(cap: AiCapability): Pair<String, androidx.compose.ui.graphics.Color> {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     return when (cap) {
         AiCapability.TEXT -> "TEXT" to colors.textSecondary
         AiCapability.VISION -> "VIS" to colors.accent
