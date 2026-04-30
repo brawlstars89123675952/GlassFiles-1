@@ -47,8 +47,6 @@ internal val GitHubSuccessGreen = Color(0xFF34C759)
 internal val GitHubErrorRed = Color(0xFFFF3B30)
 internal val GitHubMergedPurple = Color(0xFF6F42C1)
 
-@Composable internal fun StatBox(label: String, value: String, modifier: Modifier) { Column(modifier.clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surface).padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface); Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-
 @Composable
 internal fun Modifier.ghGlassCard(radius: androidx.compose.ui.unit.Dp = 16.dp): Modifier {
     val shape = RoundedCornerShape(radius)
