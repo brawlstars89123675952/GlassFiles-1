@@ -122,6 +122,13 @@ import com.glassfiles.ui.theme.Orange
 import com.glassfiles.ui.theme.Purple
 import com.glassfiles.ui.theme.Red
 import com.glassfiles.ui.theme.Teal
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleSecondaryButton
+import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.aiModuleStatusBadge
+import com.glassfiles.ui.theme.AiModuleSurface
+import com.glassfiles.ui.theme.AiModuleTheme
+import com.glassfiles.ui.theme.JetBrainsMono
 import com.glassfiles.ui.theme.SeparatorColor
 import com.glassfiles.ui.theme.SurfaceLight
 import com.glassfiles.ui.theme.SurfaceWhite
@@ -530,160 +537,340 @@ private fun ActionsRunsHistoryScreen(
         }
     }
 
-    val colors = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        if (showTopBar) {
-            GHTopBar("Build history", subtitle = "${visibleRuns.size} workflow runs", onBack = onBack) {
-                IconButton(onClick = { scope.launch { load(reset = true) } }) {
-                    if (refreshing) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
-                    else Icon(Icons.Rounded.Refresh, null, tint = Blue)
-                }
-            }
-        }
-
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(colors.surface)
-                .border(1.dp, colors.outlineVariant.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(Icons.Rounded.Search, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
-            Box(Modifier.weight(1f)) {
-                if (query.text.isEmpty()) {
-                    Text("Search runs", color = colors.onSurfaceVariant, fontSize = 14.sp)
-                }
-                BasicTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    textStyle = androidx.compose.ui.text.TextStyle(color = colors.onSurface, fontSize = 14.sp),
-                    singleLine = true,
-                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Blue),
-                    modifier = Modifier.fillMaxWidth()
+    AiModuleSurface {
+        val palette = AiModuleTheme.colors
+        Column(Modifier.fillMaxSize().background(palette.background)) {
+            if (showTopBar) {
+                AiModulePageBar(
+                    title = "> runs",
+                    subtitle = "${visibleRuns.size} workflow runs",
+                    onBack = onBack,
+                    trailing = {
+                        if (refreshing) {
+                            Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                                AiModuleSpinner()
+                            }
+                        } else {
+                            IconButton(onClick = { scope.launch { load(reset = true) } }) {
+                                Icon(
+                                    Icons.Rounded.Refresh,
+                                    null,
+                                    tint = palette.textSecondary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    },
                 )
             }
-            if (query.text.isNotEmpty()) {
-                IconButton(onClick = { query = TextFieldValue("") }, modifier = Modifier.size(20.dp)) {
-                    Icon(Icons.Rounded.Cancel, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                }
-            }
-        }
 
-        FilterRow {
-            ActionsFilterChip("All", filter == ActionsRunFilter.ALL) { filter = ActionsRunFilter.ALL }
-            ActionsFilterChip("Active", filter == ActionsRunFilter.ACTIVE) { filter = ActionsRunFilter.ACTIVE }
-            ActionsFilterChip("Queued", filter == ActionsRunFilter.QUEUED) { filter = ActionsRunFilter.QUEUED }
-            ActionsFilterChip("Success", filter == ActionsRunFilter.SUCCESS) { filter = ActionsRunFilter.SUCCESS }
-            ActionsFilterChip("Failed", filter == ActionsRunFilter.FAILED) { filter = ActionsRunFilter.FAILED }
-            ActionsFilterChip("Cancelled", filter == ActionsRunFilter.CANCELLED) { filter = ActionsRunFilter.CANCELLED }
-            ActionsFilterChip("Skipped", filter == ActionsRunFilter.SKIPPED) { filter = ActionsRunFilter.SKIPPED }
-            if (currentLogin.isNotBlank()) {
-                ActionsFilterChip("Mine", onlyMine) { onlyMine = !onlyMine }
-            }
-        }
-
-        if (workflows.isNotEmpty()) {
-            FilterRow {
-                ActionsFilterChip("All workflows", selectedWorkflowId == null) { selectedWorkflowId = null }
-                workflows.forEach { workflow ->
-                    ActionsFilterChip(
-                        workflow.name.ifBlank { workflow.path.substringAfterLast('/') },
-                        selectedWorkflowId == workflow.id
-                    ) { selectedWorkflowId = workflow.id }
-                }
-            }
-        }
-
-        if (branches.isNotEmpty()) {
-            FilterRow {
-                ActionsFilterChip("All branches", selectedBranch == null) { selectedBranch = null }
-                branches.forEach { branch ->
-                    ActionsFilterChip(branch, selectedBranch == branch) { selectedBranch = branch }
-                }
-            }
-        }
-
-        FilterRow {
-            ActionsFilterChip("All events", selectedEvent == null) { selectedEvent = null }
-            listOf("workflow_dispatch", "push", "pull_request", "schedule").forEach { event ->
-                ActionsFilterChip(event, selectedEvent == event) { selectedEvent = event }
-            }
-        }
-
-        Spacer(Modifier.height(4.dp))
-
-        if (visibleRuns.isEmpty() && !refreshing) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No workflow runs", color = TextTertiary, fontSize = 14.sp)
-            }
-        } else {
-            LazyColumn(
-                Modifier.fillMaxSize().pointerInput(refreshing, listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
-                    detectVerticalDragGestures(
-                        onDragEnd = {
-                            if (pullDistance > 140f && !refreshing) {
-                                scope.launch { load(reset = true) }
-                            }
-                            pullDistance = 0f
-                        },
-                        onDragCancel = { pullDistance = 0f },
-                        onVerticalDrag = { _, dragAmount ->
-                            if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 && dragAmount > 0) {
-                                pullDistance += dragAmount
-                            }
-                        }
-                    )
-                },
-                state = listState,
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 16.dp)
+            // mono search row
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(palette.surface)
+                    .border(1.dp, palette.border, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (pullDistance > 28f || refreshing) {
-                    item {
-                        Box(Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) {
-                            Text(if (refreshing) "Refreshing..." else "Release to refresh", fontSize = 11.sp, color = TextTertiary)
-                        }
+                Text(
+                    "search:",
+                    color = palette.textSecondary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 12.sp,
+                )
+                Box(Modifier.weight(1f)) {
+                    if (query.text.isEmpty()) {
+                        Text(
+                            "name / branch / sha / actor",
+                            color = palette.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 13.sp,
+                        )
                     }
-                }
-                items(visibleRuns) { run ->
-                    ModernRunCard(
-                        run = run,
-                        nowMs = nowMs,
-                        canWrite = repo.canWrite(),
-                        onRunClick = { onRunClick(run) },
-                        onCancel = {
-                            scope.launch {
-                                val ok = GitHubManager.cancelWorkflowRun(context, repo.owner, repo.name, run.id)
-                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                load(reset = true)
-                            }
-                        },
-                        onRerun = {
-                            scope.launch {
-                                val ok = GitHubManager.rerunWorkflow(context, repo.owner, repo.name, run.id)
-                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                load(reset = true)
-                            }
-                        }
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = palette.textPrimary,
+                            fontSize = 13.sp,
+                            fontFamily = JetBrainsMono,
+                        ),
+                        singleLine = true,
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(palette.accent),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                if (hasMore) {
-                    item {
-                        TextButton(
-                            onClick = { scope.launch { load(reset = false) } },
-                            enabled = !refreshing,
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-                        ) {
-                            if (refreshing) CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
-                            else Text("Load more runs", color = Blue)
+                if (query.text.isNotEmpty()) {
+                    Text(
+                        "x",
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { query = TextFieldValue("") }
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        color = palette.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+
+            ActionsTerminalFilterRow {
+                ActionsTerminalFilterChip("all", filter == ActionsRunFilter.ALL) { filter = ActionsRunFilter.ALL }
+                ActionsTerminalFilterChip("active", filter == ActionsRunFilter.ACTIVE) { filter = ActionsRunFilter.ACTIVE }
+                ActionsTerminalFilterChip("queued", filter == ActionsRunFilter.QUEUED) { filter = ActionsRunFilter.QUEUED }
+                ActionsTerminalFilterChip("ok", filter == ActionsRunFilter.SUCCESS) { filter = ActionsRunFilter.SUCCESS }
+                ActionsTerminalFilterChip("fail", filter == ActionsRunFilter.FAILED) { filter = ActionsRunFilter.FAILED }
+                ActionsTerminalFilterChip("cancel", filter == ActionsRunFilter.CANCELLED) { filter = ActionsRunFilter.CANCELLED }
+                ActionsTerminalFilterChip("skip", filter == ActionsRunFilter.SKIPPED) { filter = ActionsRunFilter.SKIPPED }
+                if (currentLogin.isNotBlank()) {
+                    ActionsTerminalFilterChip("mine", onlyMine) { onlyMine = !onlyMine }
+                }
+            }
+
+            if (workflows.isNotEmpty()) {
+                ActionsTerminalFilterRow {
+                    ActionsTerminalFilterChip("all wf", selectedWorkflowId == null) { selectedWorkflowId = null }
+                    workflows.forEach { workflow ->
+                        ActionsTerminalFilterChip(
+                            workflow.name.ifBlank { workflow.path.substringAfterLast('/') },
+                            selectedWorkflowId == workflow.id,
+                        ) { selectedWorkflowId = workflow.id }
+                    }
+                }
+            }
+
+            if (branches.isNotEmpty()) {
+                ActionsTerminalFilterRow {
+                    ActionsTerminalFilterChip("all br", selectedBranch == null) { selectedBranch = null }
+                    branches.forEach { branch ->
+                        ActionsTerminalFilterChip(branch, selectedBranch == branch) { selectedBranch = branch }
+                    }
+                }
+            }
+
+            ActionsTerminalFilterRow {
+                ActionsTerminalFilterChip("all ev", selectedEvent == null) { selectedEvent = null }
+                listOf("workflow_dispatch", "push", "pull_request", "schedule").forEach { event ->
+                    ActionsTerminalFilterChip(event, selectedEvent == event) { selectedEvent = event }
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            if (visibleRuns.isEmpty() && !refreshing) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "no runs yet",
+                        color = palette.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 13.sp,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize().pointerInput(
+                        refreshing,
+                        listState.firstVisibleItemIndex,
+                        listState.firstVisibleItemScrollOffset,
+                    ) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                if (pullDistance > 140f && !refreshing) {
+                                    scope.launch { load(reset = true) }
+                                }
+                                pullDistance = 0f
+                            },
+                            onDragCancel = { pullDistance = 0f },
+                            onVerticalDrag = { _, dragAmount ->
+                                if (listState.firstVisibleItemIndex == 0 &&
+                                    listState.firstVisibleItemScrollOffset == 0 &&
+                                    dragAmount > 0
+                                ) {
+                                    pullDistance += dragAmount
+                                }
+                            },
+                        )
+                    },
+                    state = listState,
+                    contentPadding = PaddingValues(start = 0.dp, end = 0.dp, top = 4.dp, bottom = 16.dp),
+                ) {
+                    if (pullDistance > 28f || refreshing) {
+                        item {
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AiModuleSpinner(
+                                    label = if (refreshing) "loading runs\u2026" else "release to refresh",
+                                )
+                            }
+                        }
+                    }
+                    items(visibleRuns) { run ->
+                        WorkflowRunRow(run = run, nowMs = nowMs) { onRunClick(run) }
+                    }
+                    if (hasMore) {
+                        item {
+                            Box(
+                                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AiModuleSecondaryButton(
+                                    label = if (refreshing) "loading\u2026" else "load more \u2192",
+                                    onClick = { scope.launch { load(reset = false) } },
+                                    enabled = !refreshing,
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ActionsTerminalFilterRow(content: @Composable () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun ActionsTerminalFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val palette = AiModuleTheme.colors
+    val tint = if (selected) palette.accent else palette.textSecondary
+    val bg = if (selected) palette.accent.copy(alpha = 0.10f) else Color.Transparent
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(bg)
+            .border(1.dp, tint, RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(
+            label,
+            color = tint,
+            fontFamily = JetBrainsMono,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun WorkflowRunRow(run: GHWorkflowRun, nowMs: Long, onClick: () -> Unit) {
+    val palette = AiModuleTheme.colors
+    val badge = aiModuleStatusBadge(run.status, run.conclusion, palette)
+    val duration = if (isRunActive(run)) "running" else calcRunDuration(run, nowMs).ifBlank { "\u2014" }
+    val sha = if (run.headSha.length >= 7) run.headSha.take(7) else "\u2014"
+    val branch = run.branch.ifBlank { "\u2014" }
+    val name = run.name.ifBlank { "workflow" }
+    val actor = run.actor.ifBlank { "\u2014" }
+    val ago = formatTimeAgoMono(run.updatedAt, nowMs)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            badge.glyph,
+            color = badge.color.copy(alpha = badge.alpha),
+            fontFamily = JetBrainsMono,
+            fontSize = 13.sp,
+            modifier = Modifier.width(20.dp),
+        )
+        Text(
+            "#${run.runNumber}",
+            color = palette.textSecondary,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            modifier = Modifier.width(58.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            name,
+            color = palette.textPrimary,
+            fontFamily = JetBrainsMono,
+            fontSize = 13.sp,
+            modifier = Modifier.width(110.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            duration,
+            color = palette.textSecondary,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            modifier = Modifier.width(72.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            branch,
+            color = palette.textSecondary,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            modifier = Modifier.width(108.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            sha,
+            color = palette.textMuted,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            modifier = Modifier.width(72.dp),
+            maxLines = 1,
+        )
+        Text(
+            actor,
+            color = palette.textSecondary,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            ago,
+            color = palette.textMuted,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+private fun formatTimeAgoMono(iso: String, nowMs: Long): String {
+    val ms = parseIsoMs(iso) ?: return "\u2014"
+    val diff = (nowMs - ms).coerceAtLeast(0L)
+    val sec = diff / 1000
+    return when {
+        sec < 60 -> "${sec}s"
+        sec < 3600 -> "${sec / 60}m"
+        sec < 86400 -> "${sec / 3600}h"
+        sec < 604800 -> "${sec / 86400}d"
+        else -> "${sec / 604800}w"
     }
 }
 
