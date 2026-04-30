@@ -48,7 +48,7 @@ fun SystemPromptOverrideDialog(
     onSave: (prompt: String, planFirst: Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val colors = AgentTerminalDarkColors
+    val colors = AiModuleDarkColors
     var text by remember { mutableStateOf(initialPrompt) }
     var planFirst by remember { mutableStateOf(initialPlanFirst) }
     AlertDialog(
