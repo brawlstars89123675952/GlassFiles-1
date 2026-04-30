@@ -291,7 +291,7 @@ private fun ProviderRow(
 
 @Composable
 private fun GetKeyLink(onClick: () -> Unit) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     Row(
         Modifier
             .clip(RoundedCornerShape(6.dp))
