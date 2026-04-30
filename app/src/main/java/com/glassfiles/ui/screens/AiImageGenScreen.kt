@@ -76,6 +76,7 @@ import com.glassfiles.data.ai.providers.AiProviders
 import com.glassfiles.ui.components.AiImageViewer
 import com.glassfiles.ui.components.AiPickerChip
 import com.glassfiles.ui.theme.AiModuleSurface
+import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -611,7 +612,7 @@ private fun ImageHistorySheet(
                                     sdf.format(java.util.Date(item.historyId)),
                                     fontSize = 10.sp,
                                     color = colors.onSurfaceVariant,
-                                    fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                                    fontFamily = JetBrainsMono,
                                     maxLines = 1,
                                 )
                             }
@@ -750,7 +751,7 @@ private fun ImageResultCard(
             Text(
                 item.model.displayName,
                 fontSize = 11.sp,
-                fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                fontFamily = JetBrainsMono,
                 color = colors.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )

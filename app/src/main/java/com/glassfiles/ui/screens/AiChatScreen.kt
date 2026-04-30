@@ -107,19 +107,19 @@ import com.glassfiles.data.ai.ChatHistoryManager
 import com.glassfiles.data.ai.ChatMessage
 import com.glassfiles.data.ai.ChatSession
 import com.glassfiles.data.ai.GeminiKeyStore
-import com.glassfiles.ui.screens.ai.terminal.AgentBlinkingCursor
-import com.glassfiles.ui.screens.ai.terminal.AgentTerminal
-import com.glassfiles.ui.screens.ai.terminal.AgentTerminalCodeBlock
-import com.glassfiles.ui.screens.ai.terminal.AgentTerminalSurface
-import com.glassfiles.ui.screens.ai.terminal.JetBrainsMono
-import com.glassfiles.ui.screens.ai.terminal.TerminalCard
-import com.glassfiles.ui.screens.ai.terminal.TerminalChip
-import com.glassfiles.ui.screens.ai.terminal.TerminalHairline
-import com.glassfiles.ui.screens.ai.terminal.TerminalListRow
-import com.glassfiles.ui.screens.ai.terminal.TerminalPageBar
-import com.glassfiles.ui.screens.ai.terminal.TerminalPillButton
-import com.glassfiles.ui.screens.ai.terminal.TerminalScreenScaffold
-import com.glassfiles.ui.screens.ai.terminal.TerminalSectionLabel
+import com.glassfiles.ui.components.AiModuleBlinkingCursor
+import com.glassfiles.ui.components.AiModuleCard
+import com.glassfiles.ui.components.AiModuleChip
+import com.glassfiles.ui.components.AiModuleCodeBlock
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleListRow
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModulePillButton
+import com.glassfiles.ui.components.AiModuleScreenScaffold
+import com.glassfiles.ui.components.AiModuleSectionLabel
+import com.glassfiles.ui.theme.AiModuleSurface
+import com.glassfiles.ui.theme.AiModuleTheme
+import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
@@ -130,7 +130,7 @@ import java.util.Locale
 /**
  * Chat / sessions screen for the AI module, terminal-themed.
  *
- * Wrapped in [AgentTerminalSurface] so every descendant reads the
+ * Wrapped in [AiModuleSurface] so every descendant reads the
  * same palette as the agent / hub / models screens. Outside the AI
  * module the global Material theme remains untouched — the override
  * is scoped via the surface's CompositionLocal.
@@ -143,7 +143,7 @@ fun AiChatScreen(
     currentFolder: String? = null,
     onRunInTerminal: ((String) -> Unit)? = null,
 ) {
-    AgentTerminalSurface {
+    AiModuleSurface {
         AiChatScreenInner(
             onBack = onBack,
             initialPrompt = initialPrompt,
@@ -219,8 +219,8 @@ private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
     var geminiKey by remember { mutableStateOf("") }
     var qwenKey by remember { mutableStateOf("") }
     var proxy by remember { mutableStateOf(GeminiKeyStore.getProxy(context)) }
-    val colors = AgentTerminal.colors
-    TerminalScreenScaffold(title = "AI · setup", onBack = onBack) {
+    val colors = AiModuleTheme.colors
+    AiModuleScreenScaffold(title = "AI · setup", onBack = onBack) {
         Column(
             Modifier
                 .fillMaxSize()
@@ -235,7 +235,7 @@ private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
                 fontSize = 13.sp,
                 lineHeight = 1.4.em,
             )
-            TerminalSectionLabel("> gemini")
+            AiModuleSectionLabel("> gemini")
             TerminalMonoField(
                 value = geminiKey,
                 onValueChange = { geminiKey = it },
@@ -254,8 +254,8 @@ private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
                 placeholder = "proxy (optional)",
                 singleLine = true,
             )
-            TerminalHairline()
-            TerminalSectionLabel("> qwen")
+            AiModuleHairline()
+            AiModuleSectionLabel("> qwen")
             TerminalMonoField(
                 value = qwenKey,
                 onValueChange = { qwenKey = it },
@@ -270,7 +270,7 @@ private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
             )
             Spacer(Modifier.height(8.dp))
             val ok = geminiKey.length > 10 || qwenKey.length > 10
-            TerminalPillButton(
+            AiModulePillButton(
                 label = "continue",
                 onClick = {
                     if (geminiKey.length > 10) GeminiKeyStore.saveKey(context, geminiKey)
@@ -301,8 +301,8 @@ private fun ChatHistoryList(
     var searchQ by remember { mutableStateOf("") }
     val filtered = if (searchQ.isBlank()) sessions
     else sessions.filter { it.title.contains(searchQ, true) || it.messages.any { m -> m.content.contains(searchQ, true) } }
-    val colors = AgentTerminal.colors
-    TerminalScreenScaffold(
+    val colors = AiModuleTheme.colors
+    AiModuleScreenScaffold(
         title = "AI · chat",
         onBack = onBack,
         subtitle = if (sessions.isNotEmpty()) "${sessions.size} session${if (sessions.size == 1) "" else "s"}" else null,
@@ -325,7 +325,7 @@ private fun ChatHistoryList(
                     .background(colors.background)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
-                TerminalPillButton(
+                AiModulePillButton(
                     label = "new chat",
                     onClick = onNew,
                     leadingIcon = Icons.Rounded.Add,
@@ -404,7 +404,7 @@ private fun ChatHistoryList(
                     items(filtered) { s ->
                         val provider = try { AiProvider.valueOf(s.provider) } catch (_: Exception) { null }
                         val pc = if (provider?.isQwen == true) colors.warning else colors.accent
-                        TerminalListRow(
+                        AiModuleListRow(
                             title = s.title,
                             prefix = "▸",
                             prefixColor = pc,
@@ -422,7 +422,7 @@ private fun ChatHistoryList(
                                 }
                             },
                         )
-                        TerminalHairline(modifier = Modifier.padding(start = 12.dp))
+                        AiModuleHairline(modifier = Modifier.padding(start = 12.dp))
                     }
                 }
             }
@@ -470,7 +470,7 @@ private fun ChatView(
     var currentJob by remember { mutableStateOf<Job?>(null) }
     var editIdx by remember { mutableIntStateOf(-1) }
     var editTxt by remember { mutableStateOf("") }
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
 
     // TTS
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
@@ -762,7 +762,7 @@ private fun ChatView(
             .imePadding(),
     ) {
         // Topbar
-        TerminalPageBar(
+        AiModulePageBar(
             title = "AI · chat",
             onBack = { save(messages); onBack() },
             subtitle = currentFolder?.let { "ctx: ${it.substringAfterLast("/")}" },
@@ -906,7 +906,7 @@ private fun ChatView(
                         )
                         if (onRunInTerminal != null) actions.add("script" to "script")
                         items(actions) { (key, label) ->
-                            TerminalPillButton(
+                            AiModulePillButton(
                                 label = label,
                                 onClick = { quickAction(key) },
                                 accent = false,
@@ -1031,7 +1031,7 @@ private fun EmptyChatBanner(
     currentFolder: String?,
     onSuggestion: (String) -> Unit,
 ) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     Column(
         Modifier
             .fillMaxWidth()
@@ -1061,14 +1061,14 @@ private fun EmptyChatBanner(
             )
         }
         Spacer(Modifier.height(8.dp))
-        TerminalSectionLabel("> suggested")
+        AiModuleSectionLabel("> suggested")
         val suggestions = mutableListOf("Explain this code", "Analyze ZIP archive", "What's in this image?")
         if (currentFolder != null) {
             suggestions.add(0, "What files are in this folder?")
             suggestions.add(1, "What takes the most space here?")
         }
         suggestions.take(5).forEach { q ->
-            TerminalListRow(
+            AiModuleListRow(
                 title = q,
                 prefix = "▸",
                 onClick = { onSuggestion(q) },
@@ -1097,7 +1097,7 @@ private fun TerminalChatMessage(
     onRunScript: (() -> Unit)?,
 ) {
     val isUser = msg.role == "user"
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     val context = LocalContext.current
     val glyph = if (isUser) ">" else "\u25A0" // ■
     val glyphColor = colors.accent
@@ -1184,12 +1184,12 @@ private fun TerminalChatMessage(
                             ),
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                AgentTerminalCodeBlock(
+                                AiModuleCodeBlock(
                                     text = code.trimEnd(),
                                     lang = lang,
                                     context = context,
                                 )
-                                TerminalPillButton(
+                                AiModulePillButton(
                                     label = "save",
                                     onClick = { onSaveCode(code.trimEnd(), lang) },
                                     accent = false,
@@ -1211,7 +1211,7 @@ private fun TerminalChatMessage(
             }
 
             if (streaming) {
-                AgentBlinkingCursor()
+                AiModuleBlinkingCursor()
             }
 
             // Action row
@@ -1237,7 +1237,7 @@ private fun TerminalChatMessage(
 
 @Composable
 private fun MsgActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     IconButton(onClick = onClick, modifier = Modifier.size(26.dp)) {
         Icon(icon, null, Modifier.size(12.dp), tint = colors.textMuted)
     }
@@ -1248,7 +1248,7 @@ private fun MsgActionButton(icon: androidx.compose.ui.graphics.vector.ImageVecto
 // ═══════════════════════════════════
 @Composable
 private fun TerminalMarkdownText(text: String) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     val lines = text.lines()
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         for (l in lines) {
@@ -1384,9 +1384,9 @@ private fun TerminalChatInput(
     isLoading: Boolean,
     canSend: Boolean,
 ) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     Column(Modifier.fillMaxWidth().background(colors.background)) {
-        TerminalHairline()
+        AiModuleHairline()
         Row(
             Modifier
                 .fillMaxWidth()
@@ -1480,7 +1480,7 @@ private fun TerminalModelPicker(
     onSelect: (AiProvider) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = colors.surfaceElevated,
@@ -1516,7 +1516,7 @@ private fun TerminalModelPicker(
                     }
                     items(models) { p ->
                         val selected = p == current
-                        TerminalListRow(
+                        AiModuleListRow(
                             title = p.label,
                             subtitle = p.desc,
                             prefix = if (selected) "▣" else "▸",
@@ -1526,8 +1526,8 @@ private fun TerminalModelPicker(
                             paddingVertical = 8.dp,
                             trailing = {
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    if (p.supportsVision) TerminalChip("vision", color = colors.textMuted)
-                                    if (p.supportsFiles) TerminalChip("files", color = cc)
+                                    if (p.supportsVision) AiModuleChip("vision", color = colors.textMuted)
+                                    if (p.supportsFiles) AiModuleChip("files", color = cc)
                                     if (selected) Icon(
                                         Icons.Rounded.Check,
                                         null,
@@ -1579,7 +1579,7 @@ private fun TerminalKeysDialog(
     onSave: (String, String, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     var gK by remember { mutableStateOf(initialGemini) }
     var pU by remember { mutableStateOf(initialProxy) }
     var qK by remember { mutableStateOf(initialQwen) }
@@ -1601,17 +1601,17 @@ private fun TerminalKeysDialog(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                TerminalSectionLabel("> gemini")
+                AiModuleSectionLabel("> gemini")
                 TerminalMonoField(value = gK, onValueChange = { gK = it }, placeholder = "AIza…")
-                TerminalSectionLabel("> proxy (optional)")
+                AiModuleSectionLabel("> proxy (optional)")
                 TerminalMonoField(value = pU, onValueChange = { pU = it }, placeholder = "https://proxy/v1beta/models")
-                TerminalHairline()
-                TerminalSectionLabel("> qwen")
+                AiModuleHairline()
+                AiModuleSectionLabel("> qwen")
                 TerminalMonoField(value = qK, onValueChange = { qK = it }, placeholder = "sk-…")
-                TerminalSectionLabel("> region")
+                AiModuleSectionLabel("> region")
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("intl" to "singapore", "cn" to "beijing").forEach { (c, l) ->
-                        TerminalPillButton(
+                        AiModulePillButton(
                             label = l,
                             onClick = { rI = c },
                             accent = rI == c,
@@ -1644,7 +1644,7 @@ private fun TerminalMonoField(
     singleLine: Boolean = true,
     minHeight: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     Box(
         Modifier
             .fillMaxWidth()

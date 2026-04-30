@@ -77,6 +77,7 @@ import com.glassfiles.data.ai.models.AiProviderId
 import com.glassfiles.data.ai.providers.AiProviders
 import com.glassfiles.ui.components.AiPickerChip
 import com.glassfiles.ui.theme.AiModuleSurface
+import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -405,7 +406,7 @@ private fun AiVideoGenScreenInner(onBack: () -> Unit) {
                     Text(
                         "${Strings.aiVideoStatus.uppercase()}: $status",
                         fontSize = 11.sp,
-                        fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                        fontFamily = JetBrainsMono,
                         color = colors.onSurfaceVariant,
                         modifier = Modifier.weight(1f).padding(end = 8.dp),
                     )
@@ -649,7 +650,7 @@ private fun VideoHistoryRow(
                 sdf.format(java.util.Date(item.historyId)),
                 fontSize = 10.sp,
                 color = colors.onSurfaceVariant,
-                fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                fontFamily = JetBrainsMono,
                 maxLines = 1,
             )
         }
@@ -733,7 +734,7 @@ private fun VideoResultCard(
         Text(
             item.model.id,
             fontSize = 11.sp,
-            fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+            fontFamily = JetBrainsMono,
             color = colors.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
         )

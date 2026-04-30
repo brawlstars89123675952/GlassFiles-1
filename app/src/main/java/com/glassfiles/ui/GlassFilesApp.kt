@@ -790,7 +790,7 @@ private fun AiAgentBottomSheet(
     // Terminal palette for the GitHub→AI agent sheet so it reads as
     // the same surface as the standalone agent / chat / hub screens.
     // Material colors stay reserved for the GitHub module behind it.
-    val term = com.glassfiles.ui.screens.ai.terminal.AgentTerminalDarkColors
+    val term = AiModuleDarkColors
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val maxH = maxHeight
         val collapsedHeight = 56.dp
@@ -894,7 +894,7 @@ private fun AiAgentBottomSheet(
                         Text(
                             ">",
                             color = term.accent,
-                            fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                            fontFamily = JetBrainsMono,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                         )
@@ -903,7 +903,7 @@ private fun AiAgentBottomSheet(
                             Strings.aiAgent.lowercase(),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
-                            fontFamily = com.glassfiles.ui.screens.ai.terminal.JetBrainsMono,
+                            fontFamily = JetBrainsMono,
                             color = term.textPrimary,
                         )
                         Spacer(Modifier.weight(1f))

@@ -195,7 +195,7 @@ fun AiUsageScreen(onBack: () -> Unit) {
 
 @Composable
 private fun WindowFlag(label: String, active: Boolean, onClick: () -> Unit) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     Row(
         Modifier
             .clip(RoundedCornerShape(4.dp))
@@ -216,7 +216,7 @@ private fun WindowFlag(label: String, active: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun UsageSectionHeader(label: String) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     Column(Modifier.padding(top = 14.dp, bottom = 4.dp)) {
         Row(
             Modifier
@@ -230,15 +230,15 @@ private fun UsageSectionHeader(label: String) {
                 fontFamily = JetBrainsMono,
                 fontSize = 12.sp,
             )
-            TerminalSectionLabel(text = label)
+            AiModuleSectionLabel(text = label)
         }
-        TerminalHairline(Modifier.padding(horizontal = 12.dp))
+        AiModuleHairline(Modifier.padding(horizontal = 12.dp))
     }
 }
 
 @Composable
 private fun BucketRow(bucket: AiUsageBucket) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     Row(
         Modifier
             .fillMaxWidth()
@@ -275,7 +275,7 @@ private fun BucketRow(bucket: AiUsageBucket) {
 
 @Composable
 private fun ClearConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
             Modifier
@@ -303,12 +303,12 @@ private fun ClearConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                     Modifier.fillMaxWidth().padding(top = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
                 ) {
-                    TerminalPillButton(
+                    AiModulePillButton(
                         label = "n · " + Strings.cancel.lowercase(),
                         onClick = onDismiss,
                         accent = false,
                     )
-                    TerminalPillButton(
+                    AiModulePillButton(
                         label = "y · " + Strings.aiUsageClearConfirm.lowercase(),
                         onClick = onConfirm,
                         destructive = true,

@@ -161,7 +161,7 @@ fun ExpensiveActionWarningDialog(
 
 @Composable
 private fun LabeledRow(label: String, value: String) {
-    val colors = AgentTerminalDarkColors
+    val colors = AiModuleDarkColors
     Row(verticalAlignment = Alignment.Top) {
         Text(
             label,
