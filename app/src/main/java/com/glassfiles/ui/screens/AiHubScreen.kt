@@ -149,19 +149,8 @@ private fun AiHubRow(item: AiHubItem) {
 
 @Composable
 private fun AiHubSoonPill() {
-    val colors = MaterialTheme.colorScheme
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(colors.tertiary.copy(alpha = 0.15f))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-    ) {
-        Text(
-            Strings.aiSoon.uppercase(),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.6.sp,
-            color = colors.tertiary,
-        )
-    }
+    AiModuleChip(
+        label = Strings.aiSoon.uppercase(),
+        color = AiModuleTheme.colors.warning,
+    )
 }
