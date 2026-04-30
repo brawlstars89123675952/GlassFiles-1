@@ -52,6 +52,7 @@ import com.glassfiles.data.github.*
 import com.glassfiles.notifications.GitHubNotificationTarget
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModulePillButton
+import com.glassfiles.ui.components.AiModuleHairline
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -711,28 +712,81 @@ internal fun RepoDetailScreen(
 @Composable
 internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWrite: Boolean = true, onDirClick: (GHContent) -> Unit, onFileClick: (GHContent) -> Unit, onEdit: (GHContent) -> Unit, onDelete: (GHContent) -> Unit, onDownload: (GHContent) -> Unit) {
     var expanded by remember { mutableStateOf<String?>(null) }
-    LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 16.dp)) { items(contents) { item -> Column {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(12.dp)).clickable { if (item.type == "dir") onDirClick(item) else expanded = if (expanded == item.path) null else item.path }.padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background((if (item.type == "dir") FolderBlue else fileTint(item.name)).copy(alpha = if (item.type == "dir") 0.14f else 0.10f)), contentAlignment = Alignment.Center) {
-                Icon(if (item.type == "dir") Icons.Rounded.Folder else fileIcon(item.name), null, Modifier.size(if (item.type == "dir") 21.dp else 18.dp), tint = if (item.type == "dir") FolderBlue else fileTint(item.name))
+    val palette = AiModuleTheme.colors
+    val sorted = remember(contents) {
+        contents.sortedWith(compareBy({ it.type != "dir" }, { it.name.lowercase() }))
+    }
+    val rowFontSize = 14.sp
+    val sizeFontSize = 12.sp
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        state = listState,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        items(sorted) { item ->
+            val index = sorted.indexOf(item)
+            val isLast = index == sorted.lastIndex
+            val prefix = if (isLast) "\u2514\u2500 " else "\u251C\u2500 "
+            val isDir = item.type == "dir"
+            val displayName = if (isDir) "${item.name}/" else item.name
+            val nameColor = if (isDir) palette.accent else palette.textPrimary
+            Column {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (isDir) onDirClick(item)
+                            else expanded = if (expanded == item.path) null else item.path
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        prefix,
+                        fontFamily = JetBrainsMono,
+                        fontSize = rowFontSize,
+                        lineHeight = rowFontSize,
+                        color = palette.textMuted,
+                    )
+                    Text(
+                        displayName,
+                        fontFamily = JetBrainsMono,
+                        fontSize = rowFontSize,
+                        lineHeight = rowFontSize,
+                        color = nameColor,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (!isDir && item.size > 0) {
+                        Text(
+                            ghFmtSize(item.size),
+                            fontFamily = JetBrainsMono,
+                            fontSize = sizeFontSize,
+                            lineHeight = rowFontSize,
+                            color = palette.textMuted,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                }
+                AnimatedVisibility(expanded == item.path && !isDir) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 24.dp, end = 4.dp, top = 4.dp, bottom = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Chip(Icons.Rounded.Visibility, "view") { onFileClick(item) }
+                        if (canWrite) Chip(Icons.Rounded.Edit, Strings.ghEditFile.lowercase()) { onEdit(item) }
+                        Chip(Icons.Rounded.Download, Strings.ghDownloadFile.lowercase()) { onDownload(item) }
+                        if (canWrite) Chip(Icons.Rounded.Delete, Strings.ghDeleteFile.lowercase(), palette.error) { onDelete(item) }
+                    }
+                }
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(item.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(item.path.substringBeforeLast("/", "").ifBlank { if (item.type == "dir") "folder" else "file" }, fontSize = 10.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (item.type != "dir" && item.size > 0) Text(ghFmtSize(item.size), fontSize = 11.sp, color = TextTertiary, fontFamily = FontFamily.Monospace)
         }
-        AnimatedVisibility(expanded == item.path && item.type != "dir") { Row(Modifier.fillMaxWidth().padding(start = 50.dp, end = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip(Icons.Rounded.Visibility, "View") { onFileClick(item) }
-            if (canWrite) Chip(Icons.Rounded.Edit, Strings.ghEditFile) { onEdit(item) }
-            Chip(Icons.Rounded.Download, Strings.ghDownloadFile) { onDownload(item) }
-            if (canWrite) Chip(Icons.Rounded.Delete, Strings.ghDeleteFile, Color(0xFFFF3B30)) { onDelete(item) }
-        } }
-        Box(Modifier.fillMaxWidth().padding(start = 50.dp).height(0.5.dp).background(SeparatorColor))
-    } } }
+    }
 }
 
-@Composable internal fun Chip(icon: ImageVector, label: String, tint: Color? = null, onClick: () -> Unit) { val chipTint = tint ?: MaterialTheme.colorScheme.primary; Row(Modifier.clip(RoundedCornerShape(6.dp)).background(chipTint.copy(0.08f)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(icon, null, Modifier.size(12.dp), tint = chipTint); Text(label, fontSize = 10.sp, color = chipTint, fontWeight = FontWeight.Medium) } }
+@Composable internal fun Chip(icon: ImageVector, label: String, tint: Color? = null, onClick: () -> Unit) { val chipTint = tint ?: AiModuleTheme.colors.accent; Row(Modifier.clip(RoundedCornerShape(6.dp)).background(chipTint.copy(0.08f)).clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) { Icon(icon, null, Modifier.size(12.dp), tint = chipTint); Text(label, fontSize = 10.sp, color = chipTint, fontWeight = FontWeight.Medium, fontFamily = JetBrainsMono) } }
 
 private fun fileIcon(name: String): ImageVector = when (name.substringAfterLast(".", "").lowercase()) {
     "kt", "java", "js", "ts", "tsx", "jsx", "py", "rb", "go", "rs", "swift", "c", "cpp", "h", "html", "css", "json", "xml", "yml", "yaml" -> Icons.Rounded.Code
