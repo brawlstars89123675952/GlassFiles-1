@@ -61,9 +61,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.glassfiles.data.github.GHRepo
-import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleGlyph
+import com.glassfiles.ui.components.AiModuleGlyphAction
 import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModulePrimaryButton
+import com.glassfiles.ui.components.AiModuleSearchField
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.data.github.GHLabelSearchResult
 import com.glassfiles.data.github.GHSearchCommitResult
@@ -210,26 +215,32 @@ internal fun AdvancedSearchScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item {
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(AiModuleTheme.colors.surface)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    AiModuleSearchField(
                         value = query,
                         onValueChange = { query = it },
-                        label = { Text(searchHint(selectedKind)) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
+                        placeholder = searchHint(selectedKind),
                     )
                     if (selectedKind == AdvancedSearchKind.LABELS) {
-                        OutlinedTextField(
+                        AiModuleTextField(
                             value = labelRepository,
                             onValueChange = { labelRepository = it },
-                            label = { Text("Repository owner/name") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            leadingIcon = { Icon(Icons.Rounded.Code, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
+                            label = "Repository owner/name",
+                            placeholder = "owner/name",
+                            leading = { AiModuleGlyph(GhGlyphs.CODE, tint = AiModuleTheme.colors.textMuted) },
                         )
                     }
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         AdvancedSearchKind.entries.forEach { kind ->
                             SearchKindChip(kind, selectedKind == kind) {
                                 selectedKind = kind
@@ -237,14 +248,13 @@ internal fun AdvancedSearchScreen(
                             }
                         }
                     }
-                    Button(onClick = { runSearch(1) }, enabled = query.length >= 2 && !searching && (selectedKind != AdvancedSearchKind.LABELS || labelRepository.contains("/")), modifier = Modifier.fillMaxWidth()) {
-                        if (searching) {
-                            CircularProgressIndicator(Modifier.size(18.dp), color = AiModuleTheme.colors.background, strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.Rounded.Search, null, Modifier.size(18.dp))
-                            Text("Search")
-                        }
-                    }
+                    AiModulePrimaryButton(
+                        label = if (searching) "search\u2026" else "[ ${GhGlyphs.SEARCH}  search ]",
+                        onClick = { runSearch(1) },
+                        enabled = query.length >= 2 && !searching &&
+                            (selectedKind != AdvancedSearchKind.LABELS || labelRepository.contains("/")),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
             item { SearchSummary(selectedKind, resultCount, searched, searching) }
@@ -306,7 +316,12 @@ private fun SearchIssueCard(issue: GHSearchIssueResult, onOpen: () -> Unit) {
                 if (issue.comments > 0) SearchPill("${formatGitHubNumber(issue.comments)} comments", AiModuleTheme.colors.textSecondary)
             }
         }
-        IconButton(onClick = onOpen) { Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
+        AiModuleGlyphAction(
+            glyph = GhGlyphs.OPEN_NEW,
+            onClick = onOpen,
+            tint = AiModuleTheme.colors.textSecondary,
+            contentDescription = "open",
+        )
     }
 }
 
@@ -318,7 +333,12 @@ private fun SearchCommitCard(commit: GHSearchCommitResult, onOpen: () -> Unit) {
             Text("${commit.repository} - ${commit.sha.take(7)} - ${commit.date.take(10)}", fontSize = 11.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (commit.author.isNotBlank()) Text(commit.author, fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        IconButton(onClick = onOpen) { Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
+        AiModuleGlyphAction(
+            glyph = GhGlyphs.OPEN_NEW,
+            onClick = onOpen,
+            tint = AiModuleTheme.colors.textSecondary,
+            contentDescription = "open",
+        )
     }
 }
 
