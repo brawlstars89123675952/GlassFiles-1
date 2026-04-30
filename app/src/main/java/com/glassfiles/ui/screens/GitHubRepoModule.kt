@@ -716,6 +716,8 @@ internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWr
     val sorted = remember(contents) {
         contents.sortedWith(compareBy({ it.type != "dir" }, { it.name.lowercase() }))
     }
+    val rowFontSize = 14.sp
+    val sizeFontSize = 12.sp
     LazyColumn(
         Modifier.fillMaxSize(),
         state = listState,
@@ -724,7 +726,7 @@ internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWr
         items(sorted) { item ->
             val index = sorted.indexOf(item)
             val isLast = index == sorted.lastIndex
-            val prefix = if (isLast) "└─ " else "├─ "
+            val prefix = if (isLast) "\u2514\u2500 " else "\u251C\u2500 "
             val isDir = item.type == "dir"
             val displayName = if (isDir) "${item.name}/" else item.name
             val nameColor = if (isDir) palette.accent else palette.textPrimary
@@ -735,20 +737,21 @@ internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWr
                         .clickable {
                             if (isDir) onDirClick(item)
                             else expanded = if (expanded == item.path) null else item.path
-                        }
-                        .padding(horizontal = 4.dp, vertical = 8.dp),
+                        },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         prefix,
                         fontFamily = JetBrainsMono,
-                        fontSize = 13.sp,
+                        fontSize = rowFontSize,
+                        lineHeight = rowFontSize,
                         color = palette.textMuted,
                     )
                     Text(
                         displayName,
                         fontFamily = JetBrainsMono,
-                        fontSize = 13.sp,
+                        fontSize = rowFontSize,
+                        lineHeight = rowFontSize,
                         color = nameColor,
                         modifier = Modifier.weight(1f),
                         maxLines = 1,
@@ -758,7 +761,8 @@ internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWr
                         Text(
                             ghFmtSize(item.size),
                             fontFamily = JetBrainsMono,
-                            fontSize = 11.sp,
+                            fontSize = sizeFontSize,
+                            lineHeight = rowFontSize,
                             color = palette.textMuted,
                             modifier = Modifier.padding(start = 8.dp),
                         )
@@ -768,7 +772,7 @@ internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWr
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .padding(start = 24.dp, end = 4.dp, top = 2.dp, bottom = 8.dp),
+                            .padding(start = 24.dp, end = 4.dp, top = 4.dp, bottom = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Chip(Icons.Rounded.Visibility, "view") { onFileClick(item) }
