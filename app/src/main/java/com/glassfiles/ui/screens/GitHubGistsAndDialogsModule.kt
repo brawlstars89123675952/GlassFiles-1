@@ -21,9 +21,14 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleCard
+import com.glassfiles.ui.components.AiModuleCheckRow
+import com.glassfiles.ui.components.AiModuleGlyph
+import com.glassfiles.ui.components.AiModuleGlyphAction
 import com.glassfiles.ui.components.AiModulePillButton
-import androidx.compose.material3.AlertDialog
+import com.glassfiles.ui.components.AiModuleTextAction
+import com.glassfiles.ui.components.AiModuleTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -254,33 +259,26 @@ internal fun CreateRepoDialog(onDismiss: () -> Unit, onCreate: (String, String, 
     var d by remember { mutableStateOf("") }
     var p by remember { mutableStateOf(false) }
     val palette = AiModuleTheme.colors
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.surface,
-        title = { MonoLabel("> ${Strings.ghNewRepo.lowercase()}", palette.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(n, { n = it }, label = { Text(Strings.ghRepoName) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(d, { d = it }, label = { Text(Strings.ghRepoDesc) }, modifier = Modifier.fillMaxWidth())
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Switch(
-                        checked = p,
-                        onCheckedChange = { p = it },
-                        colors = SwitchDefaults.colors(checkedTrackColor = palette.accent),
-                    )
-                    Text(Strings.ghPrivate, fontSize = 13.sp, color = palette.textPrimary, fontFamily = JetBrainsMono)
-                }
-            }
-        },
+        title = Strings.ghNewRepo.lowercase(),
         confirmButton = {
-            TextButton(onClick = { if (n.isNotBlank()) onCreate(n, d, p) }) {
-                MonoLabel(Strings.create, palette.accent)
-            }
+            AiModuleTextAction(
+                label = Strings.create,
+                onClick = { if (n.isNotBlank()) onCreate(n, d, p) },
+                tint = palette.accent,
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { MonoLabel(Strings.cancel, palette.textSecondary) }
+            AiModuleTextAction(label = Strings.cancel, onClick = onDismiss, tint = palette.textSecondary)
         },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AiModuleTextField(n, { n = it }, label = Strings.ghRepoName)
+            AiModuleTextField(d, { d = it }, label = Strings.ghRepoDesc, maxLines = 3)
+            AiModuleCheckRow(label = Strings.ghPrivate, checked = p, onToggle = { p = !p })
+        }
+    }
 }
 
 @Composable
@@ -291,23 +289,15 @@ internal fun UploadDialog(repo: GHRepo, curPath: String, branch: String, onDismi
     val ctx = LocalContext.current
     val s = rememberCoroutineScope()
     val palette = AiModuleTheme.colors
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.surface,
-        title = { MonoLabel("> ${Strings.ghUpload.lowercase()}", palette.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${Strings.ghPickBranch}: $branch", fontSize = 11.sp, color = palette.textSecondary, fontFamily = JetBrainsMono)
-                OutlinedTextField(fn, { fn = it }, label = { Text(Strings.ghFilePath) }, singleLine = true, modifier = Modifier.fillMaxWidth(), placeholder = { Text("example.txt") })
-                if (curPath.isNotBlank()) Text("\u2192 $curPath/$fn", fontSize = 10.sp, color = palette.textMuted, fontFamily = JetBrainsMono)
-                OutlinedTextField(msg, { msg = it }, label = { Text(Strings.ghCommitMsg) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                if (up) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = palette.accent)
-            }
-        },
+        title = Strings.ghUpload.lowercase(),
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = Strings.ghUpload,
+                enabled = !up,
                 onClick = {
-                    if (fn.isBlank() || up) return@TextButton
+                    if (fn.isBlank() || up) return@AiModuleTextAction
                     up = true
                     val p = if (curPath.isNotBlank()) "$curPath/$fn" else fn
                     s.launch {
@@ -316,13 +306,21 @@ internal fun UploadDialog(repo: GHRepo, curPath: String, branch: String, onDismi
                         if (ok) onDone() else up = false
                     }
                 },
-                enabled = !up,
-            ) { MonoLabel(Strings.ghUpload, palette.accent) }
+                tint = palette.accent,
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { MonoLabel(Strings.cancel, palette.textSecondary) }
+            AiModuleTextAction(label = Strings.cancel, onClick = onDismiss, tint = palette.textSecondary)
         },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("${Strings.ghPickBranch}: $branch", fontSize = 11.sp, color = palette.textSecondary, fontFamily = JetBrainsMono)
+            AiModuleTextField(fn, { fn = it }, label = Strings.ghFilePath, placeholder = "example.txt")
+            if (curPath.isNotBlank()) Text("\u2192 $curPath/$fn", fontSize = 10.sp, color = palette.textMuted, fontFamily = JetBrainsMono)
+            AiModuleTextField(msg, { msg = it }, label = Strings.ghCommitMsg)
+            if (up) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = palette.accent)
+        }
+    }
 }
 
 @Composable
@@ -334,21 +332,15 @@ internal fun CreateFileDialog(repo: GHRepo, curPath: String, branch: String, onD
     val ctx = LocalContext.current
     val s = rememberCoroutineScope()
     val palette = AiModuleTheme.colors
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.surface,
-        title = { MonoLabel("> ${Strings.ghCreateFile.lowercase()}", palette.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(fn, { fn = it }, label = { Text(Strings.ghFilePath) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(ct, { ct = it }, label = { Text(Strings.ghFileContent) }, modifier = Modifier.fillMaxWidth().height(120.dp), maxLines = 8)
-                OutlinedTextField(msg, { msg = it }, label = { Text(Strings.ghCommitMsg) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            }
-        },
+        title = Strings.ghCreateFile.lowercase(),
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = Strings.create,
+                enabled = !cr,
                 onClick = {
-                    if (fn.isBlank() || cr) return@TextButton
+                    if (fn.isBlank() || cr) return@AiModuleTextAction
                     cr = true
                     val p = if (curPath.isNotBlank()) "$curPath/$fn" else fn
                     s.launch {
@@ -357,13 +349,19 @@ internal fun CreateFileDialog(repo: GHRepo, curPath: String, branch: String, onD
                         if (ok) onDone() else cr = false
                     }
                 },
-                enabled = !cr,
-            ) { MonoLabel(Strings.create, palette.accent) }
+                tint = palette.accent,
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { MonoLabel(Strings.cancel, palette.textSecondary) }
+            AiModuleTextAction(label = Strings.cancel, onClick = onDismiss, tint = palette.textSecondary)
         },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiModuleTextField(fn, { fn = it }, label = Strings.ghFilePath)
+            AiModuleTextField(ct, { ct = it }, label = Strings.ghFileContent, minLines = 4, maxLines = 8)
+            AiModuleTextField(msg, { msg = it }, label = Strings.ghCommitMsg)
+        }
+    }
 }
 
 @Composable
@@ -372,29 +370,31 @@ internal fun DeleteFileDialog(repo: GHRepo, file: GHContent, branch: String, onD
     val ctx = LocalContext.current
     val s = rememberCoroutineScope()
     val palette = AiModuleTheme.colors
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.surface,
-        title = { MonoLabel("> ${Strings.ghDeleteFile.lowercase()}", palette.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${file.name}?", fontSize = 13.sp, color = palette.textPrimary, fontFamily = JetBrainsMono)
-                OutlinedTextField(msg, { msg = it }, label = { Text(Strings.ghCommitMsg) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            }
-        },
+        title = Strings.ghDeleteFile.lowercase(),
         confirmButton = {
-            TextButton(onClick = {
-                s.launch {
-                    val ok = GitHubManager.deleteFile(ctx, repo.owner, repo.name, file.path, msg, file.sha, branch)
-                    Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                    if (ok) onDone()
-                }
-            }) { MonoLabel(Strings.ghDeleteFile, palette.error) }
+            AiModuleTextAction(
+                label = Strings.ghDeleteFile,
+                onClick = {
+                    s.launch {
+                        val ok = GitHubManager.deleteFile(ctx, repo.owner, repo.name, file.path, msg, file.sha, branch)
+                        Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        if (ok) onDone()
+                    }
+                },
+                tint = palette.error,
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { MonoLabel(Strings.cancel, palette.textSecondary) }
+            AiModuleTextAction(label = Strings.cancel, onClick = onDismiss, tint = palette.textSecondary)
         },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("${file.name}?", fontSize = 13.sp, color = palette.textPrimary, fontFamily = JetBrainsMono)
+            AiModuleTextField(msg, { msg = it }, label = Strings.ghCommitMsg)
+        }
+    }
 }
 
 @Composable
@@ -407,30 +407,15 @@ private fun CreateGistDialog(onDismiss: () -> Unit, onCreated: () -> Unit) {
     val ctx = LocalContext.current
     val s = rememberCoroutineScope()
     val palette = AiModuleTheme.colors
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.surface,
-        title = { MonoLabel("> ${Strings.ghNewGist.lowercase()}", palette.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(desc, { desc = it }, label = { Text(Strings.ghRepoDesc) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(fname, { fname = it }, label = { Text(Strings.ghFilePath) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(content, { content = it }, label = { Text(Strings.ghFileContent) }, modifier = Modifier.fillMaxWidth().height(140.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Switch(
-                        checked = isPublic,
-                        onCheckedChange = { isPublic = it },
-                        colors = SwitchDefaults.colors(checkedTrackColor = palette.accent),
-                    )
-                    Text(if (isPublic) Strings.ghPublic else Strings.ghPrivate, color = palette.textPrimary, fontFamily = JetBrainsMono, fontSize = 12.sp)
-                }
-                if (creating) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = palette.accent)
-            }
-        },
+        title = Strings.ghNewGist.lowercase(),
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = Strings.create,
+                enabled = !creating,
                 onClick = {
-                    if (fname.isBlank() || content.isBlank() || creating) return@TextButton
+                    if (fname.isBlank() || content.isBlank() || creating) return@AiModuleTextAction
                     creating = true
                     s.launch {
                         val ok = GitHubManager.createGist(ctx, desc, isPublic, mapOf(fname to content))
@@ -438,13 +423,25 @@ private fun CreateGistDialog(onDismiss: () -> Unit, onCreated: () -> Unit) {
                         if (ok) onCreated() else creating = false
                     }
                 },
-                enabled = !creating,
-            ) { MonoLabel(Strings.create, palette.accent) }
+                tint = palette.accent,
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { MonoLabel(Strings.cancel, palette.textSecondary) }
+            AiModuleTextAction(label = Strings.cancel, onClick = onDismiss, tint = palette.textSecondary)
         },
-    )
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiModuleTextField(desc, { desc = it }, label = Strings.ghRepoDesc)
+            AiModuleTextField(fname, { fname = it }, label = Strings.ghFilePath)
+            AiModuleTextField(content, { content = it }, label = Strings.ghFileContent, minLines = 4, maxLines = 10)
+            AiModuleCheckRow(
+                label = if (isPublic) Strings.ghPublic else Strings.ghPrivate,
+                checked = isPublic,
+                onToggle = { isPublic = !isPublic },
+            )
+            if (creating) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = palette.accent)
+        }
+    }
 }
 
 @Composable
@@ -454,31 +451,35 @@ internal fun CreateBranchDialog(repo: GHRepo, branches: List<String>, onDismiss:
     val ctx = LocalContext.current
     val s = rememberCoroutineScope()
     val palette = AiModuleTheme.colors
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.surface,
-        title = { MonoLabel("> ${Strings.ghNewBranch.lowercase()}", palette.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(nm, { nm = it }, label = { Text(Strings.ghBranchName) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Text(Strings.ghFromBranch, fontSize = 11.sp, color = palette.textSecondary, fontFamily = JetBrainsMono)
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    branches.forEach { b -> BC(b, b == fr) { fr = b } }
-                }
-            }
-        },
+        title = Strings.ghNewBranch.lowercase(),
         confirmButton = {
-            TextButton(onClick = {
-                if (nm.isBlank()) return@TextButton
-                s.launch {
-                    val ok = GitHubManager.createBranch(ctx, repo.owner, repo.name, nm, fr)
-                    Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                    if (ok) onDone()
-                }
-            }) { MonoLabel(Strings.create, palette.accent) }
+            AiModuleTextAction(
+                label = Strings.create,
+                onClick = {
+                    if (nm.isBlank()) return@AiModuleTextAction
+                    s.launch {
+                        val ok = GitHubManager.createBranch(ctx, repo.owner, repo.name, nm, fr)
+                        Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        if (ok) onDone()
+                    }
+                },
+                tint = palette.accent,
+            )
         },
-        dismissButton = { TextButton(onClick = onDismiss) { MonoLabel(Strings.cancel, palette.textSecondary) } },
-    )
+        dismissButton = {
+            AiModuleTextAction(label = Strings.cancel, onClick = onDismiss, tint = palette.textSecondary)
+        },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiModuleTextField(nm, { nm = it }, label = Strings.ghBranchName)
+            Text(Strings.ghFromBranch, fontSize = 11.sp, color = palette.textSecondary, fontFamily = JetBrainsMono)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                branches.forEach { b -> BC(b, b == fr) { fr = b } }
+            }
+        }
+    }
 }
 
 @Composable
@@ -488,28 +489,32 @@ internal fun CreateIssueDialog(repo: GHRepo, onDismiss: () -> Unit, onDone: () -
     val ctx = LocalContext.current
     val s = rememberCoroutineScope()
     val palette = AiModuleTheme.colors
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.surface,
-        title = { MonoLabel("> ${Strings.ghNewIssue.lowercase()}", palette.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(t, { t = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(b, { b = it }, label = { Text(Strings.ghRepoDesc) }, modifier = Modifier.fillMaxWidth().height(100.dp), maxLines = 6)
-            }
-        },
+        title = Strings.ghNewIssue.lowercase(),
         confirmButton = {
-            TextButton(onClick = {
-                if (t.isBlank()) return@TextButton
-                s.launch {
-                    val ok = GitHubManager.createIssue(ctx, repo.owner, repo.name, t, b)
-                    Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                    if (ok) onDone()
-                }
-            }) { MonoLabel(Strings.create, palette.accent) }
+            AiModuleTextAction(
+                label = Strings.create,
+                onClick = {
+                    if (t.isBlank()) return@AiModuleTextAction
+                    s.launch {
+                        val ok = GitHubManager.createIssue(ctx, repo.owner, repo.name, t, b)
+                        Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        if (ok) onDone()
+                    }
+                },
+                tint = palette.accent,
+            )
         },
-        dismissButton = { TextButton(onClick = onDismiss) { MonoLabel(Strings.cancel, palette.textSecondary) } },
-    )
+        dismissButton = {
+            AiModuleTextAction(label = Strings.cancel, onClick = onDismiss, tint = palette.textSecondary)
+        },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiModuleTextField(t, { t = it }, label = "Title")
+            AiModuleTextField(b, { b = it }, label = Strings.ghRepoDesc, minLines = 4, maxLines = 6)
+        }
+    }
 }
 
 @Composable
@@ -521,36 +526,40 @@ internal fun CreatePRDialog(repo: GHRepo, branches: List<String>, onDismiss: () 
     val ctx = LocalContext.current
     val s = rememberCoroutineScope()
     val palette = AiModuleTheme.colors
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.surface,
-        title = { MonoLabel("> ${Strings.ghNewPR.lowercase()}", palette.textPrimary) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(t, { t = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(b, { b = it }, label = { Text(Strings.ghRepoDesc) }, modifier = Modifier.fillMaxWidth().height(80.dp), maxLines = 4)
-                Text(Strings.ghHead, fontSize = 11.sp, color = palette.textSecondary, fontFamily = JetBrainsMono)
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    branches.forEach { br -> BC(br, br == head) { head = br } }
-                }
-                Text(Strings.ghBase, fontSize = 11.sp, color = palette.textSecondary, fontFamily = JetBrainsMono)
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    branches.forEach { br -> BC(br, br == base) { base = br } }
-                }
-            }
-        },
+        title = Strings.ghNewPR.lowercase(),
         confirmButton = {
-            TextButton(onClick = {
-                if (t.isBlank() || head == base) return@TextButton
-                s.launch {
-                    val ok = GitHubManager.createPullRequest(ctx, repo.owner, repo.name, t, b, head, base)
-                    Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                    if (ok) onDone()
-                }
-            }) { MonoLabel(Strings.create, palette.accent) }
+            AiModuleTextAction(
+                label = Strings.create,
+                onClick = {
+                    if (t.isBlank() || head == base) return@AiModuleTextAction
+                    s.launch {
+                        val ok = GitHubManager.createPullRequest(ctx, repo.owner, repo.name, t, b, head, base)
+                        Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        if (ok) onDone()
+                    }
+                },
+                tint = palette.accent,
+            )
         },
-        dismissButton = { TextButton(onClick = onDismiss) { MonoLabel(Strings.cancel, palette.textSecondary) } },
-    )
+        dismissButton = {
+            AiModuleTextAction(label = Strings.cancel, onClick = onDismiss, tint = palette.textSecondary)
+        },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiModuleTextField(t, { t = it }, label = "Title")
+            AiModuleTextField(b, { b = it }, label = Strings.ghRepoDesc, minLines = 3, maxLines = 4)
+            Text(Strings.ghHead, fontSize = 11.sp, color = palette.textSecondary, fontFamily = JetBrainsMono)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                branches.forEach { br -> BC(br, br == head) { head = br } }
+            }
+            Text(Strings.ghBase, fontSize = 11.sp, color = palette.textSecondary, fontFamily = JetBrainsMono)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                branches.forEach { br -> BC(br, br == base) { base = br } }
+            }
+        }
+    }
 }
 
 @Composable
@@ -680,17 +689,31 @@ internal fun DispatchWorkflowDialog(
         inputValues = schema?.inputs.orEmpty().associate { it.key to it.defaultValue }
     }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.surface,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Rounded.PlayArrow, null, Modifier.size(18.dp), tint = palette.accent)
-                MonoLabel("> ${Strings.ghRunWorkflow.lowercase()}", palette.textPrimary)
-            }
+        title = "\u25B8  ${Strings.ghRunWorkflow.lowercase()}",
+        confirmButton = {
+            AiModuleTextAction(
+                label = Strings.ghRunWorkflow,
+                enabled = !dispatching && schema != null,
+                onClick = {
+                    if (selectedWf == null || dispatching) return@AiModuleTextAction
+                    dispatching = true
+                    s.launch {
+                        val ok = GitHubManager.dispatchWorkflow(ctx, repo.owner, repo.name, selectedWf!!.id, selectedBranch, inputValues.filterValues { it.isNotBlank() })
+                        Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        dispatching = false
+                        if (ok) onDone()
+                    }
+                },
+                tint = if (dispatching || schema == null) palette.textMuted else palette.accent,
+            )
         },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        dismissButton = {
+            AiModuleTextAction(label = Strings.cancel, onClick = onDismiss, tint = palette.textSecondary)
+        },
+    ) {
+        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(Strings.ghWorkflows, fontSize = 11.sp, color = palette.textSecondary, fontFamily = JetBrainsMono)
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     workflows.forEach { wf ->
@@ -702,10 +725,8 @@ internal fun DispatchWorkflowDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Icon(
-                                Icons.Rounded.Settings,
-                                null,
-                                Modifier.size(14.dp),
+                            AiModuleGlyph(
+                                glyph = GhGlyphs.SETTINGS,
                                 tint = if (selectedWf == wf) palette.accent else palette.textSecondary,
                             )
                             Column(Modifier.weight(1f)) {
@@ -724,7 +745,7 @@ internal fun DispatchWorkflowDialog(
                                 )
                             }
                             if (selectedWf == wf) {
-                                Icon(Icons.Rounded.Check, null, Modifier.size(12.dp), tint = palette.accent)
+                                AiModuleGlyph(glyph = GhGlyphs.CHECK, tint = palette.accent)
                             }
                         }
                     }
@@ -771,13 +792,11 @@ internal fun DispatchWorkflowDialog(
                                     choices.forEach { option -> BC(option, inputValues[input.key] == option) { inputValues = inputValues + (input.key to option) } }
                                 }
                             } else {
-                                OutlinedTextField(
+                                AiModuleTextField(
                                     value = inputValues[input.key].orEmpty(),
                                     onValueChange = { inputValues = inputValues + (input.key to it) },
-                                    label = { Text(input.key) },
-                                    textStyle = TextStyle(fontSize = 12.sp),
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = input.type.lowercase() != "environment",
+                                    label = input.key,
+                                    maxLines = if (input.type.lowercase() == "environment") 4 else 1,
                                 )
                             }
                         }
@@ -793,30 +812,8 @@ internal fun DispatchWorkflowDialog(
                         Text(Strings.ghRunning, fontSize = 11.sp, color = palette.accent, fontFamily = JetBrainsMono)
                     }
                 }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (selectedWf == null || dispatching) return@TextButton
-                    dispatching = true
-                    s.launch {
-                        val ok = GitHubManager.dispatchWorkflow(ctx, repo.owner, repo.name, selectedWf!!.id, selectedBranch, inputValues.filterValues { it.isNotBlank() })
-                        Toast.makeText(ctx, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                        dispatching = false
-                        if (ok) onDone()
-                    }
-                },
-                enabled = !dispatching && schema != null,
-            ) {
-                MonoLabel(
-                    Strings.ghRunWorkflow,
-                    if (dispatching || schema == null) palette.textMuted else palette.accent,
-                )
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { MonoLabel(Strings.cancel, palette.textSecondary) } },
-    )
+        }
+    }
 }
 
 private fun dialogDispatchInputChoices(input: GHWorkflowDispatchInput): List<String> = when {
