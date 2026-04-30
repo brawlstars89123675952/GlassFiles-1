@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import com.glassfiles.ui.components.AiPickerSheet
+import com.glassfiles.ui.theme.JetBrainsMono
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
