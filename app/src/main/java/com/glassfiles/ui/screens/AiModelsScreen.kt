@@ -263,7 +263,7 @@ private fun ModelsBody(
         ) {
             items(list) { model ->
                 ModelRow(model)
-                TerminalHairline()
+                AiModuleHairline()
             }
         }
     }
