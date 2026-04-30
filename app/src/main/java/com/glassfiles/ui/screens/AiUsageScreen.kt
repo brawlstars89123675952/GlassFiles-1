@@ -39,13 +39,13 @@ import com.glassfiles.data.ai.usage.AiUsageBucket
 import com.glassfiles.data.ai.usage.AiUsageStore
 import com.glassfiles.data.ai.usage.AiUsageWindow
 import com.glassfiles.data.ai.usage.summarise
-import com.glassfiles.ui.screens.ai.terminal.AgentTerminalDarkColors
-import com.glassfiles.ui.screens.ai.terminal.JetBrainsMono
-import com.glassfiles.ui.screens.ai.terminal.TerminalHairline
-import com.glassfiles.ui.screens.ai.terminal.TerminalKeyValueRow
-import com.glassfiles.ui.screens.ai.terminal.TerminalPillButton
-import com.glassfiles.ui.screens.ai.terminal.TerminalScreenScaffold
-import com.glassfiles.ui.screens.ai.terminal.TerminalSectionLabel
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleKeyValueRow
+import com.glassfiles.ui.components.AiModulePillButton
+import com.glassfiles.ui.components.AiModuleScreenScaffold
+import com.glassfiles.ui.components.AiModuleSectionLabel
+import com.glassfiles.ui.theme.AiModuleTheme
+import com.glassfiles.ui.theme.JetBrainsMono
 
 /**
  * Local AI usage breakdown screen. Reads [AiUsageStore], computes
