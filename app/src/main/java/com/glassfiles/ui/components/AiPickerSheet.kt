@@ -71,7 +71,7 @@ fun <T> AiPickerSheet(
     onDismiss: () -> Unit,
     onSelect: (T) -> Unit,
 ) {
-    val colors = AgentTerminalDarkColors
+    val colors = AiModuleDarkColors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var query by remember { mutableStateOf(TextFieldValue("")) }
 
