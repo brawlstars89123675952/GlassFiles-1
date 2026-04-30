@@ -59,15 +59,17 @@ fun AiModulePageBar(
             .padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "back",
-                    modifier = Modifier.size(18.dp),
-                    tint = colors.textPrimary,
-                )
-            }
-            Spacer(Modifier.width(4.dp))
+            // Back glyph — JetBrainsMono "←" instead of Material icon to match the rest of the bar.
+            AiModuleGlyphAction(
+                glyph = "\u2190",
+                onClick = onBack,
+                contentDescription = "back",
+                tint = colors.textPrimary,
+            )
+            Spacer(Modifier.width(2.dp))
+            // Title takes whatever space is left after the trailing actions
+            // and ellipsizes — fixes the long-name overflow that pushed
+            // icons off-screen for repos like "GKI_KernelSU_SUSFS-main".
             Text(
                 text = title,
                 color = colors.textPrimary,
@@ -75,9 +77,14 @@ fun AiModulePageBar(
                 fontWeight = FontWeight.Medium,
                 fontSize = AiModuleTheme.type.topBarTitle,
                 lineHeight = 1.25.em,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
             )
-            Spacer(Modifier.weight(1f))
-            if (trailing != null) trailing()
+            if (trailing != null) {
+                Spacer(Modifier.width(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) { trailing() }
+            }
         }
         if (!subtitle.isNullOrBlank()) {
             Row(Modifier.fillMaxWidth().padding(start = 44.dp, top = 1.dp)) {
@@ -87,12 +94,71 @@ fun AiModulePageBar(
                     fontFamily = JetBrainsMono,
                     fontSize = 11.sp,
                     lineHeight = 1.2.em,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
             }
         }
         Spacer(Modifier.height(4.dp))
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.border))
     }
+}
+
+/**
+ * Square 36dp clickable cell rendering a single JetBrainsMono glyph.
+ * Use this in place of `IconButton { Icon(Icons.Rounded.X, …) }` so the
+ * AiModule chrome stays purely typographic and never bleeds in
+ * Material-icon visuals.
+ */
+@Composable
+fun AiModuleGlyphAction(
+    glyph: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    tint: Color = AiModuleTheme.colors.textSecondary,
+    fontSize: androidx.compose.ui.unit.TextUnit = 16.sp,
+    contentDescription: String? = null,
+) {
+    val effective = if (enabled) tint else tint.copy(alpha = 0.35f)
+    Box(
+        modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .let { if (enabled) it.clickable(onClick = onClick) else it },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = glyph,
+            color = effective,
+            fontFamily = JetBrainsMono,
+            fontWeight = FontWeight.Medium,
+            fontSize = fontSize,
+            lineHeight = 1.em,
+        )
+    }
+}
+
+/**
+ * Inline JetBrainsMono glyph with no click target — for status badges
+ * in lists / cards where Material `Icon(...)` would be used otherwise.
+ */
+@Composable
+fun AiModuleGlyph(
+    glyph: String,
+    modifier: Modifier = Modifier,
+    tint: Color = AiModuleTheme.colors.textSecondary,
+    fontSize: androidx.compose.ui.unit.TextUnit = 14.sp,
+) {
+    Text(
+        text = glyph,
+        color = tint,
+        fontFamily = JetBrainsMono,
+        fontWeight = FontWeight.Medium,
+        fontSize = fontSize,
+        lineHeight = 1.em,
+        modifier = modifier,
+    )
 }
 
 @Composable

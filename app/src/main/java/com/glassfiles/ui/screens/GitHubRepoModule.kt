@@ -53,9 +53,15 @@ import androidx.compose.material.icons.outlined.Link
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.*
 import com.glassfiles.notifications.GitHubNotificationTarget
+import com.glassfiles.ui.components.AiModuleAlertDialog
+import com.glassfiles.ui.components.AiModuleGlyph
+import com.glassfiles.ui.components.AiModuleGlyphAction
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModulePillButton
 import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSearchField
+import com.glassfiles.ui.components.AiModuleTextAction
+import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -117,7 +123,6 @@ internal fun RepoDetailScreen(
     var fileContent by remember { mutableStateOf<String?>(null) }; var openedFile by remember { mutableStateOf<GHContent?>(null) }; var editingFile by remember { mutableStateOf<GHContent?>(null) }
     var repoQuery by rememberSaveable(repo.fullName) { mutableStateOf("") }
     var cloneProgress by remember { mutableStateOf<String?>(null) }; var isStarred by remember { mutableStateOf(false) }
-    var isWatching by remember { mutableStateOf(false) }
     var selectedBranch by rememberSaveable(repo.fullName) { mutableStateOf(repo.defaultBranch) }
     val childCache = remember(repo.fullName, selectedBranch) { mutableStateMapOf<String, List<GHContent>>() }
     var expandedPaths by rememberSaveable(
@@ -219,7 +224,7 @@ internal fun RepoDetailScreen(
     }
     BackHandler(onBack = ::handleRepoBack)
 
-    LaunchedEffect(Unit) { isStarred = GitHubManager.isStarred(context, repo.owner, repo.name); isWatching = GitHubManager.isWatching(context, repo.owner, repo.name); branches = GitHubManager.getBranches(context, repo.owner, repo.name) }
+    LaunchedEffect(Unit) { isStarred = GitHubManager.isStarred(context, repo.owner, repo.name); branches = GitHubManager.getBranches(context, repo.owner, repo.name) }
     LaunchedEffect(selectedTab, currentPath, selectedBranch, readmeReloadNonce) { loading = true; when (selectedTab) {
         RepoTab.FILES -> {
             val rootItems = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch)
@@ -417,32 +422,41 @@ internal fun RepoDetailScreen(
                     openedFile = null
                 },
                 trailing = {
-                    IconButton(onClick = {
-                        val clip = android.content.ClipData.newPlainText("code", safeFileContent)
-                        (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
-                        Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
-                    }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.ContentCopy, null, Modifier.size(18.dp), tint = viewerPalette.textSecondary)
-                    }
-                    IconButton(onClick = {
-                        scope.launch {
-                            val dest = File(
-                                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                                "GlassFiles_Git/${safeOpenedFile.name}"
-                            )
-                            val ok = GitHubManager.downloadFile(
-                                context, repo.owner, repo.name, safeOpenedFile.path, dest, selectedBranch
-                            )
-                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                        }
-                    }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Download, null, Modifier.size(18.dp), tint = viewerPalette.textSecondary)
-                    }
-                    IconButton(onClick = {
-                        editingFile = safeOpenedFile
-                    }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = viewerPalette.accent)
-                    }
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.COPY,
+                        onClick = {
+                            val clip = android.content.ClipData.newPlainText("code", safeFileContent)
+                            (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
+                            Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                        },
+                        tint = viewerPalette.textSecondary,
+                        fontSize = 12.sp,
+                        contentDescription = "copy",
+                    )
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.DOWNLOAD,
+                        onClick = {
+                            scope.launch {
+                                val dest = File(
+                                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                                    "GlassFiles_Git/${safeOpenedFile.name}"
+                                )
+                                val ok = GitHubManager.downloadFile(
+                                    context, repo.owner, repo.name, safeOpenedFile.path, dest, selectedBranch
+                                )
+                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        tint = viewerPalette.textSecondary,
+                        fontSize = 12.sp,
+                        contentDescription = "download",
+                    )
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.EDIT,
+                        onClick = { editingFile = safeOpenedFile },
+                        tint = viewerPalette.accent,
+                        contentDescription = "edit",
+                    )
                 },
             )
             if (isImage) {
@@ -504,48 +518,80 @@ internal fun RepoDetailScreen(
             onBack = ::handleRepoBack,
             trailing = {
                 if (onOpenAiAgent != null) {
-                    IconButton(
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.AI,
                         onClick = { onOpenAiAgent(repo.fullName, selectedBranch, null) },
-                        modifier = Modifier.size(36.dp),
-                    ) {
-                        Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp), tint = palette.accent)
-                    }
+                        tint = palette.accent,
+                        contentDescription = "ai agent",
+                    )
                 }
-                IconButton(
-                    onClick = { scope.launch { if (isStarred) GitHubManager.unstarRepo(context, repo.owner, repo.name) else GitHubManager.starRepo(context, repo.owner, repo.name); isStarred = !isStarred } },
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(if (isStarred) Icons.Rounded.Star else Icons.Rounded.StarBorder, null, Modifier.size(18.dp), tint = if (isStarred) palette.warning else palette.textSecondary)
+                AiModuleGlyphAction(
+                    glyph = if (isStarred) GhGlyphs.STAR_ON else GhGlyphs.STAR_OFF,
+                    onClick = {
+                        scope.launch {
+                            if (isStarred) GitHubManager.unstarRepo(context, repo.owner, repo.name)
+                            else GitHubManager.starRepo(context, repo.owner, repo.name)
+                            isStarred = !isStarred
+                        }
+                    },
+                    tint = if (isStarred) palette.warning else palette.textSecondary,
+                    contentDescription = "star",
+                )
+                if (canAdmin) {
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.SETTINGS,
+                        onClick = { showRepoSettings = true },
+                        tint = palette.textSecondary,
+                        contentDescription = "settings",
+                    )
                 }
-                IconButton(
-                    onClick = { scope.launch { if (isWatching) GitHubManager.unwatchRepo(context, repo.owner, repo.name) else GitHubManager.watchRepo(context, repo.owner, repo.name); isWatching = !isWatching } },
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(if (isWatching) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, Modifier.size(18.dp), tint = if (isWatching) palette.accent else palette.textSecondary)
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.COMPARE,
+                    onClick = { showCompare = true },
+                    tint = palette.accent,
+                    contentDescription = "compare",
+                )
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.FORK,
+                    onClick = {
+                        scope.launch {
+                            val ok = GitHubManager.forkRepo(context, repo.owner, repo.name)
+                            Toast.makeText(context, if (ok) Strings.ghForked else Strings.error, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    tint = palette.accent,
+                    contentDescription = "fork",
+                )
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.DOWNLOAD,
+                    onClick = {
+                        cloneProgress = "Starting..."
+                        scope.launch {
+                            val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git")
+                            val ok = GitHubManager.cloneRepo(context, repo.owner, repo.name, dest) { cloneProgress = it }
+                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                            cloneProgress = null
+                        }
+                    },
+                    tint = palette.accent,
+                    fontSize = 12.sp,
+                    contentDescription = "clone",
+                )
+                if (onMinimize != null) {
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.PIP,
+                        onClick = onMinimize,
+                        tint = palette.textSecondary,
+                        contentDescription = "minimize",
+                    )
                 }
-                if (canAdmin) IconButton(onClick = { showRepoSettings = true }, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Settings, null, Modifier.size(18.dp), tint = palette.textSecondary)
-                }
-                IconButton(onClick = { showCompare = true }, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.CompareArrows, null, Modifier.size(18.dp), tint = palette.accent)
-                }
-                IconButton(
-                    onClick = { scope.launch { val ok = GitHubManager.forkRepo(context, repo.owner, repo.name); Toast.makeText(context, if (ok) Strings.ghForked else Strings.error, Toast.LENGTH_SHORT).show() } },
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(Icons.Rounded.CallSplit, null, Modifier.size(18.dp), tint = palette.accent)
-                }
-                IconButton(
-                    onClick = { cloneProgress = "Starting..."; scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git"); val ok = GitHubManager.cloneRepo(context, repo.owner, repo.name, dest) { cloneProgress = it }; Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show(); cloneProgress = null } },
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(Icons.Rounded.Download, null, Modifier.size(18.dp), tint = palette.accent)
-                }
-                if (onMinimize != null) IconButton(onClick = onMinimize, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.PictureInPictureAlt, null, Modifier.size(18.dp), tint = palette.textSecondary)
-                }
-                if (onClose != null) IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = palette.error)
+                if (onClose != null) {
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.CLOSE,
+                        onClick = onClose,
+                        tint = palette.error,
+                        contentDescription = "close",
+                    )
                 }
             },
         )
@@ -1207,19 +1253,25 @@ private fun PullRequestDetailScreen(
             subtitle = repo.name,
             onBack = onBack,
             trailing = {
-                IconButton(onClick = { scope.launch { refreshPull() } }, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = prPalette.accent)
-                }
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.REFRESH,
+                    onClick = { scope.launch { refreshPull() } },
+                    tint = prPalette.accent,
+                    contentDescription = "refresh",
+                )
                 if (currentHtmlUrl.isNotBlank()) {
-                    IconButton(onClick = {
-                        try {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentHtmlUrl)))
-                        } catch (_: Exception) {
-                            Toast.makeText(context, Strings.error, Toast.LENGTH_SHORT).show()
-                        }
-                    }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = prPalette.accent)
-                    }
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.OPEN_NEW,
+                        onClick = {
+                            try {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentHtmlUrl)))
+                            } catch (_: Exception) {
+                                Toast.makeText(context, Strings.error, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        tint = prPalette.accent,
+                        contentDescription = "open in browser",
+                    )
                 }
             }
         )
@@ -2728,43 +2780,49 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
             onBack = onBack,
             trailing = {
                 if (detail != null) {
-                    IconButton(onClick = { showReactions = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.EmojiEmotions, null, Modifier.size(18.dp), tint = issuePalette.accent)
-                    }
-                    IconButton(onClick = { showTimeline = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Timeline, null, Modifier.size(18.dp), tint = issuePalette.accent)
-                    }
-                    IconButton(onClick = { showMetaDialog = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Tune, null, Modifier.size(18.dp), tint = issuePalette.accent)
-                    }
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.REACT,
+                        onClick = { showReactions = true },
+                        tint = issuePalette.accent,
+                        fontSize = 12.sp,
+                        contentDescription = "reactions",
+                    )
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.TIMELINE,
+                        onClick = { showTimeline = true },
+                        tint = issuePalette.accent,
+                        contentDescription = "timeline",
+                    )
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.TUNE,
+                        onClick = { showMetaDialog = true },
+                        tint = issuePalette.accent,
+                        contentDescription = "metadata",
+                    )
                     if (repo.canWrite()) {
-                        IconButton(onClick = { showLockDialog = true }, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                if (detail!!.locked) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
-                                null,
-                                Modifier.size(18.dp),
-                                tint = if (detail!!.locked) GitHubSuccessGreen else issuePalette.warning,
-                            )
-                        }
+                        AiModuleGlyphAction(
+                            glyph = if (detail!!.locked) GhGlyphs.UNLOCK else GhGlyphs.LOCK,
+                            onClick = { showLockDialog = true },
+                            tint = if (detail!!.locked) GitHubSuccessGreen else issuePalette.warning,
+                            contentDescription = if (detail!!.locked) "unlock" else "lock",
+                        )
                         val isOpen = detail!!.state == "open"
-                        IconButton(onClick = {
-                            scope.launch {
-                                val ok = if (isOpen) {
-                                    GitHubManager.closeIssue(context, repo.owner, repo.name, issueNumber)
-                                } else {
-                                    GitHubManager.reopenIssue(context, repo.owner, repo.name, issueNumber)
+                        AiModuleGlyphAction(
+                            glyph = if (isOpen) GhGlyphs.CLOSE else GhGlyphs.REFRESH,
+                            onClick = {
+                                scope.launch {
+                                    val ok = if (isOpen) {
+                                        GitHubManager.closeIssue(context, repo.owner, repo.name, issueNumber)
+                                    } else {
+                                        GitHubManager.reopenIssue(context, repo.owner, repo.name, issueNumber)
+                                    }
+                                    if (ok) refreshIssueDetail()
+                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                                 }
-                                if (ok) refreshIssueDetail()
-                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                            }
-                        }, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                if (isOpen) Icons.Rounded.Close else Icons.Rounded.Refresh,
-                                null,
-                                Modifier.size(18.dp),
-                                tint = if (isOpen) GitHubErrorRed else GitHubSuccessGreen,
-                            )
-                        }
+                            },
+                            tint = if (isOpen) GitHubErrorRed else GitHubSuccessGreen,
+                            contentDescription = if (isOpen) "close issue" else "reopen issue",
+                        )
                     }
                 }
             },

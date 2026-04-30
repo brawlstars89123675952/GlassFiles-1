@@ -99,7 +99,13 @@ import coil.compose.AsyncImage
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.GHContent
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.ui.components.AiModuleAlertDialog
+import com.glassfiles.ui.components.AiModuleGlyph
+import com.glassfiles.ui.components.AiModuleGlyphAction
 import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleSearchField
+import com.glassfiles.ui.components.AiModuleTextAction
+import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.ui.theme.AiModuleSurface
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.Blue
@@ -709,54 +715,92 @@ private fun GitHubEditorTopBar(
         onBack = onBack,
         trailing = {
             if (onAskAi != null) {
-                IconButton(onClick = { onAskAi(null) }, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp), tint = palette.accent)
-                }
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.AI,
+                    onClick = { onAskAi(null) },
+                    tint = palette.accent,
+                    contentDescription = "ask ai",
+                )
             }
             if (!isImage) {
-                IconButton(onClick = onToggleSearch, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = if (showSearch) palette.accent else palette.textSecondary)
-                }
-                IconButton(onClick = onGoTo, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Tag, null, Modifier.size(18.dp), tint = palette.textSecondary)
-                }
-                if (hasOutline) IconButton(onClick = onOutline, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Code, null, Modifier.size(18.dp), tint = palette.textSecondary)
-                }
-                IconButton(onClick = onCopy, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.ContentCopy, null, Modifier.size(18.dp), tint = palette.textSecondary)
-                }
-                IconButton(onClick = onToggleLineNumbers, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.FindInPage, null, Modifier.size(18.dp), tint = if (lineNumbers) palette.accent else palette.textSecondary)
-                }
-                IconButton(onClick = onToggleWrap, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.WrapText, null, Modifier.size(18.dp), tint = if (wrapLines) palette.accent else palette.textSecondary)
-                }
-                if (canUndo) IconButton(onClick = onUndo, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Undo, null, Modifier.size(18.dp), tint = palette.accent)
-                }
-                if (canRedo) IconButton(onClick = onRedo, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Redo, null, Modifier.size(18.dp), tint = palette.accent)
-                }
-                IconButton(onClick = onCycleMode, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        when (mode) {
-                            GitHubEditorMode.EDIT -> if (isMarkdown) Icons.Rounded.MenuBook else Icons.Rounded.Visibility
-                            GitHubEditorMode.READ -> Icons.Rounded.Edit
-                            GitHubEditorMode.PREVIEW -> Icons.Rounded.Visibility
-                        },
-                        null,
-                        Modifier.size(18.dp),
-                        tint = palette.accent,
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.SEARCH,
+                    onClick = onToggleSearch,
+                    tint = if (showSearch) palette.accent else palette.textSecondary,
+                    contentDescription = "search",
+                )
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.HASH,
+                    onClick = onGoTo,
+                    tint = palette.textSecondary,
+                    contentDescription = "go to line",
+                )
+                if (hasOutline) {
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.OUTLINE,
+                        onClick = onOutline,
+                        tint = palette.textSecondary,
+                        contentDescription = "outline",
                     )
                 }
-                if (hasChanges) IconButton(onClick = onSave, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Save, null, Modifier.size(18.dp), tint = GitHubSuccessGreen)
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.COPY,
+                    onClick = onCopy,
+                    tint = palette.textSecondary,
+                    fontSize = 12.sp,
+                    contentDescription = "copy",
+                )
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.LINES,
+                    onClick = onToggleLineNumbers,
+                    tint = if (lineNumbers) palette.accent else palette.textSecondary,
+                    fontSize = 12.sp,
+                    contentDescription = "toggle line numbers",
+                )
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.WRAP,
+                    onClick = onToggleWrap,
+                    tint = if (wrapLines) palette.accent else palette.textSecondary,
+                    contentDescription = "wrap",
+                )
+                if (canUndo) {
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.UNDO,
+                        onClick = onUndo,
+                        tint = palette.accent,
+                        contentDescription = "undo",
+                    )
+                }
+                if (canRedo) {
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.REDO,
+                        onClick = onRedo,
+                        tint = palette.accent,
+                        contentDescription = "redo",
+                    )
+                }
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.CYCLE,
+                    onClick = onCycleMode,
+                    tint = palette.accent,
+                    contentDescription = "cycle mode",
+                )
+                if (hasChanges) {
+                    AiModuleGlyphAction(
+                        glyph = GhGlyphs.SAVE,
+                        onClick = onSave,
+                        tint = GitHubSuccessGreen,
+                        contentDescription = "save",
+                    )
                 }
             } else {
-                IconButton(onClick = onOpenImage, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Download, null, Modifier.size(18.dp), tint = palette.accent)
-                }
+                AiModuleGlyphAction(
+                    glyph = GhGlyphs.DOWNLOAD,
+                    onClick = onOpenImage,
+                    tint = palette.accent,
+                    fontSize = 12.sp,
+                    contentDescription = "download",
+                )
             }
         },
     )
