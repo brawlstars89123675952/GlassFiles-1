@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -116,6 +119,12 @@ internal fun RepoDetailScreen(
     var cloneProgress by remember { mutableStateOf<String?>(null) }; var isStarred by remember { mutableStateOf(false) }
     var isWatching by remember { mutableStateOf(false) }
     var selectedBranch by rememberSaveable(repo.fullName) { mutableStateOf(repo.defaultBranch) }
+    val childCache = remember(repo.fullName, selectedBranch) { mutableStateMapOf<String, List<GHContent>>() }
+    var expandedPaths by rememberSaveable(
+        repo.fullName, selectedBranch,
+        stateSaver = listSaver<Set<String>, String>(save = { it.toList() }, restore = { it.toSet() }),
+    ) { mutableStateOf(setOf<String>()) }
+    var loadingPaths by remember(repo.fullName, selectedBranch) { mutableStateOf(setOf<String>()) }
     var showUpload by remember { mutableStateOf(false) }; var showCreateFile by remember { mutableStateOf(false) }
     var showCreateBranch by remember { mutableStateOf(false) }; var showCreateIssue by remember { mutableStateOf(false) }
     var showCreatePR by remember { mutableStateOf(false) }; var selectedIssue by remember { mutableStateOf<GHIssue?>(null) }
@@ -212,7 +221,11 @@ internal fun RepoDetailScreen(
 
     LaunchedEffect(Unit) { isStarred = GitHubManager.isStarred(context, repo.owner, repo.name); isWatching = GitHubManager.isWatching(context, repo.owner, repo.name); branches = GitHubManager.getBranches(context, repo.owner, repo.name) }
     LaunchedEffect(selectedTab, currentPath, selectedBranch, readmeReloadNonce) { loading = true; when (selectedTab) {
-        RepoTab.FILES -> contents = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch)
+        RepoTab.FILES -> {
+            val rootItems = GitHubManager.getRepoContents(context, repo.owner, repo.name, currentPath, selectedBranch)
+            contents = rootItems
+            childCache[currentPath] = rootItems
+        }
         RepoTab.COMMITS -> { commitsPage = 1; val r = GitHubManager.getCommits(context, repo.owner, repo.name, 1); commits = r; commitsHasMore = r.size >= 30 }
         RepoTab.ISSUES -> { issuesPage = 1; val r = GitHubManager.getIssues(context, repo.owner, repo.name, page = 1); issues = r; issuesHasMore = r.size >= 30 }
         RepoTab.PULLS -> { pullsPage = 1; val r = GitHubManager.getPullRequests(context, repo.owner, repo.name, page = 1); pulls = r; pullsHasMore = r.size >= 30 }
@@ -641,49 +654,93 @@ internal fun RepoDetailScreen(
             }
         }
         if (selectedTab in listOf(RepoTab.FILES, RepoTab.COMMITS, RepoTab.ISSUES, RepoTab.PULLS)) {
-            Row(
-                Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box(
-                    Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(AiModuleTheme.colors.background).padding(horizontal = 12.dp, vertical = 10.dp)
-                ) {
-                    if (repoQuery.isEmpty()) {
-                        Text(
-                            when (selectedTab) {
-                                RepoTab.FILES -> "Filter files"
-                                RepoTab.COMMITS -> "Filter commits"
-                                RepoTab.ISSUES -> "Filter issues"
-                                RepoTab.PULLS -> "Filter pull requests"
-                                else -> ""
-                            },
-                            color = AiModuleTheme.colors.textMuted,
-                            fontSize = 13.sp
+            val palette = AiModuleTheme.colors
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "> ",
+                        color = palette.textMuted,
+                        fontSize = 13.sp,
+                        fontFamily = JetBrainsMono,
+                    )
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        if (repoQuery.isEmpty()) {
+                            Text(
+                                when (selectedTab) {
+                                    RepoTab.FILES -> "filter files"
+                                    RepoTab.COMMITS -> "filter commits"
+                                    RepoTab.ISSUES -> "filter issues"
+                                    RepoTab.PULLS -> "filter pull requests"
+                                    else -> ""
+                                },
+                                color = palette.textMuted,
+                                fontSize = 13.sp,
+                                fontFamily = JetBrainsMono,
+                            )
+                        }
+                        BasicTextField(
+                            value = repoQuery,
+                            onValueChange = { repoQuery = it },
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = palette.textPrimary,
+                                fontSize = 13.sp,
+                                fontFamily = JetBrainsMono,
+                            ),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(palette.accent),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    BasicTextField(
-                        value = repoQuery,
-                        onValueChange = { repoQuery = it },
-                        textStyle = androidx.compose.ui.text.TextStyle(color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                if (repoQuery.isNotBlank()) {
-                    Box(
-                        Modifier.clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.background).clickable { repoQuery = "" }.padding(horizontal = 10.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Rounded.Close, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textSecondary)
+                    if (repoQuery.isNotBlank()) {
+                        Text(
+                            "[x]",
+                            color = palette.textMuted,
+                            fontSize = 12.sp,
+                            fontFamily = JetBrainsMono,
+                            modifier = Modifier.clickable { repoQuery = "" }.padding(start = 8.dp),
+                        )
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                AiModuleHairline()
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.10f)))
         if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
         else when (selectedTab) {
-            RepoTab.FILES -> FilesTab(filteredContents, listState = filesListState, canWrite = canWrite, onDirClick = { currentPath = it.path }, onFileClick = { scope.launch { openedFile = it; fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, it.path, selectedBranch) } }, onEdit = { openedFile = null; fileContent = null; editingFile = it }, onDelete = { deleteTarget = it }, onDownload = { scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${it.name}"); val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, it.path, dest, selectedBranch); Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show() } })
+            RepoTab.FILES -> FilesTab(
+                rootContents = filteredContents,
+                childCache = childCache,
+                expandedPaths = expandedPaths,
+                loadingPaths = loadingPaths,
+                listState = filesListState,
+                canWrite = canWrite,
+                onToggleDir = { item ->
+                    if (item.path in expandedPaths) {
+                        expandedPaths = expandedPaths - item.path
+                    } else {
+                        expandedPaths = expandedPaths + item.path
+                        if (item.path !in childCache && item.path !in loadingPaths) {
+                            loadingPaths = loadingPaths + item.path
+                            scope.launch {
+                                val children = GitHubManager.getRepoContents(context, repo.owner, repo.name, item.path, selectedBranch)
+                                childCache[item.path] = children
+                                loadingPaths = loadingPaths - item.path
+                            }
+                        }
+                    }
+                },
+                onOpenDir = { currentPath = it.path },
+                onFileClick = { scope.launch { openedFile = it; fileContent = GitHubManager.getFileContent(context, repo.owner, repo.name, it.path, selectedBranch) } },
+                onEdit = { openedFile = null; fileContent = null; editingFile = it },
+                onDelete = { deleteTarget = it },
+                onDownload = { scope.launch { val dest = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git/${it.name}"); val ok = GitHubManager.downloadFile(context, repo.owner, repo.name, it.path, dest, selectedBranch); Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show() } },
+                onCopyPath = { item ->
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("path", item.path))
+                    Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                },
+            )
             RepoTab.COMMITS -> CommitsTab(filteredCommits, commitsHasMore, { scope.launch { commitsPage++; val r = GitHubManager.getCommits(context, repo.owner, repo.name, commitsPage); if (r.size < 30) commitsHasMore = false; commits = commits + r } }, listState = commitsListState) { selectedCommitSha = it.sha }
             RepoTab.ISSUES -> IssuesTab(filteredIssues, issuesHasMore, { scope.launch { issuesPage++; val r = GitHubManager.getIssues(context, repo.owner, repo.name, page = issuesPage); if (r.size < 30) issuesHasMore = false; issues = issues + r } }, listState = issuesListState) { selectedIssue = it }
             RepoTab.PULLS -> PullsTab(filteredPulls, repo, { scope.launch { pulls = GitHubManager.getPullRequests(context, repo.owner, repo.name) } }, listState = pullsListState, onOpenDetail = { selectedPullNumber = it.number }) { prNumber -> selectedPRNumber = prNumber }
@@ -719,35 +776,123 @@ internal fun RepoDetailScreen(
     }
 }
 
+private data class FilesTreeRow(
+    val key: String,
+    val item: GHContent?,
+    val depth: Int,
+    val parentLines: List<Boolean>,
+    val isLastInParent: Boolean,
+    val isLoading: Boolean,
+)
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWrite: Boolean = true, onDirClick: (GHContent) -> Unit, onFileClick: (GHContent) -> Unit, onEdit: (GHContent) -> Unit, onDelete: (GHContent) -> Unit, onDownload: (GHContent) -> Unit) {
-    var expanded by remember { mutableStateOf<String?>(null) }
+internal fun FilesTab(
+    rootContents: List<GHContent>,
+    childCache: Map<String, List<GHContent>>,
+    expandedPaths: Set<String>,
+    loadingPaths: Set<String>,
+    listState: LazyListState,
+    canWrite: Boolean = true,
+    onToggleDir: (GHContent) -> Unit,
+    onOpenDir: (GHContent) -> Unit,
+    onFileClick: (GHContent) -> Unit,
+    onEdit: (GHContent) -> Unit,
+    onDelete: (GHContent) -> Unit,
+    onDownload: (GHContent) -> Unit,
+    onCopyPath: (GHContent) -> Unit,
+) {
     val palette = AiModuleTheme.colors
-    val sorted = remember(contents) {
-        contents.sortedWith(compareBy({ it.type != "dir" }, { it.name.lowercase() }))
-    }
     val rowFontSize = 14.sp
     val sizeFontSize = 12.sp
+    var menuFor by remember { mutableStateOf<String?>(null) }
+    var expandedFile by remember { mutableStateOf<String?>(null) }
+
+    val visibleNodes = remember(rootContents, childCache.toMap(), expandedPaths, loadingPaths) {
+        val out = mutableListOf<FilesTreeRow>()
+        fun build(items: List<GHContent>, depth: Int, parentLines: List<Boolean>) {
+            val sorted = items.sortedWith(compareBy({ it.type != "dir" }, { it.name.lowercase() }))
+            sorted.forEachIndexed { i, item ->
+                val isLast = i == sorted.lastIndex
+                out.add(FilesTreeRow(
+                    key = "${depth}|${item.path}",
+                    item = item,
+                    depth = depth,
+                    parentLines = parentLines,
+                    isLastInParent = isLast,
+                    isLoading = false,
+                ))
+                if (item.type == "dir" && item.path in expandedPaths) {
+                    val nextLines = parentLines + !isLast
+                    val children = childCache[item.path]
+                    if (children == null) {
+                        out.add(FilesTreeRow(
+                            key = "${item.path}::loading",
+                            item = null,
+                            depth = depth + 1,
+                            parentLines = nextLines,
+                            isLastInParent = true,
+                            isLoading = true,
+                        ))
+                    } else {
+                        build(children, depth + 1, nextLines)
+                    }
+                }
+            }
+        }
+        build(rootContents, 0, emptyList())
+        out.toList()
+    }
+
     LazyColumn(
         Modifier.fillMaxSize(),
         state = listState,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
     ) {
-        items(sorted) { item ->
-            val index = sorted.indexOf(item)
-            val isLast = index == sorted.lastIndex
-            val prefix = if (isLast) "\u2514\u2500 " else "\u251C\u2500 "
+        items(visibleNodes, key = { it.key }) { row ->
+            val prefix = buildString {
+                row.parentLines.forEach { hasMore -> append(if (hasMore) "\u2502  " else "   ") }
+                append(if (row.isLastInParent) "\u2514\u2500 " else "\u251C\u2500 ")
+            }
+            if (row.isLoading) {
+                Text(
+                    "${prefix}\u2026 loading",
+                    fontFamily = JetBrainsMono,
+                    fontSize = rowFontSize,
+                    lineHeight = rowFontSize,
+                    color = palette.textMuted,
+                )
+                return@items
+            }
+            val item = row.item ?: return@items
             val isDir = item.type == "dir"
+            val isExpanded = isDir && item.path in expandedPaths
+            val toggleGlyph = when {
+                isDir && isExpanded -> "\u25BE "
+                isDir -> "\u25B8 "
+                else -> "  "
+            }
+            val isHidden = item.name.startsWith(".")
+            val nameColor = when {
+                isDir -> palette.accent
+                isHidden -> palette.textSecondary
+                else -> palette.textPrimary
+            }
             val displayName = if (isDir) "${item.name}/" else item.name
-            val nameColor = if (isDir) palette.accent else palette.textPrimary
-            Column {
+            Box(Modifier.fillMaxWidth()) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            if (isDir) onDirClick(item)
-                            else expanded = if (expanded == item.path) null else item.path
-                        },
+                        .combinedClickable(
+                            onClick = {
+                                if (isDir) onToggleDir(item)
+                                else expandedFile = if (expandedFile == item.path) null else item.path
+                            },
+                            onLongClick = {
+                                if (isDir) menuFor = item.path
+                                else expandedFile = item.path
+                            },
+                        ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -756,6 +901,13 @@ internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWr
                         fontSize = rowFontSize,
                         lineHeight = rowFontSize,
                         color = palette.textMuted,
+                    )
+                    Text(
+                        toggleGlyph,
+                        fontFamily = JetBrainsMono,
+                        fontSize = rowFontSize,
+                        lineHeight = rowFontSize,
+                        color = if (isDir) palette.accent else palette.textMuted,
                     )
                     Text(
                         displayName,
@@ -776,20 +928,52 @@ internal fun FilesTab(contents: List<GHContent>, listState: LazyListState, canWr
                             color = palette.textMuted,
                             modifier = Modifier.padding(start = 8.dp),
                         )
+                    } else if (isDir && isExpanded) {
+                        val count = childCache[item.path]?.size
+                        if (count != null) {
+                            Text(
+                                "($count)",
+                                fontFamily = JetBrainsMono,
+                                fontSize = sizeFontSize,
+                                lineHeight = rowFontSize,
+                                color = palette.textMuted,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
                     }
                 }
-                AnimatedVisibility(expanded == item.path && !isDir) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(start = 24.dp, end = 4.dp, top = 4.dp, bottom = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                if (isDir && menuFor == item.path) {
+                    DropdownMenu(
+                        expanded = true,
+                        onDismissRequest = { menuFor = null },
+                        modifier = Modifier.background(palette.surface),
                     ) {
-                        Chip(Icons.Rounded.Visibility, "view") { onFileClick(item) }
-                        if (canWrite) Chip(Icons.Rounded.Edit, Strings.ghEditFile.lowercase()) { onEdit(item) }
-                        Chip(Icons.Rounded.Download, Strings.ghDownloadFile.lowercase()) { onDownload(item) }
-                        if (canWrite) Chip(Icons.Rounded.Delete, Strings.ghDeleteFile.lowercase(), palette.error) { onDelete(item) }
+                        DropdownMenuItem(
+                            text = { Text("> open in screen", color = palette.textPrimary, fontFamily = JetBrainsMono, fontSize = 13.sp) },
+                            onClick = { menuFor = null; onOpenDir(item) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("> copy path", color = palette.textPrimary, fontFamily = JetBrainsMono, fontSize = 13.sp) },
+                            onClick = { menuFor = null; onCopyPath(item) },
+                        )
                     }
+                }
+            }
+            AnimatedVisibility(expandedFile == item.path && !isDir) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = (12 + (row.parentLines.size + 1) * 18).dp,
+                            top = 4.dp,
+                            bottom = 6.dp,
+                        ),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Chip(Icons.Rounded.Visibility, "view") { onFileClick(item) }
+                    if (canWrite) Chip(Icons.Rounded.Edit, Strings.ghEditFile.lowercase()) { onEdit(item) }
+                    Chip(Icons.Rounded.Download, Strings.ghDownloadFile.lowercase()) { onDownload(item) }
+                    if (canWrite) Chip(Icons.Rounded.Delete, Strings.ghDeleteFile.lowercase(), palette.error) { onDelete(item) }
                 }
             }
         }
