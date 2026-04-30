@@ -45,5 +45,29 @@ fun AiTerminalMaterialBridge(content: @Composable () -> Unit) {
         errorContainer = terminal.surface,
         onErrorContainer = terminal.error,
     )
-    MaterialTheme(colorScheme = terminalScheme, content = content)
+    val baseTypography = MaterialTheme.typography
+    val terminalTypography = remember(baseTypography) {
+        baseTypography.copy(
+            displayLarge = baseTypography.displayLarge.copy(fontFamily = JetBrainsMono),
+            displayMedium = baseTypography.displayMedium.copy(fontFamily = JetBrainsMono),
+            displaySmall = baseTypography.displaySmall.copy(fontFamily = JetBrainsMono),
+            headlineLarge = baseTypography.headlineLarge.copy(fontFamily = JetBrainsMono),
+            headlineMedium = baseTypography.headlineMedium.copy(fontFamily = JetBrainsMono),
+            headlineSmall = baseTypography.headlineSmall.copy(fontFamily = JetBrainsMono),
+            titleLarge = baseTypography.titleLarge.copy(fontFamily = JetBrainsMono),
+            titleMedium = baseTypography.titleMedium.copy(fontFamily = JetBrainsMono),
+            titleSmall = baseTypography.titleSmall.copy(fontFamily = JetBrainsMono),
+            bodyLarge = baseTypography.bodyLarge.copy(fontFamily = JetBrainsMono),
+            bodyMedium = baseTypography.bodyMedium.copy(fontFamily = JetBrainsMono),
+            bodySmall = baseTypography.bodySmall.copy(fontFamily = JetBrainsMono),
+            labelLarge = baseTypography.labelLarge.copy(fontFamily = JetBrainsMono),
+            labelMedium = baseTypography.labelMedium.copy(fontFamily = JetBrainsMono),
+            labelSmall = baseTypography.labelSmall.copy(fontFamily = JetBrainsMono),
+        )
+    }
+    MaterialTheme(
+        colorScheme = terminalScheme,
+        typography = terminalTypography,
+        content = content,
+    )
 }
