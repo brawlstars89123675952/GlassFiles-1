@@ -114,7 +114,7 @@ fun AiUsageScreen(onBack: () -> Unit) {
                     WindowFlag(label = flag, active = active, onClick = { window = w })
                 }
             }
-            TerminalHairline()
+            AiModuleHairline()
 
             if (summary.recordCount == 0) {
                 Box(
