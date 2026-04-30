@@ -64,6 +64,7 @@ fun TerminalPageBar(
         Modifier
             .fillMaxWidth()
             .background(colors.background)
+            .statusBarsPadding()
             .padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
