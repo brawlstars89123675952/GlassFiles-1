@@ -1,28 +1,40 @@
 package com.glassfiles.ui.screens
 
-import android.widget.Toast
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.glassfiles.data.github.GHCheckRun
 import com.glassfiles.data.github.GitHubManager
-import com.glassfiles.ui.theme.*
-import kotlinx.coroutines.launch
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleScreenScaffold
+import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.aiModuleStatusBadge
+import com.glassfiles.ui.components.aiModuleStatusLabel
+import com.glassfiles.ui.theme.AiModuleTheme
+import com.glassfiles.ui.theme.JetBrainsMono
 
 @Composable
 internal fun CheckRunsScreen(
@@ -32,7 +44,6 @@ internal fun CheckRunsScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     var checkRuns by remember { mutableStateOf<List<GHCheckRun>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -42,29 +53,26 @@ internal fun CheckRunsScreen(
         loading = false
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Check Runs",
-            subtitle = "$repoOwner/$repoName · $ref",
-            onBack = onBack
-        )
-
-        if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+    AiModuleScreenScaffold(
+        title = "> check runs",
+        onBack = onBack,
+        subtitle = "$repoOwner/$repoName · $ref",
+    ) {
+        when {
+            loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                AiModuleSpinner(label = "loading checks…")
             }
-        } else if (checkRuns.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No check runs", fontSize = 14.sp, color = TextTertiary)
-            }
-        } else {
-            LazyColumn(
+            checkRuns.isEmpty() -> GitHubMonoEmpty(
+                title = "no check runs",
+                subtitle = "no CI activity reported for this ref",
+            )
+            else -> LazyColumn(
                 Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
             ) {
                 items(checkRuns) { run ->
-                    CheckRunCard(run)
+                    CheckRunRow(run)
+                    AiModuleHairline()
                 }
             }
         }
@@ -72,52 +80,62 @@ internal fun CheckRunsScreen(
 }
 
 @Composable
-private fun CheckRunCard(run: GHCheckRun) {
-    val statusColor = when (run.conclusion.lowercase()) {
-        "success" -> Color(0xFF34C759)
-        "failure" -> Color(0xFFFF3B30)
-        "cancelled" -> Color(0xFFFF9500)
-        "skipped" -> TextTertiary
-        else -> when (run.status.lowercase()) {
-            "in_progress" -> Blue
-            "queued" -> Color(0xFFFFCC00)
-            else -> TextSecondary
-        }
-    }
-
-    val statusIcon = when (run.conclusion.lowercase()) {
-        "success" -> Icons.Rounded.CheckCircle
-        "failure" -> Icons.Rounded.Error
-        "cancelled" -> Icons.Rounded.Cancel
-        else -> when (run.status.lowercase()) {
-            "in_progress" -> Icons.Rounded.HourglassTop
-            "queued" -> Icons.Rounded.Schedule
-            else -> Icons.Rounded.Help
-        }
-    }
-
+private fun CheckRunRow(run: GHCheckRun) {
+    val palette = AiModuleTheme.colors
+    val badge = aiModuleStatusBadge(run.status, run.conclusion, palette)
+    val label = aiModuleStatusLabel(run.status, run.conclusion)
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(statusIcon, null, Modifier.size(20.dp), tint = statusColor)
-            Text(run.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
-            Text(run.status.replaceFirstChar { it.uppercase() }, fontSize = 11.sp, color = statusColor, fontWeight = FontWeight.Medium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = badge.glyph,
+                color = badge.color,
+                fontFamily = JetBrainsMono,
+                fontSize = 14.sp,
+                modifier = Modifier.width(18.dp),
+            )
+            Text(
+                text = run.name,
+                color = palette.textPrimary,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = label,
+                color = badge.color,
+                fontFamily = JetBrainsMono,
+                fontSize = 11.sp,
+            )
         }
-
         if (run.outputTitle.isNotBlank()) {
-            Spacer(Modifier.height(6.dp))
-            Text(run.outputTitle, fontSize = 12.sp, color = TextSecondary)
-        }
-
-        if (run.outputSummary.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
-            Text(run.outputSummary, fontSize = 11.sp, color = TextTertiary, maxLines = 3)
+            Text(
+                text = run.outputTitle,
+                color = palette.textSecondary,
+                fontFamily = JetBrainsMono,
+                fontSize = 12.sp,
+                lineHeight = 1.3.em,
+                modifier = Modifier.padding(start = 18.dp),
+            )
         }
-
-        if (run.conclusion.isNotBlank()) {
-            Spacer(Modifier.height(6.dp))
-            Text("Conclusion: ${run.conclusion.replaceFirstChar { it.uppercase() }}", fontSize = 11.sp, color = statusColor, fontWeight = FontWeight.Medium)
+        if (run.outputSummary.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = run.outputSummary,
+                color = palette.textMuted,
+                fontFamily = JetBrainsMono,
+                fontSize = 11.sp,
+                lineHeight = 1.3.em,
+                maxLines = 3,
+                modifier = Modifier.padding(start = 18.dp),
+            )
         }
     }
 }
+

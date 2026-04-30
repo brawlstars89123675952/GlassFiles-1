@@ -1,30 +1,60 @@
 package com.glassfiles.ui.screens
 
-import androidx.compose.animation.*
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.rounded.Commit
+import androidx.compose.material.icons.rounded.DoneAll
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.automirrored.rounded.MergeType
+import androidx.compose.material.icons.rounded.NewReleases
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.glassfiles.data.github.GHNotification
 import com.glassfiles.data.github.GHThreadSubscription
 import com.glassfiles.data.github.GitHubManager
-import com.glassfiles.ui.theme.*
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModulePillButton
+import com.glassfiles.ui.components.AiModuleScreenScaffold
+import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.theme.AiModuleTheme
+import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.launch
 
 @Composable
@@ -37,68 +67,82 @@ fun NotificationsScreen(onBack: () -> Unit) {
     var selectedSubscription by remember { mutableStateOf<GHNotification?>(null) }
 
     LaunchedEffect(showAll) {
+        loading = true
         notifications = GitHubManager.getNotifications(context, showAll)
         loading = false
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Notifications",
-            onBack = onBack,
-            actions = {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FilterChip(
-                        selected = !showAll,
-                        onClick = { showAll = false },
-                        label = { Text("Unread", fontSize = 11.sp) }
-                    )
-                    FilterChip(
-                        selected = showAll,
-                        onClick = { showAll = true },
-                        label = { Text("All", fontSize = 11.sp) }
-                    )
-                }
-                IconButton(onClick = {
+    val palette = AiModuleTheme.colors
+
+    AiModuleScreenScaffold(
+        title = "> notifications",
+        onBack = onBack,
+        subtitle = if (showAll) "scope: all" else "scope: unread",
+        trailing = {
+            IconButton(
+                onClick = {
                     scope.launch {
                         GitHubManager.markAllNotificationsRead(context)
                         notifications = GitHubManager.getNotifications(context, showAll)
                     }
-                }) {
-                    Icon(Icons.Rounded.DoneAll, null, Modifier.size(20.dp), tint = Blue)
-                }
-            }
-        )
-
-        if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue)
-            }
-            return@Column
-        }
-
-        if (notifications.isEmpty()) {
-            EmptyState(
-                icon = Icons.Rounded.NotificationsNone,
-                title = "No notifications",
-                subtitle = if (showAll) "You're all caught up!" else "No unread notifications"
-            )
-            return@Column
-        }
-
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
-            items(notifications.size) { index ->
-                val notification = notifications[index]
-                NotificationCard(
-                    notification = notification,
-                    onMarkRead = {
-                        scope.launch {
-                            GitHubManager.markNotificationRead(context, notification.id)
-                            notifications = GitHubManager.getNotifications(context, showAll)
-                        }
-                    },
-                    onSubscription = { selectedSubscription = notification }
+                },
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    Icons.Rounded.DoneAll,
+                    contentDescription = "mark all read",
+                    modifier = Modifier.size(18.dp),
+                    tint = palette.accent,
                 )
-                if (index < notifications.lastIndex) Spacer(Modifier.height(8.dp))
+            }
+        },
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AiModulePillButton(
+                    label = "unread",
+                    onClick = { showAll = false },
+                    accent = !showAll,
+                )
+                AiModulePillButton(
+                    label = "all",
+                    onClick = { showAll = true },
+                    accent = showAll,
+                )
+            }
+            AiModuleHairline()
+
+            when {
+                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    AiModuleSpinner(label = "loading inbox…")
+                }
+                notifications.isEmpty() -> GitHubMonoEmpty(
+                    title = if (showAll) "inbox empty" else "no unread notifications",
+                    subtitle = if (showAll) "you're all caught up" else "switch to all to see read items",
+                )
+                else -> LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
+                ) {
+                    items(notifications, key = { it.id }) { notification ->
+                        NotificationRow(
+                            notification = notification,
+                            onMarkRead = {
+                                scope.launch {
+                                    GitHubManager.markNotificationRead(context, notification.id)
+                                    notifications = GitHubManager.getNotifications(context, showAll)
+                                }
+                            },
+                            onSubscription = { selectedSubscription = notification },
+                        )
+                        AiModuleHairline()
+                    }
+                }
             }
         }
     }
@@ -106,57 +150,105 @@ fun NotificationsScreen(onBack: () -> Unit) {
     selectedSubscription?.let { notification ->
         NotificationSubscriptionDialog(
             notification = notification,
-            onDismiss = { selectedSubscription = null }
+            onDismiss = { selectedSubscription = null },
         )
     }
 }
 
 @Composable
-private fun NotificationCard(notification: GHNotification, onMarkRead: () -> Unit, onSubscription: () -> Unit) {
-    val icon = when (notification.type) {
-        "PullRequest" -> Icons.Rounded.MergeType
+private fun NotificationRow(
+    notification: GHNotification,
+    onMarkRead: () -> Unit,
+    onSubscription: () -> Unit,
+) {
+    val palette = AiModuleTheme.colors
+    val icon: ImageVector = when (notification.type) {
+        "PullRequest" -> Icons.AutoMirrored.Rounded.MergeType
         "Issue" -> Icons.Rounded.ErrorOutline
         "Release" -> Icons.Rounded.NewReleases
         "Commit" -> Icons.Rounded.Commit
         else -> Icons.Rounded.Notifications
     }
-
+    val typeGlyph = when (notification.type) {
+        "PullRequest" -> "PR"
+        "Issue" -> "IS"
+        "Release" -> "RL"
+        "Commit" -> "CT"
+        else -> "··"
+    }
     val reasonColor = when (notification.reason) {
-        "mention" -> Color(0xFFFF9500)
-        "assign" -> Color(0xFF5856D6)
-        "review_requested" -> Color(0xFF34C759)
-        else -> TextTertiary
+        "mention" -> palette.warning
+        "assign" -> palette.accent
+        "review_requested" -> palette.accent
+        else -> palette.textMuted
     }
 
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-            .background(SurfaceWhite)
+    Row(
+        Modifier
+            .fillMaxWidth()
             .clickable { onMarkRead() }
-            .padding(16.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.size(36.dp).clip(CircleShape).background(if (notification.unread) Blue.copy(0.1f) else SurfaceLight), contentAlignment = Alignment.Center) {
-                Icon(icon, null, Modifier.size(18.dp), tint = if (notification.unread) Blue else TextSecondary)
-            }
-            Column(Modifier.weight(1f)) {
-                Text(notification.title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(2.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(notification.repoName.substringAfter("/"), fontSize = 11.sp, color = TextSecondary)
-                    Text("-", fontSize = 11.sp, color = TextTertiary)
-                    Text(notification.type, fontSize = 11.sp, color = TextSecondary)
+        Text(
+            text = if (notification.unread) "●" else "·",
+            color = if (notification.unread) palette.accent else palette.textMuted,
+            fontFamily = JetBrainsMono,
+            fontSize = 14.sp,
+            modifier = Modifier.width(14.dp),
+        )
+        Text(
+            text = typeGlyph,
+            color = if (notification.unread) palette.accent else palette.textSecondary,
+            fontFamily = JetBrainsMono,
+            fontWeight = FontWeight.Medium,
+            fontSize = 11.sp,
+            modifier = Modifier.width(24.dp),
+        )
+        Spacer(Modifier.width(2.dp))
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = if (notification.unread) palette.accent else palette.textSecondary,
+        )
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                notification.title,
+                color = palette.textPrimary,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                lineHeight = 1.3.em,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    notification.repoName.substringAfter("/"),
+                    color = palette.textSecondary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.sp,
+                )
+                if (notification.reason.isNotBlank()) {
+                    Text(
+                        " · ${notification.reason.replace("_", " ")}",
+                        color = reasonColor,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                    )
                 }
             }
-            if (notification.unread) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(Blue))
-            }
-            IconButton(onClick = onSubscription) {
-                Icon(Icons.Rounded.Tune, null, Modifier.size(18.dp), tint = TextSecondary)
-            }
         }
-        if (notification.reason.isNotBlank()) {
-            Spacer(Modifier.height(6.dp))
-            Text(notification.reason.replace("_", " "), fontSize = 11.sp, color = reasonColor, fontWeight = FontWeight.Medium)
+        IconButton(onClick = onSubscription, modifier = Modifier.size(32.dp)) {
+            Icon(
+                Icons.Rounded.Tune,
+                contentDescription = "subscription",
+                modifier = Modifier.size(16.dp),
+                tint = palette.textSecondary,
+            )
         }
     }
 }
@@ -179,80 +271,148 @@ private fun NotificationSubscriptionDialog(notification: GHNotification, onDismi
 
     LaunchedEffect(notification.id) { loadSubscription() }
 
+    val palette = AiModuleTheme.colors
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Thread subscription", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = palette.surface,
+        title = {
+            Text(
+                "> subscription",
+                color = palette.textPrimary,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(notification.title, fontSize = 14.sp, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    notification.title,
+                    color = palette.textSecondary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 12.sp,
+                    lineHeight = 1.3.em,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 if (loading) {
-                    Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
+                        AiModuleSpinner(label = "loading…")
                     }
                 } else {
                     val current = subscription
                     val status = when {
-                        current?.ignored == true -> "Ignored"
-                        current?.subscribed == true -> "Subscribed"
-                        else -> "Default"
+                        current?.ignored == true -> "ignored"
+                        current?.subscribed == true -> "subscribed"
+                        else -> "default"
                     }
-                    Text(status, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (current?.ignored == true) Color(0xFFFF3B30) else Blue)
-                    if (!current?.reason.isNullOrBlank()) Text(current!!.reason, fontSize = 12.sp, color = TextSecondary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        ThreadActionChip("Subscribe", enabled = !actionInFlight) {
-                            actionInFlight = true
-                            scope.launch {
-                                GitHubManager.setThreadSubscription(context, notification.id, subscribed = true, ignored = false)
-                                actionInFlight = false
-                                loadSubscription()
-                            }
-                        }
-                        ThreadActionChip("Ignore", enabled = !actionInFlight) {
-                            actionInFlight = true
-                            scope.launch {
-                                GitHubManager.setThreadSubscription(context, notification.id, subscribed = false, ignored = true)
-                                actionInFlight = false
-                                loadSubscription()
-                            }
-                        }
-                        ThreadActionChip("Default", enabled = !actionInFlight) {
-                            actionInFlight = true
-                            scope.launch {
-                                GitHubManager.deleteThreadSubscription(context, notification.id)
-                                actionInFlight = false
-                                loadSubscription()
-                            }
-                        }
+                    val statusColor = when {
+                        current?.ignored == true -> palette.error
+                        current?.subscribed == true -> palette.accent
+                        else -> palette.textSecondary
+                    }
+                    Text(
+                        text = "status · $status",
+                        color = statusColor,
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp,
+                    )
+                    val reason = current?.reason
+                    if (!reason.isNullOrBlank()) {
+                        Text(
+                            reason,
+                            color = palette.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.sp,
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    ) {
+                        AiModulePillButton(
+                            label = "subscribe",
+                            enabled = !actionInFlight,
+                            onClick = {
+                                actionInFlight = true
+                                scope.launch {
+                                    GitHubManager.setThreadSubscription(context, notification.id, subscribed = true, ignored = false)
+                                    actionInFlight = false
+                                    loadSubscription()
+                                }
+                            },
+                        )
+                        AiModulePillButton(
+                            label = "ignore",
+                            enabled = !actionInFlight,
+                            destructive = true,
+                            onClick = {
+                                actionInFlight = true
+                                scope.launch {
+                                    GitHubManager.setThreadSubscription(context, notification.id, subscribed = false, ignored = true)
+                                    actionInFlight = false
+                                    loadSubscription()
+                                }
+                            },
+                        )
+                        AiModulePillButton(
+                            label = "default",
+                            enabled = !actionInFlight,
+                            accent = false,
+                            onClick = {
+                                actionInFlight = true
+                                scope.launch {
+                                    GitHubManager.deleteThreadSubscription(context, notification.id)
+                                    actionInFlight = false
+                                    loadSubscription()
+                                }
+                            },
+                        )
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    "[ close ]",
+                    color = palette.accent,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 13.sp,
+                )
+            }
+        },
     )
 }
 
+/**
+ * Centered fullscreen empty placeholder kept for callers that still
+ * pass an [ImageVector]; new call sites should use [GitHubMonoEmpty].
+ * Style is unified with the AI module mono empty state.
+ */
 @Composable
-private fun ThreadActionChip(label: String, enabled: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(8.dp))
-            .background(if (enabled) Blue.copy(alpha = 0.12f) else SurfaceLight)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 7.dp)
-    ) {
-        Text(label, fontSize = 12.sp, color = if (enabled) Blue else TextTertiary, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String) {
+fun EmptyState(icon: ImageVector, title: String, subtitle: String) {
+    val palette = AiModuleTheme.colors
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, Modifier.size(64.dp), tint = TextTertiary)
-            Spacer(Modifier.height(16.dp))
-            Text(title, fontSize = 18.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
-            Spacer(Modifier.height(4.dp))
-            Text(subtitle, fontSize = 14.sp, color = TextTertiary)
+            Icon(icon, null, Modifier.size(40.dp), tint = palette.textMuted)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                title,
+                color = palette.textSecondary,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                subtitle,
+                color = palette.textMuted,
+                fontFamily = JetBrainsMono,
+                fontSize = 11.sp,
+            )
         }
     }
 }
+
