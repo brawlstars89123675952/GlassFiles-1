@@ -152,7 +152,7 @@ fun AiUsageScreen(onBack: () -> Unit) {
                         summary.filesWrittenCount.toString(),
                     )
                     if (summary.estimatedRecordCount > 0) {
-                        TerminalKeyValueRow(
+                        AiModuleKeyValueRow(
                             Strings.aiUsageEstimated,
                             Strings.aiUsageEstimatedFmt
                                 .replace("{n}", summary.estimatedRecordCount.toString())
