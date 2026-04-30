@@ -269,7 +269,7 @@ private fun ProviderRow(
                     GetKeyLink(onClick = onOpenConsole)
                     Spacer(Modifier.weight(1f))
                     if (hasKey) {
-                        TerminalPillButton(
+                        AiModulePillButton(
                             label = Strings.aiKeyClear.lowercase(),
                             onClick = onClear,
                             destructive = true,
@@ -277,7 +277,7 @@ private fun ProviderRow(
                         )
                         Spacer(Modifier.width(6.dp))
                     }
-                    TerminalPillButton(
+                    AiModulePillButton(
                         label = if (saved) "${Strings.aiKeySaved.lowercase()} ✓" else Strings.aiKeySave.lowercase(),
                         onClick = onSave,
                         enabled = value.isNotBlank() && !saved,
