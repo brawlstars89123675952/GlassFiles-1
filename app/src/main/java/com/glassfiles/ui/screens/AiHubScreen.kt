@@ -59,27 +59,14 @@ fun AiHubScreen(
     onSettings: () -> Unit,
     onUsage: () -> Unit,
 ) {
-    val colors = MaterialTheme.colorScheme
-
-    Column(Modifier.fillMaxSize().background(colors.surface)) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 44.dp, start = 4.dp, end = 16.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = colors.onSurface)
-            }
-            Text(
-                Strings.aiHub,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.onSurface,
-            )
-        }
-
+    AiModuleScreenScaffold(
+        title = Strings.aiHub,
+        onBack = onBack,
+        subtitle = "glassfiles.ai",
+    ) {
         LazyColumn(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             items(
                 listOf(
@@ -93,7 +80,10 @@ fun AiHubScreen(
                     AiHubItem(Icons.Rounded.Insights, Strings.aiUsageTitle, Strings.aiUsageSubtitle, soon = false, onUsage),
                     AiHubItem(Icons.Rounded.Tune, Strings.aiSettings, Strings.aiSettingsSubtitle, soon = false, onSettings),
                 ),
-            ) { item -> AiHubRow(item) }
+            ) { item ->
+                AiHubRow(item)
+                AiModuleHairline()
+            }
         }
     }
 }
