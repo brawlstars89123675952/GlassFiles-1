@@ -98,30 +98,31 @@ private data class AiHubItem(
 
 @Composable
 private fun AiHubRow(item: AiHubItem) {
-    val colors = MaterialTheme.colorScheme
+    val colors = AiModuleTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(colors.surfaceVariant.copy(alpha = 0.5f))
+            .clip(RoundedCornerShape(8.dp))
+            .background(colors.surface)
             .clickable(enabled = !item.soon) { item.onClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(40.dp).clip(CircleShape).background(colors.primary.copy(alpha = 0.12f)),
+            Modifier.size(34.dp).clip(CircleShape).background(colors.surfaceElevated),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(item.icon, null, Modifier.size(20.dp), tint = colors.primary)
+            Icon(item.icon, null, Modifier.size(17.dp), tint = colors.accent)
         }
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     item.title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.onSurface,
+                    fontSize = 14.sp,
+                    fontFamily = JetBrainsMono,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.textPrimary,
                 )
                 if (item.soon) {
                     Spacer(Modifier.size(8.dp))
@@ -130,16 +131,17 @@ private fun AiHubRow(item: AiHubItem) {
             }
             Text(
                 item.subtitle,
-                fontSize = 12.sp,
-                color = colors.onSurfaceVariant,
+                fontSize = 11.sp,
+                fontFamily = JetBrainsMono,
+                color = colors.textMuted,
             )
         }
         if (!item.soon) {
             Icon(
                 Icons.Rounded.ChevronRight,
                 null,
-                Modifier.size(20.dp),
-                tint = colors.onSurfaceVariant,
+                Modifier.size(18.dp),
+                tint = colors.textSecondary,
             )
         }
     }
