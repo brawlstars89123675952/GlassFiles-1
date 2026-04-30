@@ -69,7 +69,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.glassfiles.data.Strings
+import androidx.compose.material.icons.rounded.ChevronRight
 import com.glassfiles.ui.theme.AiModuleTheme
+import com.glassfiles.ui.theme.JetBrainsMono
 import com.glassfiles.data.github.GHBlockedEntry
 import com.glassfiles.data.github.GHEmailEntry
 import com.glassfiles.data.github.GHFollowerEntry
@@ -229,7 +231,7 @@ internal fun GitHubSettingsScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item { HeaderCard(user) }
+                item { HomeUserHeader(user) }
                 item {
                     when (currentSection) {
                         SettingsSection.PROFILE -> SectionCard("Profile") {
@@ -540,62 +542,72 @@ internal fun GitHubSettingsScreen(
 private fun HomeSettingsMenu(user: GHUser?, onOpen: (SettingsSection) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        item { HeaderCard(user) }
-        item {
-            CompactCard {
-                SectionHeader("Account")
-                MenuRow(Icons.Rounded.Person, SettingsSection.PROFILE, onOpen)
-                MenuDivider()
-                MenuRow(Icons.Rounded.Email, SettingsSection.EMAILS, onOpen)
-                MenuDivider()
-                MenuRow(Icons.Rounded.Notifications, SettingsSection.NOTIFICATIONS, onOpen)
-                MenuDivider()
-                MenuRow(Icons.Rounded.Key, SettingsSection.KEYS, onOpen)
-                MenuDivider()
-                MenuRow(Icons.Rounded.Public, SettingsSection.SOCIAL, onOpen)
-            }
-        }
-        item {
-            CompactCard {
-                SectionHeader("People")
-                MenuRow(Icons.Rounded.Group, SettingsSection.PEOPLE, onOpen)
-                MenuDivider()
-                MenuRow(Icons.Rounded.Block, SettingsSection.BLOCKED, onOpen)
-                MenuDivider()
-                MenuRow(Icons.Rounded.Warning, SettingsSection.INTERACTION, onOpen)
-            }
-        }
-        item {
-            CompactCard {
-                SectionHeader("Workspace")
-                MenuRow(Icons.Rounded.Business, SettingsSection.ORGANIZATIONS, onOpen)
-                MenuDivider()
-                MenuRow(Icons.Rounded.Description, SettingsSection.REPOSITORIES, onOpen)
-            }
-        }
-        item {
-            CompactCard {
-                SectionHeader("Developer")
-                MenuRow(Icons.Rounded.Code, SettingsSection.DEVELOPER, onOpen)
-            }
-        }
+        item { HomeUserHeader(user) }
+        item { TerminalSectionHeader("account") }
+        item { MenuRow(Icons.Rounded.Person, SettingsSection.PROFILE, onOpen); AiModuleHairline() }
+        item { MenuRow(Icons.Rounded.Email, SettingsSection.EMAILS, onOpen); AiModuleHairline() }
+        item { MenuRow(Icons.Rounded.Notifications, SettingsSection.NOTIFICATIONS, onOpen); AiModuleHairline() }
+        item { MenuRow(Icons.Rounded.Key, SettingsSection.KEYS, onOpen); AiModuleHairline() }
+        item { MenuRow(Icons.Rounded.Public, SettingsSection.SOCIAL, onOpen); AiModuleHairline() }
+        item { TerminalSectionHeader("people") }
+        item { MenuRow(Icons.Rounded.Group, SettingsSection.PEOPLE, onOpen); AiModuleHairline() }
+        item { MenuRow(Icons.Rounded.Block, SettingsSection.BLOCKED, onOpen); AiModuleHairline() }
+        item { MenuRow(Icons.Rounded.Warning, SettingsSection.INTERACTION, onOpen); AiModuleHairline() }
+        item { TerminalSectionHeader("workspace") }
+        item { MenuRow(Icons.Rounded.Business, SettingsSection.ORGANIZATIONS, onOpen); AiModuleHairline() }
+        item { MenuRow(Icons.Rounded.Description, SettingsSection.REPOSITORIES, onOpen); AiModuleHairline() }
+        item { TerminalSectionHeader("developer") }
+        item { MenuRow(Icons.Rounded.Code, SettingsSection.DEVELOPER, onOpen); AiModuleHairline() }
     }
 }
 
 @Composable
-private fun HeaderCard(user: GHUser?) {
-    CompactCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            AsyncImage(model = user?.avatarUrl, contentDescription = user?.login, modifier = Modifier.size(52.dp).clip(CircleShape))
+private fun HomeUserHeader(user: GHUser?) {
+    val colors = AiModuleTheme.colors
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AsyncImage(
+                model = user?.avatarUrl,
+                contentDescription = user?.login,
+                modifier = Modifier.size(40.dp).clip(CircleShape).background(colors.surfaceElevated)
+            )
             Column(Modifier.weight(1f)) {
-                Text(user?.name?.takeIf { it.isNotBlank() } ?: user?.login ?: "GitHub", color = AiModuleTheme.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("@${user?.login ?: "unknown"}", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp)
+                Text(
+                    user?.name?.takeIf { it.isNotBlank() } ?: user?.login ?: "github",
+                    color = colors.textPrimary,
+                    fontSize = 14.sp,
+                    fontFamily = JetBrainsMono,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    "@${user?.login ?: "unknown"}",
+                    color = colors.textMuted,
+                    fontSize = 11.sp,
+                    fontFamily = JetBrainsMono
+                )
             }
         }
+        AiModuleHairline()
     }
+}
+
+@Composable
+private fun TerminalSectionHeader(title: String) {
+    Text(
+        "// $title",
+        color = AiModuleTheme.colors.textMuted,
+        fontSize = 11.sp,
+        fontFamily = JetBrainsMono,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.padding(horizontal = 4.dp).padding(top = 16.dp, bottom = 6.dp)
+    )
 }
 
 @Composable
@@ -623,22 +635,45 @@ private fun SectionHeader(title: String) {
 
 @Composable
 private fun MenuRow(icon: androidx.compose.ui.graphics.vector.ImageVector, section: SettingsSection, onOpen: (SettingsSection) -> Unit) {
+    val colors = AiModuleTheme.colors
     Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onOpen(section) }.padding(horizontal = 10.dp, vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpen(section) }
+            .padding(horizontal = 4.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Icon(icon, null, tint = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp))
-        Column(Modifier.weight(1f)) {
-            Text(section.title, color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Text(section.subtitle, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Box(
+            Modifier.size(28.dp).clip(CircleShape).background(colors.surfaceElevated),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = colors.accent, modifier = Modifier.size(15.dp))
         }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                section.title.lowercase(),
+                color = colors.textPrimary,
+                fontSize = 14.sp,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                section.subtitle,
+                color = colors.textMuted,
+                fontSize = 11.sp,
+                fontFamily = JetBrainsMono,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = colors.textSecondary)
     }
 }
 
 @Composable
 private fun MenuDivider() {
-    Box(Modifier.fillMaxWidth().height(0.5.dp).background(AiModuleTheme.colors.border))
+    AiModuleHairline()
 }
 
 @Composable
