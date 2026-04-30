@@ -215,7 +215,7 @@ private fun ModelsBody(
     error: String?,
     isConfigured: Boolean,
 ) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     when {
         loading && list.isEmpty() -> Box(
             Modifier.fillMaxSize().padding(32.dp),
