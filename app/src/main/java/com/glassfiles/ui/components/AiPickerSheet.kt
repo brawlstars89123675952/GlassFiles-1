@@ -55,10 +55,9 @@ import com.glassfiles.ui.theme.JetBrainsMono
  * across Hub, Chat, Coding, ImageGen, VideoGen, Models, Settings reads
  * the same as the agent screen.
  *
- * The palette is read from [AgentTerminalDarkColors] directly rather
- * than the [AgentTerminal] CompositionLocal — `ModalBottomSheet` opens
- * in a popup window that does not always propagate parent
- * CompositionLocals reliably across versions.
+ * The palette is read from [AiModuleDarkColors] directly rather than a
+ * CompositionLocal — `ModalBottomSheet` opens in a popup window that does
+ * not always propagate parent CompositionLocals reliably across versions.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
