@@ -127,7 +127,7 @@ fun AiKeysScreen(onBack: () -> Unit) {
                         }
                     },
                 )
-                TerminalHairline()
+                AiModuleHairline()
             }
         }
     }
