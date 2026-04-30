@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import com.glassfiles.data.ai.agent.AiToolCall
+import com.glassfiles.ui.theme.JetBrainsMono
 import com.glassfiles.data.ai.agent.AiToolResult
 import org.json.JSONArray
 import org.json.JSONObject
