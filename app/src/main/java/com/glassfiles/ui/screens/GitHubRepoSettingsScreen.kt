@@ -74,14 +74,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.glassfiles.data.github.GHRepo
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.data.github.GitHubRepoSettingsManager
-import com.glassfiles.ui.theme.Blue
-import com.glassfiles.ui.theme.SeparatorColor
-import com.glassfiles.ui.theme.SurfaceLight
-import com.glassfiles.ui.theme.SurfaceWhite
-import com.glassfiles.ui.theme.TextPrimary
-import com.glassfiles.ui.theme.TextSecondary
-import com.glassfiles.ui.theme.TextTertiary
 import kotlinx.coroutines.launch
 
 private enum class RepoSettingsTab(val label: String) {
@@ -185,7 +179,7 @@ fun GitHubRepoSettingsScreen(
         refreshCurrentTab()
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
         RepoSettingsTopBar(
             title = "Repository settings",
             subtitle = repo.fullName,
@@ -196,7 +190,7 @@ fun GitHubRepoSettingsScreen(
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(SurfaceWhite)
+                .background(AiModuleTheme.colors.surface)
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -206,10 +200,10 @@ fun GitHubRepoSettingsScreen(
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (selected) Blue.copy(0.12f) else Color.Transparent)
+                        .background(if (selected) AiModuleTheme.colors.accent.copy(0.12f) else Color.Transparent)
                         .border(
                             1.dp,
-                            if (selected) Blue.copy(0.35f) else SeparatorColor,
+                            if (selected) AiModuleTheme.colors.accent.copy(0.35f) else AiModuleTheme.colors.border,
                             RoundedCornerShape(8.dp)
                         )
                         .clickable { selectedTab = tab }
@@ -219,7 +213,7 @@ fun GitHubRepoSettingsScreen(
                         tab.label,
                         fontSize = 12.sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (selected) Blue else TextSecondary
+                        color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary
                     )
                 }
             }
@@ -240,7 +234,7 @@ fun GitHubRepoSettingsScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(30.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(30.dp), strokeWidth = 2.5.dp)
             }
         } else {
             when (selectedTab) {
@@ -421,19 +415,19 @@ private fun RepoSettingsTopBar(
     Row(
         Modifier
             .fillMaxWidth()
-            .background(SurfaceWhite)
+            .background(AiModuleTheme.colors.surface)
             .padding(top = 48.dp, start = 4.dp, end = 8.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(22.dp), tint = Blue)
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(22.dp), tint = AiModuleTheme.colors.accent)
         }
         Column(Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 24.sp)
-            Text(subtitle, fontSize = 13.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary, fontSize = 24.sp)
+            Text(subtitle, fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onClick = onRefresh) {
-            Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
+            Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent)
         }
     }
 }
@@ -467,7 +461,7 @@ private fun GeneralTab(
     ) {
         item {
             SettingsCard {
-                Text("Identity", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("Identity", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 SettingsInfo("Owner", general.owner)
                 SettingsInfo("Visibility", general.visibility)
                 Spacer(Modifier.height(6.dp))
@@ -482,7 +476,7 @@ private fun GeneralTab(
         }
         item {
             SettingsCard {
-                Text("Features", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("Features", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 SettingsSwitchRow("Issues", hasIssues) { hasIssues = it }
                 DividerMini()
                 SettingsSwitchRow("Projects", hasProjects) { hasProjects = it }
@@ -518,7 +512,7 @@ private fun GeneralTab(
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Blue)
+                colors = ButtonDefaults.buttonColors(containerColor = AiModuleTheme.colors.accent)
             ) {
                 Icon(Icons.Rounded.Save, null, Modifier.size(18.dp), tint = Color.White)
                 Spacer(Modifier.width(8.dp))
@@ -540,7 +534,7 @@ private fun AccessTab(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = Blue)) {
+            Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = AiModuleTheme.colors.accent)) {
                 Icon(Icons.Rounded.PersonAdd, null, Modifier.size(18.dp), tint = Color.White)
                 Spacer(Modifier.width(8.dp))
                 Text("Add collaborator", color = Color.White)
@@ -554,10 +548,10 @@ private fun AccessTab(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         AsyncImage(item.avatarUrl, item.login, Modifier.size(38.dp).clip(CircleShape))
                         Column(Modifier.weight(1f)) {
-                            Text(item.login, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            Text(item.roleName.ifBlank { item.permissionSummary }, color = TextSecondary, fontSize = 11.sp)
+                            Text(item.login, color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text(item.roleName.ifBlank { item.permissionSummary }, color = AiModuleTheme.colors.textSecondary, fontSize = 11.sp)
                             if (item.permissionSummary.isNotBlank()) {
-                                Text(item.permissionSummary, color = TextTertiary, fontSize = 10.sp)
+                                Text(item.permissionSummary, color = AiModuleTheme.colors.textMuted, fontSize = 10.sp)
                             }
                         }
                         TextButton(onClick = { onRemove(item.login) }) {
@@ -583,7 +577,7 @@ private fun VariablesTab(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = Blue)) {
+            Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = AiModuleTheme.colors.accent)) {
                 Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = Color.White)
                 Spacer(Modifier.width(8.dp))
                 Text("Add variable", color = Color.White)
@@ -596,11 +590,11 @@ private fun VariablesTab(
                 SettingsCard {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column(Modifier.weight(1f)) {
-                            Text(item.name, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            Text("Updated ${dateLabel(item.updatedAt)}", color = TextTertiary, fontSize = 11.sp)
+                            Text(item.name, color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text("Updated ${dateLabel(item.updatedAt)}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
                         }
                         IconButton(onClick = { onEdit(item) }) {
-                            Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = Blue)
+                            Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
                         }
                         IconButton(onClick = { onDelete(item) }) {
                             Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30))
@@ -624,10 +618,10 @@ private fun SecretsTab(
     ) {
         item {
             SettingsCard {
-                Text("Secrets", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("Secrets", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 Text(
                     "This build lists and deletes repository secrets. Creating or updating encrypted secrets needs an extra public-key flow, so I left that for the next step.",
-                    color = TextSecondary,
+                    color = AiModuleTheme.colors.textSecondary,
                     fontSize = 12.sp
                 )
             }
@@ -639,8 +633,8 @@ private fun SecretsTab(
                 SettingsCard {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Column(Modifier.weight(1f)) {
-                            Text(item.name, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            Text("Updated ${dateLabel(item.updatedAt)}", color = TextTertiary, fontSize = 11.sp)
+                            Text(item.name, color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text("Updated ${dateLabel(item.updatedAt)}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
                         }
                         IconButton(onClick = { onDelete(item) }) {
                             Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30))
@@ -666,7 +660,7 @@ private fun WebhooksTab(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = Blue)) {
+            Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = AiModuleTheme.colors.accent)) {
                 Icon(Icons.Rounded.Link, null, Modifier.size(18.dp), tint = Color.White)
                 Spacer(Modifier.width(8.dp))
                 Text("Add webhook", color = Color.White)
@@ -677,13 +671,13 @@ private fun WebhooksTab(
         } else {
             items(hooks) { hook ->
                 SettingsCard {
-                    Text(hook.url.ifBlank { "Webhook #${hook.id}" }, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(hook.url.ifBlank { "Webhook #${hook.id}" }, color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(4.dp))
-                    Text("Events: ${hook.events.joinToString(", ")}", color = TextSecondary, fontSize = 11.sp)
-                    Text("Content type: ${hook.contentType} • active=${hook.active}", color = TextTertiary, fontSize = 11.sp)
+                    Text("Events: ${hook.events.joinToString(", ")}", color = AiModuleTheme.colors.textSecondary, fontSize = 11.sp)
+                    Text("Content type: ${hook.contentType} • active=${hook.active}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SmallOutlineButton("Edit", Blue) { onEdit(hook) }
+                        SmallOutlineButton("Edit", AiModuleTheme.colors.accent) { onEdit(hook) }
                         SmallOutlineButton("Ping", Color(0xFF34C759)) { onPing(hook) }
                         SmallOutlineButton("Delete", Color(0xFFFF3B30)) { onDelete(hook) }
                     }
@@ -708,7 +702,7 @@ private fun RulesTab(
     ) {
         item {
             SettingsCard {
-                Text("Branch to inspect", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("Branch to inspect", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 OutlinedTextField(
                     value = rulesBranch,
                     onValueChange = onBranchChange,
@@ -720,7 +714,7 @@ private fun RulesTab(
         }
         item {
             SettingsCard {
-                Text("Protection summary", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("Protection summary", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 SettingsInfo("Protected", yesNo(protection.isProtected))
                 SettingsInfo("Force pushes", yesNo(protection.allowForcePushes))
                 SettingsInfo("Deletions", yesNo(protection.allowDeletions))
@@ -732,9 +726,9 @@ private fun RulesTab(
         }
         item {
             SettingsCard {
-                Text("Active rules for branch", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("Active rules for branch", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 if (branchRules.isEmpty()) {
-                    Text("No active branch rules returned.", color = TextSecondary, fontSize = 12.sp)
+                    Text("No active branch rules returned.", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp)
                 } else {
                     branchRules.forEach { rule ->
                         MiniTag(rule)
@@ -744,14 +738,14 @@ private fun RulesTab(
         }
         item {
             SettingsCard {
-                Text("Rulesets", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("Rulesets", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 if (rulesets.isEmpty()) {
-                    Text("No repository rulesets returned.", color = TextSecondary, fontSize = 12.sp)
+                    Text("No repository rulesets returned.", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp)
                 } else {
                     rulesets.forEach { ruleset ->
                         Column(Modifier.padding(vertical = 6.dp)) {
-                            Text(ruleset.name, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            Text("${ruleset.target} • ${ruleset.enforcement} • ${ruleset.sourceType}", color = TextTertiary, fontSize = 11.sp)
+                            Text(ruleset.name, color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text("${ruleset.target} • ${ruleset.enforcement} • ${ruleset.sourceType}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp)
                             DividerMini()
                         }
                     }
@@ -775,7 +769,7 @@ private fun SecurityTab(
     ) {
         item {
             SettingsCard {
-                Text("Repository security", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("Repository security", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 SettingsSwitchRow("Automated security fixes", security.automatedSecurityFixes, onToggleFixes)
                 DividerMini()
                 SettingsSwitchRow("Vulnerability alerts", security.vulnerabilityAlerts, onToggleAlerts)
@@ -784,7 +778,7 @@ private fun SecurityTab(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "Some security toggles depend on repository type and token permissions. Public-repo/private-reporting support can differ from private repositories and from weaker tokens.",
-                    color = TextSecondary,
+                    color = AiModuleTheme.colors.textSecondary,
                     fontSize = 12.sp
                 )
             }
@@ -798,7 +792,7 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(SurfaceWhite)
+            .background(AiModuleTheme.colors.surface)
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         content = content
@@ -808,35 +802,35 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun SettingsInfo(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, color = TextSecondary, fontSize = 12.sp, modifier = Modifier.widthIn(min = 120.dp))
-        Text(value.ifBlank { "—" }, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Text(label, color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp, modifier = Modifier.widthIn(min = 120.dp))
+        Text(value.ifBlank { "—" }, color = AiModuleTheme.colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
 private fun SettingsSwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Blue))
+        Text(label, color = AiModuleTheme.colors.textPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AiModuleTheme.colors.accent))
     }
 }
 
 @Composable
 private fun DividerMini() {
-    Box(Modifier.fillMaxWidth().height(0.5.dp).background(SeparatorColor))
+    Box(Modifier.fillMaxWidth().height(0.5.dp).background(AiModuleTheme.colors.border))
 }
 
 @Composable
 private fun EmptySettingsState(text: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text, color = TextTertiary, fontSize = 13.sp)
+        Text(text, color = AiModuleTheme.colors.textMuted, fontSize = 13.sp)
     }
 }
 
 @Composable
 private fun EmptyCard(text: String) {
     SettingsCard {
-        Text(text, color = TextSecondary, fontSize = 12.sp)
+        Text(text, color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp)
     }
 }
 
@@ -860,10 +854,10 @@ private fun MiniTag(label: String) {
         Modifier
             .padding(top = 6.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(Blue.copy(0.10f))
+            .background(AiModuleTheme.colors.accent.copy(0.10f))
             .padding(horizontal = 8.dp, vertical = 5.dp)
     ) {
-        Text(label, color = Blue, fontSize = 11.sp)
+        Text(label, color = AiModuleTheme.colors.accent, fontSize = 11.sp)
     }
 }
 
@@ -878,8 +872,8 @@ private fun AddCollaboratorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Add collaborator", color = TextPrimary, fontWeight = FontWeight.Bold) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Add collaborator", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(username, { username = it }, label = { Text("GitHub username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -888,12 +882,12 @@ private fun AddCollaboratorDialog(
                         Box(
                             Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (permission == item) Blue.copy(0.12f) else SurfaceLight)
-                                .border(1.dp, if (permission == item) Blue.copy(0.35f) else SeparatorColor, RoundedCornerShape(8.dp))
+                                .background(if (permission == item) AiModuleTheme.colors.accent.copy(0.12f) else AiModuleTheme.colors.background)
+                                .border(1.dp, if (permission == item) AiModuleTheme.colors.accent.copy(0.35f) else AiModuleTheme.colors.border, RoundedCornerShape(8.dp))
                                 .clickable { permission = item }
                                 .padding(horizontal = 8.dp, vertical = 5.dp)
                         ) {
-                            Text(item, color = if (permission == item) Blue else TextSecondary, fontSize = 11.sp)
+                            Text(item, color = if (permission == item) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary, fontSize = 11.sp)
                         }
                     }
                 }
@@ -901,12 +895,12 @@ private fun AddCollaboratorDialog(
         },
         confirmButton = {
             TextButton(onClick = { if (username.isNotBlank()) onConfirm(username.trim(), permission) }) {
-                Text("Add", color = Blue)
+                Text("Add", color = AiModuleTheme.colors.accent)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = TextSecondary)
+                Text("Cancel", color = AiModuleTheme.colors.textSecondary)
             }
         }
     )
@@ -924,8 +918,8 @@ private fun VariableDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text(if (initialName == null) "Add variable" else "Edit variable", color = TextPrimary, fontWeight = FontWeight.Bold) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text(if (initialName == null) "Add variable" else "Edit variable", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(name, { if (initialName == null) name = it.uppercase() }, enabled = initialName == null, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -934,12 +928,12 @@ private fun VariableDialog(
         },
         confirmButton = {
             TextButton(onClick = { if (name.isNotBlank()) onSave(name.trim(), value) }) {
-                Text("Save", color = Blue)
+                Text("Save", color = AiModuleTheme.colors.accent)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = TextSecondary)
+                Text("Cancel", color = AiModuleTheme.colors.textSecondary)
             }
         }
     )
@@ -958,8 +952,8 @@ private fun WebhookDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text(if (webhook == null) "Add webhook" else "Edit webhook", color = TextPrimary, fontWeight = FontWeight.Bold) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text(if (webhook == null) "Add webhook" else "Edit webhook", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(url, { url = it }, label = { Text("Webhook URL") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -977,12 +971,12 @@ private fun WebhookDialog(
                     }
                 }
             ) {
-                Text("Save", color = Blue)
+                Text("Save", color = AiModuleTheme.colors.accent)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = TextSecondary)
+                Text("Cancel", color = AiModuleTheme.colors.textSecondary)
             }
         }
     )

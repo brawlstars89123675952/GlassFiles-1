@@ -24,9 +24,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHWebhook
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
 import com.glassfiles.data.github.GHWebhookConfig
 import com.glassfiles.data.github.GHWebhookDelivery
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -74,24 +78,26 @@ internal fun WebhooksScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Webhooks",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> webhooks",
             subtitle = "$repoOwner/$repoName",
             onBack = onBack,
-            actions = {
-                IconButton(onClick = { loadWebhooks() }, enabled = !loading) {
-                    Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { loadWebhooks() }, enabled = !loading, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                    }
+                    IconButton(onClick = { createNew = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                    }
                 }
-                IconButton(onClick = { createNew = true }) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(20.dp), tint = Blue)
-                }
-            }
+            },
         )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
         } else {
             val visibleHooks = webhooks.filter { hook ->
@@ -114,7 +120,7 @@ internal fun WebhooksScreen(
                         label = { Text("Search URL, event or status") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = TextSecondary) }
+                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
                     )
                 }
 
@@ -160,7 +166,7 @@ internal fun WebhooksScreen(
                 if (visibleHooks.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text(if (webhooks.isEmpty()) "No webhooks configured" else "No matching webhooks", fontSize = 14.sp, color = TextTertiary)
+                            Text(if (webhooks.isEmpty()) "No webhooks configured" else "No matching webhooks", fontSize = 14.sp, color = AiModuleTheme.colors.textMuted)
                         }
                     }
                 }
@@ -234,9 +240,9 @@ internal fun WebhooksScreen(
     deleteTarget?.let { hook ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            containerColor = SurfaceWhite,
-            title = { Text("Delete webhook", fontWeight = FontWeight.Bold, color = TextPrimary) },
-            text = { Text(hook.url.ifBlank { "Webhook #${hook.id}" }, color = TextSecondary, fontSize = 13.sp) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Delete webhook", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
+            text = { Text(hook.url.ifBlank { "Webhook #${hook.id}" }, color = AiModuleTheme.colors.textSecondary, fontSize = 13.sp) },
             confirmButton = {
                 TextButton(
                     enabled = !actionInFlight,
@@ -252,7 +258,7 @@ internal fun WebhooksScreen(
                     }
                 ) { Text("Delete", color = Color(0xFFFF3B30)) }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel", color = TextSecondary) } }
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
         )
     }
 }
@@ -263,17 +269,17 @@ private fun WebhooksSummaryCard(webhooks: List<GHWebhook>) {
     val inactive = webhooks.size - active
     val failing = webhooks.count { it.lastResponseCode >= 400 || it.lastResponseStatus.equals("failed", ignoreCase = true) }
 
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Rounded.Webhook, null, Modifier.size(20.dp), tint = Blue)
-            Text("Delivery endpoints", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
-            Text("${webhooks.size}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Icon(Icons.Rounded.Webhook, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent)
+            Text("Delivery endpoints", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text("${webhooks.size}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary)
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             WebhookPill("Active $active", Color(0xFF34C759))
-            WebhookPill("Inactive $inactive", TextTertiary)
-            WebhookPill("Failing $failing", if (failing > 0) Color(0xFFFF3B30) else TextTertiary)
+            WebhookPill("Inactive $inactive", AiModuleTheme.colors.textMuted)
+            WebhookPill("Failing $failing", if (failing > 0) Color(0xFFFF3B30) else AiModuleTheme.colors.textMuted)
         }
     }
 }
@@ -294,7 +300,7 @@ private fun WebhookCard(
     Column(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(SurfaceWhite)
+            .background(AiModuleTheme.colors.surface)
             .clickable(enabled = !disabled, onClick = onOpen)
             .padding(14.dp)
     ) {
@@ -303,28 +309,28 @@ private fun WebhookCard(
                 if (hook.active) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
                 null,
                 Modifier.size(18.dp),
-                tint = if (hook.active) Color(0xFF34C759) else TextTertiary
+                tint = if (hook.active) Color(0xFF34C759) else AiModuleTheme.colors.textMuted
             )
             Column(Modifier.weight(1f)) {
-                Text(hook.url.ifBlank { "Webhook #${hook.id}" }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${hook.contentType.ifBlank { "json" }} · ${if (hook.active) "Active" else "Inactive"}", fontSize = 11.sp, color = TextTertiary)
+                Text(hook.url.ifBlank { "Webhook #${hook.id}" }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${hook.contentType.ifBlank { "json" }} · ${if (hook.active) "Active" else "Inactive"}", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
             }
         }
 
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            WebhookIconAction(Icons.Rounded.Send, Blue, disabled, onPing)
+            WebhookIconAction(Icons.Rounded.Send, AiModuleTheme.colors.accent, disabled, onPing)
             WebhookIconAction(Icons.Rounded.PlayArrow, Color(0xFFFF9500), disabled, onTest)
-            WebhookIconAction(Icons.Rounded.History, Blue, disabled, onDeliveries)
-            WebhookIconAction(Icons.Rounded.Settings, TextSecondary, disabled, onConfig)
-            WebhookIconAction(Icons.Rounded.Edit, TextSecondary, disabled, onEdit)
+            WebhookIconAction(Icons.Rounded.History, AiModuleTheme.colors.accent, disabled, onDeliveries)
+            WebhookIconAction(Icons.Rounded.Settings, AiModuleTheme.colors.textSecondary, disabled, onConfig)
+            WebhookIconAction(Icons.Rounded.Edit, AiModuleTheme.colors.textSecondary, disabled, onEdit)
             WebhookIconAction(Icons.Rounded.Delete, Color(0xFFFF3B30), disabled, onDelete)
         }
 
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            hook.events.take(8).forEach { event -> WebhookPill(event, TextSecondary) }
-            if (hook.events.size > 8) WebhookPill("+${hook.events.size - 8}", TextTertiary)
+            hook.events.take(8).forEach { event -> WebhookPill(event, AiModuleTheme.colors.textSecondary) }
+            if (hook.events.size > 8) WebhookPill("+${hook.events.size - 8}", AiModuleTheme.colors.textMuted)
             if (hook.insecureSsl == "1") WebhookPill("SSL off", Color(0xFFFF9500))
         }
 
@@ -332,11 +338,11 @@ private fun WebhookCard(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).clip(RoundedCornerShape(8.dp)).background(responseColor))
             Text(webhookLastResponseLabel(hook), fontSize = 12.sp, color = responseColor, fontWeight = FontWeight.Medium)
-            if (hook.updatedAt.isNotBlank()) Text("Updated ${hook.updatedAt.take(10)}", fontSize = 11.sp, color = TextTertiary)
+            if (hook.updatedAt.isNotBlank()) Text("Updated ${hook.updatedAt.take(10)}", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
         }
         if (hook.lastResponseMessage.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
-            Text(hook.lastResponseMessage, fontSize = 11.sp, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(hook.lastResponseMessage, fontSize = 11.sp, color = AiModuleTheme.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -361,13 +367,13 @@ private fun WebhookDetailDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Webhook #${hook.id}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Webhook #${hook.id}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    WebhookPill(if (hook.active) "Active" else "Inactive", if (hook.active) Color(0xFF34C759) else TextTertiary)
-                    WebhookPill(hook.contentType.ifBlank { "json" }, TextSecondary)
+                    WebhookPill(if (hook.active) "Active" else "Inactive", if (hook.active) Color(0xFF34C759) else AiModuleTheme.colors.textMuted)
+                    WebhookPill(hook.contentType.ifBlank { "json" }, AiModuleTheme.colors.textSecondary)
                     if (hook.insecureSsl == "1") WebhookPill("SSL off", Color(0xFFFF9500))
                     WebhookPill(webhookLastResponseLabel(hook), webhookResponseColor(hook))
                 }
@@ -381,11 +387,11 @@ private fun WebhookDetailDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onConfig) { Text("Config", color = Blue) } },
+        confirmButton = { TextButton(onClick = onConfig) { Text("Config", color = AiModuleTheme.colors.accent) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onDeliveries) { Text("Deliveries", color = TextSecondary) }
-                TextButton(onClick = onDismiss) { Text("Close", color = TextSecondary) }
+                TextButton(onClick = onDeliveries) { Text("Deliveries", color = AiModuleTheme.colors.textSecondary) }
+                TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.textSecondary) }
             }
         }
     )
@@ -394,8 +400,8 @@ private fun WebhookDetailDialog(
 @Composable
 private fun WebhookDetailRow(label: String, value: String) {
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(label, fontSize = 11.sp, color = TextTertiary, fontWeight = FontWeight.Medium)
-        Text(value.ifBlank { "-" }, fontSize = 13.sp, color = TextPrimary)
+        Text(label, fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, fontWeight = FontWeight.Medium)
+        Text(value.ifBlank { "-" }, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary)
     }
 }
 
@@ -416,8 +422,8 @@ private fun WebhookEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text(if (webhook == null) "Add webhook" else "Edit webhook", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text(if (webhook == null) "Add webhook" else "Edit webhook", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
@@ -457,14 +463,14 @@ private fun WebhookEditorDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
-                Text("GitHub never returns existing webhook secrets.", fontSize = 11.sp, color = TextTertiary)
+                Text("GitHub never returns existing webhook secrets.", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Switch(checked = active, onCheckedChange = { active = it }, colors = SwitchDefaults.colors(checkedThumbColor = Blue))
-                    Text("Active", fontSize = 13.sp, color = TextPrimary)
+                    Switch(checked = active, onCheckedChange = { active = it }, colors = SwitchDefaults.colors(checkedThumbColor = AiModuleTheme.colors.accent))
+                    Text("Active", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Checkbox(checked = insecureSsl, onCheckedChange = { insecureSsl = it })
-                    Text("Disable SSL verification", fontSize = 13.sp, color = TextPrimary)
+                    Text("Disable SSL verification", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary)
                 }
             }
         },
@@ -475,9 +481,9 @@ private fun WebhookEditorDialog(
                     onSave(webhook, url.trim(), events.ifEmpty { listOf("push") }, secret, active, contentType, insecureSsl)
                 },
                 enabled = canSave
-            ) { Text("Save", color = Blue) }
+            ) { Text("Save", color = AiModuleTheme.colors.accent) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -515,14 +521,14 @@ private fun WebhookConfigDialog(
 
     AlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
-        containerColor = SurfaceWhite,
-        title = { Text("Webhook config", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Webhook config", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (loading) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CircularProgressIndicator(color = Blue, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text("Loading config", fontSize = 13.sp, color = TextSecondary)
+                        CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Text("Loading config", fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary)
                     }
                 }
                 OutlinedTextField(
@@ -548,11 +554,11 @@ private fun WebhookConfigDialog(
                 Text(
                     if (remoteSecret.isNotBlank()) "Existing secret is write-only and stays unchanged unless replaced." else "GitHub does not expose existing webhook secrets.",
                     fontSize = 11.sp,
-                    color = TextTertiary
+                    color = AiModuleTheme.colors.textMuted
                 )
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Checkbox(checked = insecureSsl, onCheckedChange = { insecureSsl = it })
-                    Text("Disable SSL verification", fontSize = 13.sp, color = TextPrimary)
+                    Text("Disable SSL verification", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary)
                 }
             }
         },
@@ -575,9 +581,9 @@ private fun WebhookConfigDialog(
                         saving = false
                     }
                 }
-            ) { Text(if (saving) "Saving" else "Save config", color = Blue) }
+            ) { Text(if (saving) "Saving" else "Save config", color = AiModuleTheme.colors.accent) }
         },
-        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text("Cancel", color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -607,21 +613,21 @@ private fun WebhookDeliveriesScreen(
 
     LaunchedEffect(hook.id) { loadDeliveries() }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Webhook deliveries",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> webhook deliveries",
             subtitle = hook.url.ifBlank { "$repoOwner/$repoName" },
             onBack = onBack,
-            actions = {
-                IconButton(onClick = { loadDeliveries() }, enabled = !loading) {
-                    Icon(Icons.Rounded.Refresh, null, Modifier.size(20.dp), tint = Blue)
+            trailing = {
+                IconButton(onClick = { loadDeliveries() }, enabled = !loading, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
                 }
-            }
+            },
         )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
         } else {
             val visibleDeliveries = deliveries.filter { delivery ->
@@ -655,7 +661,7 @@ private fun WebhookDeliveriesScreen(
                         label = { Text("Search event, guid or status") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = TextSecondary) }
+                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
                     )
                 }
                 item {
@@ -691,7 +697,7 @@ private fun WebhookDeliveriesScreen(
                 if (visibleDeliveries.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text(if (deliveries.isEmpty()) "No deliveries found" else "No matching deliveries", fontSize = 14.sp, color = TextTertiary)
+                            Text(if (deliveries.isEmpty()) "No deliveries found" else "No matching deliveries", fontSize = 14.sp, color = AiModuleTheme.colors.textMuted)
                         }
                     }
                 }
@@ -722,17 +728,17 @@ private fun DeliverySummaryCard(deliveries: List<GHWebhookDelivery>) {
     val success = deliveries.count { it.statusCode in 200..299 }
     val failed = deliveries.count { it.statusCode >= 300 || it.status.equals("failed", ignoreCase = true) }
     val redeliveries = deliveries.count { it.redelivery }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Rounded.History, null, Modifier.size(20.dp), tint = Blue)
-            Text("Recent deliveries", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
-            Text("${deliveries.size}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Icon(Icons.Rounded.History, null, Modifier.size(20.dp), tint = AiModuleTheme.colors.accent)
+            Text("Recent deliveries", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text("${deliveries.size}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary)
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             WebhookPill("Success $success", Color(0xFF34C759))
-            WebhookPill("Failed $failed", if (failed > 0) Color(0xFFFF3B30) else TextTertiary)
-            WebhookPill("Redelivered $redeliveries", TextSecondary)
+            WebhookPill("Failed $failed", if (failed > 0) Color(0xFFFF3B30) else AiModuleTheme.colors.textMuted)
+            WebhookPill("Redelivered $redeliveries", AiModuleTheme.colors.textSecondary)
         }
     }
 }
@@ -745,15 +751,15 @@ private fun DeliveryCard(
     onRedeliver: () -> Unit
 ) {
     val color = deliveryStatusColor(delivery)
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(if (delivery.statusCode in 200..299) Icons.Rounded.CheckCircle else Icons.Rounded.Error, null, Modifier.size(18.dp), tint = color)
             Column(Modifier.weight(1f)) {
-                Text(delivery.event.ifBlank { "Delivery ${delivery.id}" }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(delivery.guid.ifBlank { delivery.deliveredAt.take(19).replace('T', ' ') }, fontSize = 11.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(delivery.event.ifBlank { "Delivery ${delivery.id}" }, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(delivery.guid.ifBlank { delivery.deliveredAt.take(19).replace('T', ' ') }, fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             IconButton(onClick = onOpen, enabled = !disabled) {
-                Icon(Icons.Rounded.Article, null, Modifier.size(18.dp), tint = Blue)
+                Icon(Icons.Rounded.Article, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
             }
             IconButton(onClick = onRedeliver, enabled = !disabled) {
                 Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = Color(0xFFFF9500))
@@ -762,10 +768,10 @@ private fun DeliveryCard(
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             WebhookPill(deliveryStatusLabel(delivery), color)
-            if (delivery.action.isNotBlank()) WebhookPill(delivery.action, TextSecondary)
+            if (delivery.action.isNotBlank()) WebhookPill(delivery.action, AiModuleTheme.colors.textSecondary)
             if (delivery.redelivery) WebhookPill("redelivery", Color(0xFFFF9500))
-            if (delivery.duration > 0.0) WebhookPill("${"%.2f".format(delivery.duration)}s", TextTertiary)
-            if (delivery.deliveredAt.isNotBlank()) WebhookPill(delivery.deliveredAt.take(10), TextTertiary)
+            if (delivery.duration > 0.0) WebhookPill("${"%.2f".format(delivery.duration)}s", AiModuleTheme.colors.textMuted)
+            if (delivery.deliveredAt.isNotBlank()) WebhookPill(delivery.deliveredAt.take(10), AiModuleTheme.colors.textMuted)
         }
     }
 }
@@ -778,12 +784,12 @@ private fun DeliveryDetailDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Delivery ${delivery.id}", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Delivery ${delivery.id}", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    WebhookPill(delivery.event.ifBlank { "event" }, TextSecondary)
+                    WebhookPill(delivery.event.ifBlank { "event" }, AiModuleTheme.colors.textSecondary)
                     WebhookPill(deliveryStatusLabel(delivery), deliveryStatusColor(delivery))
                     if (delivery.redelivery) WebhookPill("redelivery", Color(0xFFFF9500))
                 }
@@ -796,16 +802,16 @@ private fun DeliveryDetailDialog(
         confirmButton = {
             TextButton(onClick = onRedeliver) { Text("Redeliver", color = Color(0xFFFF9500)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close", color = TextSecondary) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close", color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
 @Composable
 private fun DeliveryBlock(title: String, body: String) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SurfaceLight).padding(8.dp)) {
-            Text(body.ifBlank { "No data" }, fontSize = 10.sp, color = TextSecondary, lineHeight = 14.sp)
+        Text(title, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.background).padding(8.dp)) {
+            Text(body.ifBlank { "No data" }, fontSize = 10.sp, color = AiModuleTheme.colors.textSecondary, lineHeight = 14.sp)
         }
     }
 }
@@ -825,11 +831,11 @@ private fun WebhookPill(label: String, color: Color) {
 private fun WebhookChoiceChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Blue.copy(alpha = 0.14f) else SurfaceLight)
+            .background(if (selected) AiModuleTheme.colors.accent.copy(alpha = 0.14f) else AiModuleTheme.colors.background)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
-        Text(label, fontSize = 12.sp, color = if (selected) Blue else TextSecondary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(label, fontSize = 12.sp, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
@@ -839,10 +845,11 @@ private fun webhookLastResponseLabel(hook: GHWebhook): String {
     return listOfNotNull(status, code).joinToString(" · ").ifBlank { "No delivery response yet" }
 }
 
+@Composable
 private fun webhookResponseColor(hook: GHWebhook): Color = when {
     hook.lastResponseCode in 200..299 || hook.lastResponseStatus.equals("ok", ignoreCase = true) -> Color(0xFF34C759)
     hook.lastResponseCode >= 400 || hook.lastResponseStatus.equals("failed", ignoreCase = true) -> Color(0xFFFF3B30)
-    else -> TextTertiary
+    else -> AiModuleTheme.colors.textMuted
 }
 
 private fun deliveryStatusLabel(delivery: GHWebhookDelivery): String {
@@ -851,10 +858,11 @@ private fun deliveryStatusLabel(delivery: GHWebhookDelivery): String {
     return listOfNotNull(status, code).joinToString(" · ").ifBlank { "No response" }
 }
 
+@Composable
 private fun deliveryStatusColor(delivery: GHWebhookDelivery): Color = when {
     delivery.statusCode in 200..299 -> Color(0xFF34C759)
     delivery.statusCode >= 300 || delivery.status.equals("failed", ignoreCase = true) -> Color(0xFFFF3B30)
-    else -> TextTertiary
+    else -> AiModuleTheme.colors.textMuted
 }
 
 private fun formatHeaders(headers: List<Pair<String, String>>): String =

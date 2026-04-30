@@ -21,6 +21,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.*
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -167,20 +171,20 @@ internal fun BranchProtectionScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Branch Protection",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> branch protection",
             subtitle = "$repoOwner/$repoName",
             onBack = onBack,
-            actions = {
+            trailing = {
                 if (saving) {
-                    CircularProgressIndicator(Modifier.size(20.dp), color = Blue, strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.size(16.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
                 } else {
                     TextButton(onClick = { saveProtection() }, enabled = hasUnsavedChanges) {
-                        Text(if (hasUnsavedChanges) "Save" else "Saved", color = if (hasUnsavedChanges) Blue else TextTertiary, fontWeight = FontWeight.SemiBold)
+                        Text(if (hasUnsavedChanges) "save" else "saved", color = if (hasUnsavedChanges) AiModuleTheme.colors.accent else AiModuleTheme.colors.textMuted, fontWeight = FontWeight.SemiBold)
                     }
                 }
-            }
+            },
         )
 
         // Branch selector
@@ -201,7 +205,7 @@ internal fun BranchProtectionScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
         } else {
             LazyColumn(
@@ -229,19 +233,19 @@ internal fun BranchProtectionScreen(
                                 if (enabled) Icons.Rounded.Shield else Icons.Rounded.Shield,
                                 null,
                                 Modifier.size(24.dp),
-                                tint = if (enabled) Color(0xFF34C759) else TextSecondary
+                                tint = if (enabled) Color(0xFF34C759) else AiModuleTheme.colors.textSecondary
                             )
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     if (enabled) "Protection enabled" else "Protection disabled",
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = TextPrimary
+                                    color = AiModuleTheme.colors.textPrimary
                                 )
                                 Text(
                                     if (enabled) "Rules are enforced on this branch" else "No rules enforced",
                                     fontSize = 12.sp,
-                                    color = TextTertiary
+                                    color = AiModuleTheme.colors.textMuted
                                 )
                             }
                             Switch(
@@ -333,12 +337,12 @@ internal fun BranchProtectionScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        Text("Required approvals:", fontSize = 14.sp, color = TextPrimary)
+                                        Text("Required approvals:", fontSize = 14.sp, color = AiModuleTheme.colors.textPrimary)
                                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                             (1..6).forEach { count ->
                                                 Box(
                                                     Modifier.size(32.dp).clip(RoundedCornerShape(8.dp))
-                                                        .background(if (count == requiredApprovalCount) Blue.copy(0.15f) else SurfaceLight)
+                                                        .background(if (count == requiredApprovalCount) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.background)
                                                         .clickable { requiredApprovalCount = count },
                                                     contentAlignment = Alignment.Center
                                                 ) {
@@ -346,7 +350,7 @@ internal fun BranchProtectionScreen(
                                                         "$count",
                                                         fontSize = 14.sp,
                                                         fontWeight = if (count == requiredApprovalCount) FontWeight.Bold else FontWeight.Normal,
-                                                        color = if (count == requiredApprovalCount) Blue else TextPrimary
+                                                        color = if (count == requiredApprovalCount) AiModuleTheme.colors.accent else AiModuleTheme.colors.textPrimary
                                                     )
                                                 }
                                             }
@@ -410,13 +414,13 @@ internal fun BranchProtectionScreen(
     if (showDisableConfirm) {
         AlertDialog(
             onDismissRequest = { showDisableConfirm = false },
-            containerColor = SurfaceWhite,
-            title = { Text("Disable branch protection?", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Disable branch protection?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
             text = {
                 Text(
                     "This removes protection rules from $selectedBranch. Required reviews, status checks, and admin enforcement will no longer apply.",
                     fontSize = 13.sp,
-                    color = TextSecondary
+                    color = AiModuleTheme.colors.textSecondary
                 )
             },
             confirmButton = {
@@ -434,7 +438,7 @@ internal fun BranchProtectionScreen(
                     disableConfirmed = false
                     enabled = true
                 }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
                 }
             }
         )
@@ -460,14 +464,14 @@ private data class BranchProtectionEditState(
 private fun BranchProtectionSummaryCard(branch: String, state: BranchProtectionEditState, hasUnsavedChanges: Boolean) {
     SettingsCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Rounded.Shield, null, Modifier.size(22.dp), tint = if (state.enabled) Color(0xFF34C759) else TextSecondary)
+            Icon(Icons.Rounded.Shield, null, Modifier.size(22.dp), tint = if (state.enabled) Color(0xFF34C759) else AiModuleTheme.colors.textSecondary)
             Column(Modifier.weight(1f)) {
-                Text(branch, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text(branch, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
                 Text(
                     if (state.enabled) "${state.statusCheckContexts.size} checks · ${if (state.requirePRReviews) "${state.requiredApprovalCount} approvals" else "no review requirement"}"
                     else "No branch protection enabled",
                     fontSize = 11.sp,
-                    color = TextSecondary
+                    color = AiModuleTheme.colors.textSecondary
                 )
             }
             if (hasUnsavedChanges) {
@@ -482,7 +486,7 @@ private fun BranchProtectionSummaryCard(branch: String, state: BranchProtectionE
         if (state.enabled) {
             Spacer(Modifier.height(8.dp))
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (state.requireStatusChecks) MiniProtectionBadge("Status checks", Blue)
+                if (state.requireStatusChecks) MiniProtectionBadge("Status checks", AiModuleTheme.colors.accent)
                 if (state.requirePRReviews) MiniProtectionBadge("Reviews", Color(0xFF34C759))
                 if (state.requireConversationResolution) MiniProtectionBadge("Conversations", Color(0xFFFF9500))
                 if (state.enforceAdmins) MiniProtectionBadge("Admins", Color(0xFFFF3B30))
@@ -505,7 +509,7 @@ private fun MiniProtectionBadge(label: String, color: Color) {
 private fun BranchChip(name: String, selected: Boolean, protected: Boolean, onClick: () -> Unit) {
     Row(
         Modifier.clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Blue.copy(0.15f) else SurfaceWhite)
+            .background(if (selected) AiModuleTheme.colors.accent.copy(0.15f) else AiModuleTheme.colors.surface)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -515,9 +519,9 @@ private fun BranchChip(name: String, selected: Boolean, protected: Boolean, onCl
             Icons.Rounded.AccountTree,
             null,
             Modifier.size(14.dp),
-            tint = if (selected) Blue else TextSecondary
+            tint = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary
         )
-        Text(name, fontSize = 13.sp, color = if (selected) Blue else TextPrimary)
+        Text(name, fontSize = 13.sp, color = if (selected) AiModuleTheme.colors.accent else AiModuleTheme.colors.textPrimary)
         if (protected) {
             Icon(
                 Icons.Rounded.Shield,
@@ -532,17 +536,17 @@ private fun BranchChip(name: String, selected: Boolean, protected: Boolean, onCl
 @Composable
 private fun ContextChip(name: String, onRemove: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(8.dp)).background(Blue.copy(0.1f))
+        Modifier.clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.accent.copy(0.1f))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text(name, fontSize = 12.sp, color = Blue, fontWeight = FontWeight.Medium)
+        Text(name, fontSize = 12.sp, color = AiModuleTheme.colors.accent, fontWeight = FontWeight.Medium)
         Icon(
             Icons.Rounded.Close,
             null,
             Modifier.size(14.dp).clickable { onRemove() },
-            tint = Blue
+            tint = AiModuleTheme.colors.accent
         )
     }
 }
@@ -550,11 +554,11 @@ private fun ContextChip(name: String, onRemove: () -> Unit) {
 @Composable
 private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(16.dp)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(16.dp)
     ) { content() }
 }
 
 @Composable
-private fun SectionHeader(title: String, color: Color = TextPrimary) {
+private fun SectionHeader(title: String, color: Color = AiModuleTheme.colors.textPrimary) {
     Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = color, modifier = Modifier.padding(bottom = 8.dp))
 }

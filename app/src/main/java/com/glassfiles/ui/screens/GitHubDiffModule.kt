@@ -22,11 +22,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
 import com.glassfiles.data.github.GHCommitDetail
 import com.glassfiles.data.github.GHDiffFile
 import com.glassfiles.data.github.GHPullFile
 import com.glassfiles.data.github.GHReviewComment
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -77,22 +81,24 @@ fun DiffViewerScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = title,
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> ${title.lowercase()}",
             subtitle = subtitle,
             onBack = onBack,
-            actions = {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("+$totalAdditions", color = Color(0xFF34C759), fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                    Text("-$totalDeletions", color = Color(0xFFFF3B30), fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                }
-                if (pullNumber != null) {
-                    IconButton(onClick = { showComments = true }) {
-                        Icon(Icons.Rounded.Comment, null, Modifier.size(20.dp), tint = Blue)
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("+$totalAdditions", color = Color(0xFF34C759), fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = JetBrainsMono)
+                        Text("-$totalDeletions", color = Color(0xFFFF3B30), fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = JetBrainsMono)
+                    }
+                    if (pullNumber != null) {
+                        IconButton(onClick = { showComments = true }, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Rounded.Comment, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
+                        }
                     }
                 }
-            }
+            },
         )
 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
@@ -112,18 +118,18 @@ private fun DiffFileCard(file: GHDiffFile, index: Int, total: Int, commentCount:
         "removed" -> Color(0xFFFF3B30)
         "modified" -> Color(0xFFFF9500)
         "renamed" -> Color(0xFF5856D6)
-        else -> TextSecondary
+        else -> AiModuleTheme.colors.textSecondary
     }
 
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-            .background(SurfaceWhite).clickable(onClick = onClick)
+            .background(AiModuleTheme.colors.surface).clickable(onClick = onClick)
             .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(statusColor))
-            Text(file.filename, modifier = Modifier.weight(1f), fontSize = 14.sp, color = TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            Text("${index}/$total", fontSize = 11.sp, color = TextTertiary)
+            Text(file.filename, modifier = Modifier.weight(1f), fontSize = 14.sp, color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text("${index}/$total", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
         }
         Spacer(Modifier.height(4.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -132,8 +138,8 @@ private fun DiffFileCard(file: GHDiffFile, index: Int, total: Int, commentCount:
             Text("-${file.deletions}", fontSize = 12.sp, color = Color(0xFFFF3B30))
             if (commentCount > 0) {
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Comment, null, Modifier.size(12.dp), tint = Blue)
-                    Text("$commentCount", fontSize = 12.sp, color = Blue, fontWeight = FontWeight.Medium)
+                    Icon(Icons.Rounded.Comment, null, Modifier.size(12.dp), tint = AiModuleTheme.colors.accent)
+                    Text("$commentCount", fontSize = 12.sp, color = AiModuleTheme.colors.accent, fontWeight = FontWeight.Medium)
                 }
             }
         }
@@ -165,23 +171,23 @@ private fun FileDiffScreen(
     var commentActionInFlight by remember { mutableStateOf(false) }
     val canMutateComments = repoOwner != null && repoName != null && pullNumber != null
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = file.filename.substringAfterLast("/"),
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> ${file.filename.substringAfterLast("/")}",
             subtitle = "${file.status} +${file.additions} -${file.deletions}",
             onBack = onBack,
-            actions = {
+            trailing = {
                 IconButton(onClick = {
                     onViewModeChange(if (viewMode == DiffViewMode.UNIFIED) DiffViewMode.SPLIT else DiffViewMode.UNIFIED)
-                }) {
+                }, modifier = Modifier.size(36.dp)) {
                     Icon(
                         if (viewMode == DiffViewMode.UNIFIED) Icons.Rounded.ViewColumn else Icons.Rounded.ViewAgenda,
                         null,
-                        Modifier.size(20.dp),
-                        tint = Blue
+                        Modifier.size(18.dp),
+                        tint = AiModuleTheme.colors.accent
                     )
                 }
-            }
+            },
         )
 
         LazyColumn(
@@ -229,8 +235,8 @@ private fun FileDiffScreen(
         var commentBody by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showCommentDialog = false },
-            containerColor = SurfaceWhite,
-            title = { Text("Add comment on line $commentLine", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text("Add comment on line $commentLine", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
             text = {
                 OutlinedTextField(
                     value = commentBody,
@@ -257,12 +263,12 @@ private fun FileDiffScreen(
                         }
                     }
                 ) {
-                    Text("Comment", color = Blue)
+                    Text("Comment", color = AiModuleTheme.colors.accent)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCommentDialog = false }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
                 }
             }
         )
@@ -375,16 +381,16 @@ private fun DiffLineItem(line: PatchDiffLine, viewMode: DiffViewMode, onAddComme
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("+${line.lineNum}", modifier = Modifier.width(40.dp), fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFF34C759))
-                Text(line.text, modifier = Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = TextPrimary)
+                Text(line.text, modifier = Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = AiModuleTheme.colors.textPrimary)
                 if (onAddComment != null) {
-                    Icon(Icons.Rounded.AddComment, null, Modifier.size(14.dp), tint = Blue.copy(0.5f))
+                    Icon(Icons.Rounded.AddComment, null, Modifier.size(14.dp), tint = AiModuleTheme.colors.accent.copy(0.5f))
                 }
             }
         }
         is PatchDiffLine.Removed -> {
             Row(Modifier.fillMaxWidth().background(Color(0x0DFF3B30)).padding(horizontal = 8.dp, vertical = 2.dp)) {
                 Text("-${line.lineNum}", modifier = Modifier.width(40.dp), fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFFFF3B30))
-                Text(line.text, modifier = Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = TextPrimary)
+                Text(line.text, modifier = Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = AiModuleTheme.colors.textPrimary)
             }
         }
         is PatchDiffLine.Context -> {
@@ -395,9 +401,9 @@ private fun DiffLineItem(line: PatchDiffLine, viewMode: DiffViewMode, onAddComme
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("${line.oldLineNum}", modifier = Modifier.width(40.dp), fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFF6E7681))
-                Text(line.text, modifier = Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = TextSecondary)
+                Text(line.text, modifier = Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                 if (onAddComment != null) {
-                    Icon(Icons.Rounded.AddComment, null, Modifier.size(14.dp), tint = Blue.copy(0.3f))
+                    Icon(Icons.Rounded.AddComment, null, Modifier.size(14.dp), tint = AiModuleTheme.colors.accent.copy(0.3f))
                 }
             }
         }
@@ -415,16 +421,16 @@ private fun CommentBubble(
 ) {
     Column(
         Modifier.fillMaxWidth().padding(start = 48.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
-            .clip(RoundedCornerShape(8.dp)).background(SurfaceWhite)
+            .clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.surface)
             .padding(10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(comment.author, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Blue)
-            Text(comment.createdAt.take(10), fontSize = 10.sp, color = TextTertiary)
+            Text(comment.author, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.accent)
+            Text(comment.createdAt.take(10), fontSize = 10.sp, color = AiModuleTheme.colors.textMuted)
             Spacer(Modifier.weight(1f))
             if (onEdit != null) {
                 IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Rounded.Edit, null, Modifier.size(15.dp), tint = Blue)
+                    Icon(Icons.Rounded.Edit, null, Modifier.size(15.dp), tint = AiModuleTheme.colors.accent)
                 }
             }
             if (onDelete != null) {
@@ -434,7 +440,7 @@ private fun CommentBubble(
             }
         }
         Spacer(Modifier.height(4.dp))
-        Text(comment.body, fontSize = 13.sp, color = TextPrimary, lineHeight = 18.sp)
+        Text(comment.body, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, lineHeight = 18.sp)
     }
 }
 
@@ -453,16 +459,16 @@ fun PRReviewCommentsScreen(
     var deleteComment by remember { mutableStateOf<GHReviewComment?>(null) }
     var commentActionInFlight by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Review Comments",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> review comments",
             subtitle = "#$pullNumber · ${comments.size} comments",
-            onBack = onBack
+            onBack = onBack,
         )
 
         if (comments.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No review comments yet", fontSize = 14.sp, color = TextTertiary)
+                Text("No review comments yet", fontSize = 14.sp, color = AiModuleTheme.colors.textMuted)
             }
         } else {
             LazyColumn(
@@ -472,14 +478,14 @@ fun PRReviewCommentsScreen(
             ) {
                 items(comments) { comment ->
                     Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(14.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(comment.path.substringAfterLast("/"), fontSize = 12.sp, color = Blue, fontWeight = FontWeight.Medium)
-                            Text("Line ${comment.line}", fontSize = 11.sp, color = TextTertiary)
+                            Text(comment.path.substringAfterLast("/"), fontSize = 12.sp, color = AiModuleTheme.colors.accent, fontWeight = FontWeight.Medium)
+                            Text("Line ${comment.line}", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                             Spacer(Modifier.weight(1f))
                             IconButton(onClick = { editComment = comment }, modifier = Modifier.size(30.dp)) {
-                                Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = Blue)
+                                Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.accent)
                             }
                             IconButton(onClick = { deleteComment = comment }, modifier = Modifier.size(30.dp)) {
                                 Icon(Icons.Rounded.Delete, null, Modifier.size(16.dp), tint = Color(0xFFFF3B30))
@@ -487,11 +493,11 @@ fun PRReviewCommentsScreen(
                         }
                         Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(comment.author, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                            Text(comment.createdAt.take(10), fontSize = 11.sp, color = TextTertiary)
+                            Text(comment.author, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
+                            Text(comment.createdAt.take(10), fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text(comment.body, fontSize = 13.sp, color = TextPrimary, lineHeight = 18.sp)
+                        Text(comment.body, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, lineHeight = 18.sp)
                     }
                 }
             }
@@ -550,11 +556,11 @@ private fun ReviewCommentEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Edit review comment", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Edit review comment", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${comment.path}:${comment.line}", fontSize = 12.sp, color = TextTertiary)
+                Text("${comment.path}:${comment.line}", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
                 OutlinedTextField(
                     value = body,
                     onValueChange = { body = it },
@@ -566,11 +572,11 @@ private fun ReviewCommentEditDialog(
         },
         confirmButton = {
             TextButton(enabled = !saving && body.isNotBlank(), onClick = { onSave(body) }) {
-                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
-                else Text("Save", color = Blue)
+                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
+                else Text("Save", color = AiModuleTheme.colors.accent)
             }
         },
-        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -583,16 +589,16 @@ private fun ReviewCommentDeleteDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Delete review comment?", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = { Text("Delete comment on ${comment.path}:${comment.line}?", fontSize = 13.sp, color = TextSecondary) },
+        containerColor = AiModuleTheme.colors.surface,
+        title = { Text("Delete review comment?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
+        text = { Text("Delete comment on ${comment.path}:${comment.line}?", fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary) },
         confirmButton = {
             TextButton(enabled = !deleting, onClick = onDelete) {
                 if (deleting) CircularProgressIndicator(Modifier.size(14.dp), color = Color(0xFFFF3B30), strokeWidth = 2.dp)
                 else Text("Delete", color = Color(0xFFFF3B30))
             }
         },
-        dismissButton = { TextButton(enabled = !deleting, onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { TextButton(enabled = !deleting, onClick = onDismiss) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
     )
 }
 
@@ -619,7 +625,7 @@ fun PullRequestDiffScreen(
 
     if (loading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Blue)
+            CircularProgressIndicator(color = AiModuleTheme.colors.accent)
         }
         return
     }
@@ -675,14 +681,14 @@ fun CommitDiffScreen(
 
     if (loading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Blue)
+            CircularProgressIndicator(color = AiModuleTheme.colors.accent)
         }
         return
     }
 
     if (detail == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Failed to load diff", color = TextTertiary)
+            Text("Failed to load diff", color = AiModuleTheme.colors.textMuted)
         }
         return
     }

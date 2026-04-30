@@ -24,9 +24,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleSpinner
 import com.glassfiles.data.github.GHRepoSettings
 import com.glassfiles.data.github.GHTag
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -144,25 +148,25 @@ internal fun RepoSettingsScreen(
             topics.map(::normalizeRepoTopic).filter { it.isNotBlank() }.distinct() != s.topics.map(::normalizeRepoTopic).filter { it.isNotBlank() }.distinct()
     } ?: false
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(
-            title = "Repository Settings",
+    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
+        AiModulePageBar(
+            title = "> repo settings",
             subtitle = "$repoOwner/$repoName",
             onBack = onBack,
-            actions = {
+            trailing = {
                 if (saving) {
-                    CircularProgressIndicator(Modifier.size(20.dp), color = Blue, strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.size(16.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
                 } else {
                     TextButton(onClick = { saveChanges() }, enabled = hasUnsavedChanges) {
-                        Text(if (hasUnsavedChanges) "Save" else "Saved", color = if (hasUnsavedChanges) Blue else TextTertiary, fontWeight = FontWeight.SemiBold)
+                        Text(if (hasUnsavedChanges) "save" else "saved", color = if (hasUnsavedChanges) AiModuleTheme.colors.accent else AiModuleTheme.colors.textMuted, fontWeight = FontWeight.SemiBold)
                     }
                 }
-            }
+            },
         )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
             }
         } else {
             LazyColumn(
@@ -238,51 +242,51 @@ internal fun RepoSettingsScreen(
                             // Branch protection button
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                    .background(SurfaceLight)
+                                    .background(AiModuleTheme.colors.background)
                                     .clickable { onBranchProtection() }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Icon(Icons.Rounded.Shield, null, Modifier.size(22.dp), tint = Blue)
+                                Icon(Icons.Rounded.Shield, null, Modifier.size(22.dp), tint = AiModuleTheme.colors.accent)
                                 Column(Modifier.weight(1f)) {
-                                    Text("Branch protection rules", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                                    Text("Require reviews, status checks, and more", fontSize = 12.sp, color = TextTertiary)
+                                    Text("Branch protection rules", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
+                                    Text("Require reviews, status checks, and more", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
                                 }
-                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textMuted)
                             }
 
                             // Collaborators button
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                    .background(SurfaceLight)
+                                    .background(AiModuleTheme.colors.background)
                                     .clickable { onCollaborators() }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Icon(Icons.Rounded.Group, null, Modifier.size(22.dp), tint = Blue)
+                                Icon(Icons.Rounded.Group, null, Modifier.size(22.dp), tint = AiModuleTheme.colors.accent)
                                 Column(Modifier.weight(1f)) {
-                                    Text("Manage collaborators", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                                    Text("Add, remove, or change permissions", fontSize = 12.sp, color = TextTertiary)
+                                    Text("Manage collaborators", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
+                                    Text("Add, remove, or change permissions", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
                                 }
-                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textMuted)
                             }
 
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                    .background(SurfaceLight)
+                                    .background(AiModuleTheme.colors.background)
                                     .clickable { onTeams() }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Icon(Icons.Rounded.Group, null, Modifier.size(22.dp), tint = Blue)
+                                Icon(Icons.Rounded.Group, null, Modifier.size(22.dp), tint = AiModuleTheme.colors.accent)
                                 Column(Modifier.weight(1f)) {
-                                    Text("Manage teams", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                                    Text("Org team access and permissions", fontSize = 12.sp, color = TextTertiary)
+                                    Text("Manage teams", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
+                                    Text("Org team access and permissions", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
                                 }
-                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textMuted)
                             }
 
                             ToggleRow("Allow forking", allowForking, Icons.Rounded.ForkRight) { allowForking = it }
@@ -291,58 +295,58 @@ internal fun RepoSettingsScreen(
                             // Webhooks button
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                    .background(SurfaceLight)
+                                    .background(AiModuleTheme.colors.background)
                                     .clickable { onWebhooks() }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Icon(Icons.Rounded.Webhook, null, Modifier.size(22.dp), tint = Blue)
+                                Icon(Icons.Rounded.Webhook, null, Modifier.size(22.dp), tint = AiModuleTheme.colors.accent)
                                 Column(Modifier.weight(1f)) {
-                                    Text("Webhooks", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                                    Text("Manage repository webhooks", fontSize = 12.sp, color = TextTertiary)
+                                    Text("Webhooks", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
+                                    Text("Manage repository webhooks", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
                                 }
-                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textMuted)
                             }
 
                             // Discussions button
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                    .background(SurfaceLight)
+                                    .background(AiModuleTheme.colors.background)
                                     .clickable { onDiscussions() }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Icon(Icons.Rounded.Forum, null, Modifier.size(22.dp), tint = Blue)
+                                Icon(Icons.Rounded.Forum, null, Modifier.size(22.dp), tint = AiModuleTheme.colors.accent)
                                 Column(Modifier.weight(1f)) {
-                                    Text("Discussions", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                                    Text("View repository discussions", fontSize = 12.sp, color = TextTertiary)
+                                    Text("Discussions", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
+                                    Text("View repository discussions", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
                                 }
-                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textMuted)
                             }
 
                             // Rulesets button
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                    .background(SurfaceLight)
+                                    .background(AiModuleTheme.colors.background)
                                     .clickable { onRulesets() }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Icon(Icons.Rounded.Rule, null, Modifier.size(22.dp), tint = Blue)
+                                Icon(Icons.Rounded.Rule, null, Modifier.size(22.dp), tint = AiModuleTheme.colors.accent)
                                 Column(Modifier.weight(1f)) {
-                                    Text("Rulesets", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                                    Text("View repository rulesets", fontSize = 12.sp, color = TextTertiary)
+                                    Text("Rulesets", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
+                                    Text("View repository rulesets", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
                                 }
-                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textMuted)
                             }
 
                             // Security button
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                    .background(SurfaceLight)
+                                    .background(AiModuleTheme.colors.background)
                                     .clickable { onSecurity() }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -350,16 +354,16 @@ internal fun RepoSettingsScreen(
                             ) {
                                 Icon(Icons.Rounded.Security, null, Modifier.size(22.dp), tint = Color(0xFFFF3B30))
                                 Column(Modifier.weight(1f)) {
-                                    Text("Security", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                                    Text("Dependabot alerts", fontSize = 12.sp, color = TextTertiary)
+                                    Text("Security", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
+                                    Text("Dependabot alerts", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
                                 }
-                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+                                Icon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.textMuted)
                             }
 
                             // Archive toggle
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                    .background(if (archived) Color(0xFFFF3B30).copy(0.1f) else SurfaceLight)
+                                    .background(if (archived) Color(0xFFFF3B30).copy(0.1f) else AiModuleTheme.colors.background)
                                     .clickable { showArchiveConfirm = !archived }
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -369,19 +373,19 @@ internal fun RepoSettingsScreen(
                                     if (archived) Icons.Rounded.Unarchive else Icons.Rounded.Archive,
                                     null,
                                     Modifier.size(22.dp),
-                                    tint = if (archived) Color(0xFFFF3B30) else TextSecondary
+                                    tint = if (archived) Color(0xFFFF3B30) else AiModuleTheme.colors.textSecondary
                                 )
                                 Column(Modifier.weight(1f)) {
                                     Text(
                                         if (archived) "Unarchive this repository" else "Archive this repository",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = if (archived) Color(0xFFFF3B30) else TextPrimary
+                                        color = if (archived) Color(0xFFFF3B30) else AiModuleTheme.colors.textPrimary
                                     )
                                     Text(
                                         if (archived) "This repository is currently archived" else "Archive makes the repository read-only",
                                         fontSize = 12.sp,
-                                        color = TextTertiary
+                                        color = AiModuleTheme.colors.textMuted
                                     )
                                 }
                                 Switch(
@@ -443,7 +447,7 @@ internal fun RepoSettingsScreen(
                                     Text("Add")
                                 }
                             }
-                            Text("${topics.size}/20 topics", fontSize = 11.sp, color = TextTertiary)
+                            Text("${topics.size}/20 topics", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                         }
                     }
                 }
@@ -453,14 +457,14 @@ internal fun RepoSettingsScreen(
                 item {
                     SettingsCard {
                         if (tags.isEmpty()) {
-                            Text("No tags returned for this repository.", fontSize = 13.sp, color = TextTertiary)
+                            Text("No tags returned for this repository.", fontSize = 13.sp, color = AiModuleTheme.colors.textMuted)
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 tags.take(12).forEach { tag ->
                                     RepoTagRow(tag)
                                 }
                                 if (tags.size > 12) {
-                                    Text("+${tags.size - 12} more tags", fontSize = 11.sp, color = TextTertiary)
+                                    Text("+${tags.size - 12} more tags", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted)
                                 }
                             }
                         }
@@ -476,13 +480,13 @@ internal fun RepoSettingsScreen(
     if (archiveTarget != null) {
         AlertDialog(
             onDismissRequest = { showArchiveConfirm = null },
-            containerColor = SurfaceWhite,
-            title = { Text(if (archiveTarget) "Archive repository" else "Unarchive repository", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            containerColor = AiModuleTheme.colors.surface,
+            title = { Text(if (archiveTarget) "Archive repository" else "Unarchive repository", color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Text(
                     if (archiveTarget) "Archiving makes the repository read-only until it is unarchived. Save settings after confirming."
                     else "Unarchiving restores normal repository writes after you save settings.",
-                    color = TextSecondary,
+                    color = AiModuleTheme.colors.textSecondary,
                     fontSize = 13.sp
                 )
             },
@@ -491,11 +495,11 @@ internal fun RepoSettingsScreen(
                     archived = archiveTarget
                     showArchiveConfirm = null
                 }) {
-                    Text(if (archiveTarget) "Archive" else "Unarchive", color = if (archiveTarget) Color(0xFFFF3B30) else Blue)
+                    Text(if (archiveTarget) "Archive" else "Unarchive", color = if (archiveTarget) Color(0xFFFF3B30) else AiModuleTheme.colors.accent)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showArchiveConfirm = null }) { Text(Strings.cancel, color = TextSecondary) }
+                TextButton(onClick = { showArchiveConfirm = null }) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) }
             }
         )
     }
@@ -505,9 +509,9 @@ internal fun RepoSettingsScreen(
 private fun RepoSettingsSummaryCard(settings: GHRepoSettings?, tags: List<GHTag>, hasUnsavedChanges: Boolean) {
     SettingsCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Rounded.Settings, null, Modifier.size(22.dp), tint = Blue)
+            Icon(Icons.Rounded.Settings, null, Modifier.size(22.dp), tint = AiModuleTheme.colors.accent)
             Column(Modifier.weight(1f)) {
-                Text(settings?.name ?: "Repository", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text(settings?.name ?: "Repository", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AiModuleTheme.colors.textPrimary)
                 Text(
                     buildString {
                         append(settings?.defaultBranch ?: "default branch")
@@ -519,7 +523,7 @@ private fun RepoSettingsSummaryCard(settings: GHRepoSettings?, tags: List<GHTag>
                         append("${tags.size} tags")
                     },
                     fontSize = 11.sp,
-                    color = TextSecondary,
+                    color = AiModuleTheme.colors.textSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -546,7 +550,7 @@ private fun RepoSettingsSummaryCard(settings: GHRepoSettings?, tags: List<GHTag>
 }
 
 @Composable
-private fun SectionHeader(title: String, color: Color = TextPrimary) {
+private fun SectionHeader(title: String, color: Color = AiModuleTheme.colors.textPrimary) {
     Text(
         title,
         fontSize = 13.sp,
@@ -559,7 +563,7 @@ private fun SectionHeader(title: String, color: Color = TextPrimary) {
 @Composable
 private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(14.dp)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(14.dp)
     ) {
         content()
     }
@@ -568,18 +572,18 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun RepoTagRow(tag: GHTag) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(SurfaceLight).padding(horizontal = 10.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.background).padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(Icons.Rounded.Label, null, Modifier.size(16.dp), tint = Blue)
+        Icon(Icons.Rounded.Label, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.accent)
         Column(Modifier.weight(1f)) {
-            Text(tag.name, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(tag.name, fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (tag.commitSha.isNotBlank()) {
-                Text(tag.commitSha.take(7), fontSize = 10.sp, color = TextTertiary)
+                Text(tag.commitSha.take(7), fontSize = 10.sp, color = AiModuleTheme.colors.textMuted)
             }
         }
-        Icon(Icons.Rounded.ChevronRight, null, Modifier.size(15.dp), tint = TextTertiary)
+        Icon(Icons.Rounded.ChevronRight, null, Modifier.size(15.dp), tint = AiModuleTheme.colors.textMuted)
     }
 }
 
@@ -597,12 +601,12 @@ internal fun ToggleRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Icon(icon, null, Modifier.size(20.dp), tint = if (checked) Blue else TextSecondary)
-        Text(label, fontSize = 14.sp, color = TextPrimary, modifier = Modifier.weight(1f))
+        Icon(icon, null, Modifier.size(20.dp), tint = if (checked) AiModuleTheme.colors.accent else AiModuleTheme.colors.textSecondary)
+        Text(label, fontSize = 14.sp, color = AiModuleTheme.colors.textPrimary, modifier = Modifier.weight(1f))
         Switch(
             checked = checked,
             onCheckedChange = onToggle,
-            colors = SwitchDefaults.colors(checkedTrackColor = Blue)
+            colors = SwitchDefaults.colors(checkedTrackColor = AiModuleTheme.colors.accent)
         )
     }
 }
@@ -617,17 +621,17 @@ private fun normalizeRepoTopic(value: String): String =
 @Composable
 private fun TopicChip(topic: String, onRemove: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(8.dp)).background(Blue.copy(0.1f))
+        Modifier.clip(RoundedCornerShape(8.dp)).background(AiModuleTheme.colors.accent.copy(0.1f))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text(topic, fontSize = 12.sp, color = Blue, fontWeight = FontWeight.Medium)
+        Text(topic, fontSize = 12.sp, color = AiModuleTheme.colors.accent, fontWeight = FontWeight.Medium)
         Icon(
             Icons.Rounded.Close,
             null,
             Modifier.size(14.dp).clickable { onRemove() },
-            tint = Blue
+            tint = AiModuleTheme.colors.accent
         )
     }
 }
