@@ -73,6 +73,7 @@ fun AiUsageScreen(onBack: () -> Unit) {
             AiUsageWindow.MONTH -> "30d"
         },
         trailing = {
+            val colors = AiModuleTheme.colors
             IconButton(
                 onClick = { confirmClear = true },
                 enabled = records.isNotEmpty(),
