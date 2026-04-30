@@ -148,7 +148,7 @@ fun AiModelsScreen(onBack: () -> Unit) {
                     )
                 }
             }
-            TerminalHairline()
+            AiModuleHairline()
 
             ModelsBody(
                 provider = selected,
