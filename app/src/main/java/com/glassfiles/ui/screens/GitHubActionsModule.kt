@@ -122,6 +122,15 @@ import com.glassfiles.ui.theme.Orange
 import com.glassfiles.ui.theme.Purple
 import com.glassfiles.ui.theme.Red
 import com.glassfiles.ui.theme.Teal
+import com.glassfiles.ui.components.AiModuleDestructiveButton
+import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModulePrimaryButton
+import com.glassfiles.ui.components.AiModuleSecondaryButton
+import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.aiModuleStatusBadge
+import com.glassfiles.ui.theme.AiModuleSurface
+import com.glassfiles.ui.theme.AiModuleTheme
+import com.glassfiles.ui.theme.JetBrainsMono
 import com.glassfiles.ui.theme.SeparatorColor
 import com.glassfiles.ui.theme.SurfaceLight
 import com.glassfiles.ui.theme.SurfaceWhite
@@ -277,10 +286,12 @@ internal fun ActionsTab(
         missingDispatchInputs(dispatchSchema, dispatchInputValues)
     }
 
+    AiModuleSurface {
+    val palette = AiModuleTheme.colors
     Column(
         Modifier
             .fillMaxSize()
-            .background(SurfaceLight)
+            .background(palette.background)
             .verticalScroll(rememberScrollState())
             .imePadding()
     ) {
@@ -288,15 +299,27 @@ internal fun ActionsTab(
             Row(
                 Modifier.fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, Orange.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(palette.surface)
+                    .border(1.dp, palette.warning.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Rounded.Info, null, tint = Orange, modifier = Modifier.size(16.dp))
-                Text(notice, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 16.sp)
+                Text(
+                    "!",
+                    color = palette.warning,
+                    fontFamily = JetBrainsMono,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                )
+                Text(
+                    notice,
+                    fontSize = 12.sp,
+                    color = palette.textPrimary,
+                    fontFamily = JetBrainsMono,
+                    lineHeight = 16.sp,
+                )
             }
         }
         ActionsOverviewHeader(
@@ -386,6 +409,7 @@ internal fun ActionsTab(
             nowMs = nowMs,
             onOpenLatestRun = { latestRun?.let(onRunClick) }
         )
+    }
     }
 }
 
@@ -530,160 +554,340 @@ private fun ActionsRunsHistoryScreen(
         }
     }
 
-    val colors = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        if (showTopBar) {
-            GHTopBar("Build history", subtitle = "${visibleRuns.size} workflow runs", onBack = onBack) {
-                IconButton(onClick = { scope.launch { load(reset = true) } }) {
-                    if (refreshing) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
-                    else Icon(Icons.Rounded.Refresh, null, tint = Blue)
-                }
-            }
-        }
-
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(colors.surface)
-                .border(1.dp, colors.outlineVariant.copy(alpha = 0.10f), RoundedCornerShape(10.dp))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(Icons.Rounded.Search, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
-            Box(Modifier.weight(1f)) {
-                if (query.text.isEmpty()) {
-                    Text("Search runs", color = colors.onSurfaceVariant, fontSize = 14.sp)
-                }
-                BasicTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    textStyle = androidx.compose.ui.text.TextStyle(color = colors.onSurface, fontSize = 14.sp),
-                    singleLine = true,
-                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Blue),
-                    modifier = Modifier.fillMaxWidth()
+    AiModuleSurface {
+        val palette = AiModuleTheme.colors
+        Column(Modifier.fillMaxSize().background(palette.background)) {
+            if (showTopBar) {
+                AiModulePageBar(
+                    title = "> runs",
+                    subtitle = "${visibleRuns.size} workflow runs",
+                    onBack = onBack,
+                    trailing = {
+                        if (refreshing) {
+                            Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                                AiModuleSpinner()
+                            }
+                        } else {
+                            IconButton(onClick = { scope.launch { load(reset = true) } }) {
+                                Icon(
+                                    Icons.Rounded.Refresh,
+                                    null,
+                                    tint = palette.textSecondary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    },
                 )
             }
-            if (query.text.isNotEmpty()) {
-                IconButton(onClick = { query = TextFieldValue("") }, modifier = Modifier.size(20.dp)) {
-                    Icon(Icons.Rounded.Cancel, null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                }
-            }
-        }
 
-        FilterRow {
-            ActionsFilterChip("All", filter == ActionsRunFilter.ALL) { filter = ActionsRunFilter.ALL }
-            ActionsFilterChip("Active", filter == ActionsRunFilter.ACTIVE) { filter = ActionsRunFilter.ACTIVE }
-            ActionsFilterChip("Queued", filter == ActionsRunFilter.QUEUED) { filter = ActionsRunFilter.QUEUED }
-            ActionsFilterChip("Success", filter == ActionsRunFilter.SUCCESS) { filter = ActionsRunFilter.SUCCESS }
-            ActionsFilterChip("Failed", filter == ActionsRunFilter.FAILED) { filter = ActionsRunFilter.FAILED }
-            ActionsFilterChip("Cancelled", filter == ActionsRunFilter.CANCELLED) { filter = ActionsRunFilter.CANCELLED }
-            ActionsFilterChip("Skipped", filter == ActionsRunFilter.SKIPPED) { filter = ActionsRunFilter.SKIPPED }
-            if (currentLogin.isNotBlank()) {
-                ActionsFilterChip("Mine", onlyMine) { onlyMine = !onlyMine }
-            }
-        }
-
-        if (workflows.isNotEmpty()) {
-            FilterRow {
-                ActionsFilterChip("All workflows", selectedWorkflowId == null) { selectedWorkflowId = null }
-                workflows.forEach { workflow ->
-                    ActionsFilterChip(
-                        workflow.name.ifBlank { workflow.path.substringAfterLast('/') },
-                        selectedWorkflowId == workflow.id
-                    ) { selectedWorkflowId = workflow.id }
-                }
-            }
-        }
-
-        if (branches.isNotEmpty()) {
-            FilterRow {
-                ActionsFilterChip("All branches", selectedBranch == null) { selectedBranch = null }
-                branches.forEach { branch ->
-                    ActionsFilterChip(branch, selectedBranch == branch) { selectedBranch = branch }
-                }
-            }
-        }
-
-        FilterRow {
-            ActionsFilterChip("All events", selectedEvent == null) { selectedEvent = null }
-            listOf("workflow_dispatch", "push", "pull_request", "schedule").forEach { event ->
-                ActionsFilterChip(event, selectedEvent == event) { selectedEvent = event }
-            }
-        }
-
-        Spacer(Modifier.height(4.dp))
-
-        if (visibleRuns.isEmpty() && !refreshing) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No workflow runs", color = TextTertiary, fontSize = 14.sp)
-            }
-        } else {
-            LazyColumn(
-                Modifier.fillMaxSize().pointerInput(refreshing, listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
-                    detectVerticalDragGestures(
-                        onDragEnd = {
-                            if (pullDistance > 140f && !refreshing) {
-                                scope.launch { load(reset = true) }
-                            }
-                            pullDistance = 0f
-                        },
-                        onDragCancel = { pullDistance = 0f },
-                        onVerticalDrag = { _, dragAmount ->
-                            if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 && dragAmount > 0) {
-                                pullDistance += dragAmount
-                            }
-                        }
-                    )
-                },
-                state = listState,
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 16.dp)
+            // mono search row
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(palette.surface)
+                    .border(1.dp, palette.border, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (pullDistance > 28f || refreshing) {
-                    item {
-                        Box(Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) {
-                            Text(if (refreshing) "Refreshing..." else "Release to refresh", fontSize = 11.sp, color = TextTertiary)
-                        }
+                Text(
+                    "search:",
+                    color = palette.textSecondary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 12.sp,
+                )
+                Box(Modifier.weight(1f)) {
+                    if (query.text.isEmpty()) {
+                        Text(
+                            "name / branch / sha / actor",
+                            color = palette.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 13.sp,
+                        )
                     }
-                }
-                items(visibleRuns) { run ->
-                    ModernRunCard(
-                        run = run,
-                        nowMs = nowMs,
-                        canWrite = repo.canWrite(),
-                        onRunClick = { onRunClick(run) },
-                        onCancel = {
-                            scope.launch {
-                                val ok = GitHubManager.cancelWorkflowRun(context, repo.owner, repo.name, run.id)
-                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                load(reset = true)
-                            }
-                        },
-                        onRerun = {
-                            scope.launch {
-                                val ok = GitHubManager.rerunWorkflow(context, repo.owner, repo.name, run.id)
-                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                load(reset = true)
-                            }
-                        }
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = palette.textPrimary,
+                            fontSize = 13.sp,
+                            fontFamily = JetBrainsMono,
+                        ),
+                        singleLine = true,
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(palette.accent),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                if (hasMore) {
-                    item {
-                        TextButton(
-                            onClick = { scope.launch { load(reset = false) } },
-                            enabled = !refreshing,
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-                        ) {
-                            if (refreshing) CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
-                            else Text("Load more runs", color = Blue)
+                if (query.text.isNotEmpty()) {
+                    Text(
+                        "x",
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { query = TextFieldValue("") }
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        color = palette.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+
+            ActionsTerminalFilterRow {
+                ActionsTerminalFilterChip("all", filter == ActionsRunFilter.ALL) { filter = ActionsRunFilter.ALL }
+                ActionsTerminalFilterChip("active", filter == ActionsRunFilter.ACTIVE) { filter = ActionsRunFilter.ACTIVE }
+                ActionsTerminalFilterChip("queued", filter == ActionsRunFilter.QUEUED) { filter = ActionsRunFilter.QUEUED }
+                ActionsTerminalFilterChip("ok", filter == ActionsRunFilter.SUCCESS) { filter = ActionsRunFilter.SUCCESS }
+                ActionsTerminalFilterChip("fail", filter == ActionsRunFilter.FAILED) { filter = ActionsRunFilter.FAILED }
+                ActionsTerminalFilterChip("cancel", filter == ActionsRunFilter.CANCELLED) { filter = ActionsRunFilter.CANCELLED }
+                ActionsTerminalFilterChip("skip", filter == ActionsRunFilter.SKIPPED) { filter = ActionsRunFilter.SKIPPED }
+                if (currentLogin.isNotBlank()) {
+                    ActionsTerminalFilterChip("mine", onlyMine) { onlyMine = !onlyMine }
+                }
+            }
+
+            if (workflows.isNotEmpty()) {
+                ActionsTerminalFilterRow {
+                    ActionsTerminalFilterChip("all wf", selectedWorkflowId == null) { selectedWorkflowId = null }
+                    workflows.forEach { workflow ->
+                        ActionsTerminalFilterChip(
+                            workflow.name.ifBlank { workflow.path.substringAfterLast('/') },
+                            selectedWorkflowId == workflow.id,
+                        ) { selectedWorkflowId = workflow.id }
+                    }
+                }
+            }
+
+            if (branches.isNotEmpty()) {
+                ActionsTerminalFilterRow {
+                    ActionsTerminalFilterChip("all br", selectedBranch == null) { selectedBranch = null }
+                    branches.forEach { branch ->
+                        ActionsTerminalFilterChip(branch, selectedBranch == branch) { selectedBranch = branch }
+                    }
+                }
+            }
+
+            ActionsTerminalFilterRow {
+                ActionsTerminalFilterChip("all ev", selectedEvent == null) { selectedEvent = null }
+                listOf("workflow_dispatch", "push", "pull_request", "schedule").forEach { event ->
+                    ActionsTerminalFilterChip(event, selectedEvent == event) { selectedEvent = event }
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            if (visibleRuns.isEmpty() && !refreshing) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "no runs yet",
+                        color = palette.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 13.sp,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize().pointerInput(
+                        refreshing,
+                        listState.firstVisibleItemIndex,
+                        listState.firstVisibleItemScrollOffset,
+                    ) {
+                        detectVerticalDragGestures(
+                            onDragEnd = {
+                                if (pullDistance > 140f && !refreshing) {
+                                    scope.launch { load(reset = true) }
+                                }
+                                pullDistance = 0f
+                            },
+                            onDragCancel = { pullDistance = 0f },
+                            onVerticalDrag = { _, dragAmount ->
+                                if (listState.firstVisibleItemIndex == 0 &&
+                                    listState.firstVisibleItemScrollOffset == 0 &&
+                                    dragAmount > 0
+                                ) {
+                                    pullDistance += dragAmount
+                                }
+                            },
+                        )
+                    },
+                    state = listState,
+                    contentPadding = PaddingValues(start = 0.dp, end = 0.dp, top = 4.dp, bottom = 16.dp),
+                ) {
+                    if (pullDistance > 28f || refreshing) {
+                        item {
+                            Row(
+                                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AiModuleSpinner(
+                                    label = if (refreshing) "loading runs\u2026" else "release to refresh",
+                                )
+                            }
+                        }
+                    }
+                    items(visibleRuns) { run ->
+                        WorkflowRunRow(run = run, nowMs = nowMs) { onRunClick(run) }
+                    }
+                    if (hasMore) {
+                        item {
+                            Box(
+                                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AiModuleSecondaryButton(
+                                    label = if (refreshing) "loading\u2026" else "load more \u2192",
+                                    onClick = { scope.launch { load(reset = false) } },
+                                    enabled = !refreshing,
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ActionsTerminalFilterRow(content: @Composable () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun ActionsTerminalFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val palette = AiModuleTheme.colors
+    val tint = if (selected) palette.accent else palette.textSecondary
+    val bg = if (selected) palette.accent.copy(alpha = 0.10f) else Color.Transparent
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(bg)
+            .border(1.dp, tint, RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(
+            label,
+            color = tint,
+            fontFamily = JetBrainsMono,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun WorkflowRunRow(run: GHWorkflowRun, nowMs: Long, onClick: () -> Unit) {
+    val palette = AiModuleTheme.colors
+    val badge = aiModuleStatusBadge(run.status, run.conclusion, palette)
+    val duration = if (isRunActive(run)) "running" else calcRunDuration(run, nowMs).ifBlank { "\u2014" }
+    val sha = if (run.headSha.length >= 7) run.headSha.take(7) else "\u2014"
+    val branch = run.branch.ifBlank { "\u2014" }
+    val name = run.name.ifBlank { "workflow" }
+    val actor = run.actor.ifBlank { "\u2014" }
+    val ago = formatTimeAgoMono(run.updatedAt, nowMs)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            badge.glyph,
+            color = badge.color.copy(alpha = badge.alpha),
+            fontFamily = JetBrainsMono,
+            fontSize = 13.sp,
+            modifier = Modifier.width(20.dp),
+        )
+        Text(
+            "#${run.runNumber}",
+            color = palette.textSecondary,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            modifier = Modifier.width(58.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            name,
+            color = palette.textPrimary,
+            fontFamily = JetBrainsMono,
+            fontSize = 13.sp,
+            modifier = Modifier.width(110.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            duration,
+            color = palette.textSecondary,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            modifier = Modifier.width(72.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            branch,
+            color = palette.textSecondary,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            modifier = Modifier.width(108.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            sha,
+            color = palette.textMuted,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            modifier = Modifier.width(72.dp),
+            maxLines = 1,
+        )
+        Text(
+            actor,
+            color = palette.textSecondary,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            ago,
+            color = palette.textMuted,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+private fun formatTimeAgoMono(iso: String, nowMs: Long): String {
+    val ms = parseIsoMs(iso) ?: return "\u2014"
+    val diff = (nowMs - ms).coerceAtLeast(0L)
+    val sec = diff / 1000
+    return when {
+        sec < 60 -> "${sec}s"
+        sec < 3600 -> "${sec / 60}m"
+        sec < 86400 -> "${sec / 3600}h"
+        sec < 604800 -> "${sec / 86400}d"
+        else -> "${sec / 604800}w"
     }
 }
 
@@ -713,186 +917,316 @@ private fun ActionsOverviewHeader(
     nowMs: Long,
     onOpenLatestRun: () -> Unit
 ) {
+    val palette = AiModuleTheme.colors
     Column(
         Modifier
             .fillMaxWidth()
-            .background(SurfaceLight)
+            .background(palette.background)
             .padding(top = 4.dp)
     ) {
+        // Stats one-liner: total: N  active: N  ok: N  fail: N
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            StatCard("Total", totalRuns.toString(), Icons.Rounded.Timeline, Blue, modifier = Modifier.weight(1f))
-            StatCard("Active", activeCount.toString(), Icons.Rounded.FlashOn, Blue, modifier = Modifier.weight(1f))
-            StatCard("Success", successCount.toString(), Icons.Rounded.CheckCircle, Green, modifier = Modifier.weight(1f))
-            StatCard("Failed", failedCount.toString(), Icons.Rounded.Error, Red, modifier = Modifier.weight(1f))
+            ActionsStatPair("total", totalRuns.toString(), palette.textPrimary, palette)
+            ActionsStatPair("active", activeCount.toString(), palette.warning, palette)
+            ActionsStatPair("ok", successCount.toString(), palette.accent, palette)
+            ActionsStatPair("fail", failedCount.toString(), palette.error, palette)
         }
 
-        Spacer(Modifier.height(8.dp))
+        // > WORKFLOW CONTROL  ............................................. ⟳
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "> WORKFLOW CONTROL",
+                color = palette.textSecondary,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.Medium,
+                fontSize = AiModuleTheme.type.label,
+                letterSpacing = 0.6.sp,
+            )
+            if (refreshing) {
+                Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                    AiModuleSpinner()
+                }
+            } else {
+                IconButton(onClick = onRefresh, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Rounded.Refresh,
+                        null,
+                        tint = palette.textSecondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
 
-        Column(
+        Box(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
-                .ghGlassCard(12.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(palette.surface)
+                .border(1.dp, palette.border, RoundedCornerShape(6.dp))
                 .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Rounded.AutoAwesome, null, tint = Blue, modifier = Modifier.size(18.dp))
-                    Text(
-                        "WORKFLOW CONTROL",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextSecondary,
-                        letterSpacing = 0.8.sp
-                    )
-                }
-                IconButton(onClick = onRefresh, modifier = Modifier.size(28.dp)) {
-                    if (refreshing) CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
-                    else Icon(Icons.Rounded.Refresh, null, tint = Blue, modifier = Modifier.size(18.dp))
-                }
-            }
-
-            InputGroup("Workflow") {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // workflow:
+                ActionsFieldLabel("workflow", palette)
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (workflows.isEmpty()) {
-                        ActionsFilterChip(Strings.ghNoWorkflows, false) {}
+                        Text(
+                            Strings.ghNoWorkflows,
+                            color = palette.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.sp,
+                        )
                     } else {
                         workflows.forEach { workflow ->
                             val selected = workflow.id == selectedWorkflowId
-                            ActionsFilterChip(
+                            ActionsTerminalFilterChip(
                                 workflow.name.ifBlank { workflow.path.substringAfterLast('/') },
-                                selected
+                                selected,
                             ) { onSelectWorkflow(workflow.id) }
                         }
                     }
                 }
-            }
 
-            InputGroup("Branch / ref") {
-                OutlinedTextField(
-                    value = selectedBranch,
-                    onValueChange = onBranchChange,
-                    placeholder = { Text("main", fontSize = 13.sp, color = TextTertiary) },
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                // branch:
+                ActionsFieldLabel("branch", palette)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(palette.surfaceElevated)
+                        .border(1.dp, palette.border, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        if (selectedBranch.isEmpty()) {
+                            Text(
+                                "main",
+                                color = palette.textMuted,
+                                fontFamily = JetBrainsMono,
+                                fontSize = 13.sp,
+                            )
+                        }
+                        BasicTextField(
+                            value = selectedBranch,
+                            onValueChange = onBranchChange,
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = palette.textPrimary,
+                                fontSize = 13.sp,
+                                fontFamily = JetBrainsMono,
+                            ),
+                            singleLine = true,
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(palette.accent),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
                 if (branches.isNotEmpty()) {
                     Row(
                         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         branches.take(20).forEach { branch ->
-                            ActionsFilterChip(branch, branch == selectedBranch) { onBranchChange(branch) }
+                            ActionsTerminalFilterChip(branch, branch == selectedBranch) {
+                                onBranchChange(branch)
+                            }
                         }
                     }
                 }
-            }
 
-            val hasInputs = dispatchSchema?.inputs?.isNotEmpty() == true
-            if (hasInputs) {
-                InputGroup("Inputs") {
+                val hasInputs = dispatchSchema?.inputs?.isNotEmpty() == true
+                if (dispatchSchema == null) {
+                    Text(
+                        "no workflow_dispatch trigger",
+                        color = palette.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                    )
+                } else if (!hasInputs) {
+                    Text(
+                        "no inputs",
+                        color = palette.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                    )
+                } else {
+                    ActionsFieldLabel("inputs", palette)
                     DynamicDispatchInputs(
                         schema = dispatchSchema,
                         values = dispatchInputValues,
                         missingRequiredInputs = missingRequiredInputs,
-                        onValueChange = onDispatchInputChange
+                        onValueChange = onDispatchInputChange,
                     )
                 }
-            } else {
-                DynamicDispatchInputs(
-                    schema = dispatchSchema,
-                    values = dispatchInputValues,
-                    missingRequiredInputs = missingRequiredInputs,
-                    onValueChange = onDispatchInputChange
-                )
-            }
 
-            workflows.firstOrNull { it.id == selectedWorkflowId }?.let { selectedWorkflow ->
-                Spacer(Modifier.height(2.dp))
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.10f))
-                )
+                workflows.firstOrNull { it.id == selectedWorkflowId }?.let { selectedWorkflow ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(palette.border)
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        val state = selectedWorkflow.state.ifBlank { "unknown" }
+                        val stateColor = if (selectedWorkflow.state == "active") palette.accent else palette.textSecondary
+                        Text(
+                            "[$state]",
+                            color = stateColor,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            selectedWorkflow.path,
+                            fontSize = 11.sp,
+                            fontFamily = JetBrainsMono,
+                            color = palette.textMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (canWrite) {
+                            val isActive = selectedWorkflow.state == "active"
+                            if (isActive) {
+                                AiModuleDestructiveButton(
+                                    label = "disable",
+                                    onClick = { onToggleWorkflowState(selectedWorkflow) },
+                                )
+                            } else {
+                                AiModuleSecondaryButton(
+                                    label = "enable",
+                                    onClick = { onToggleWorkflowState(selectedWorkflow) },
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Row(
                     Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    MiniActionsBadge(selectedWorkflow.state.ifBlank { "unknown" }, if (selectedWorkflow.state == "active") Green else TextSecondary)
-                    Text(
-                        selectedWorkflow.path,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = TextTertiary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
+                    if (latestRun != null) {
+                        AiModuleSecondaryButton(
+                            label = "latest #${latestRun.runNumber} \u2192",
+                            onClick = onOpenLatestRun,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
                     if (canWrite) {
-                        TextButton(onClick = { onToggleWorkflowState(selectedWorkflow) }) {
+                        AiModulePrimaryButton(
+                            label = if (dispatching) "dispatching\u2026" else "\u23F5 ${Strings.ghRunWorkflow} \u2192",
+                            onClick = onDispatch,
+                            enabled = !dispatching &&
+                                workflows.isNotEmpty() &&
+                                dispatchSchema != null &&
+                                missingRequiredInputs.isEmpty(),
+                        )
+                    }
+                }
+
+                latestRun?.let { run ->
+                    val badge = aiModuleStatusBadge(run.status, run.conclusion, palette)
+                    val elapsed = calcRunDuration(run, nowMs)
+                    val parts = buildList {
+                        add("latest:")
+                        add(badge.glyph)
+                        add(displayRunStatus(run))
+                        if (run.branch.isNotBlank()) add(run.branch)
+                        if (run.event.isNotBlank()) add(run.event)
+                        if (elapsed.isNotBlank()) add(elapsed)
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        parts.forEachIndexed { idx, part ->
+                            val color = when {
+                                idx == 0 -> palette.textMuted
+                                idx == 1 -> badge.color.copy(alpha = badge.alpha)
+                                idx == 2 -> badge.color.copy(alpha = badge.alpha)
+                                else -> palette.textSecondary
+                            }
                             Text(
-                                if (selectedWorkflow.state == "active") "Disable" else "Enable",
-                                color = if (selectedWorkflow.state == "active") Red else Blue,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
+                                part,
+                                color = color,
+                                fontFamily = JetBrainsMono,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
-                }
-            }
-
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                    if (latestRun != null) {
-                        Chip(Icons.Rounded.Article, "Latest #${latestRun.runNumber}") { onOpenLatestRun() }
-                    }
-                }
-                if (canWrite) {
-                    TextButton(onClick = onDispatch, enabled = !dispatching && workflows.isNotEmpty() && dispatchSchema != null && missingRequiredInputs.isEmpty()) {
-                        if (dispatching) {
-                            CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.Rounded.PlayArrow, null, tint = Blue, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(Strings.ghRunWorkflow, color = Blue, fontWeight = FontWeight.Medium)
-                        }
-                    }
-                }
-            }
-
-            latestRun?.let { run ->
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MiniActionsBadge("Latest ${displayRunStatus(run)}", runStatusColor(run))
-                    if (run.branch.isNotBlank()) MiniActionsBadge(run.branch, Blue)
-                    if (run.event.isNotBlank()) MiniActionsBadge(run.event, Purple)
-                    val elapsed = calcRunDuration(run, nowMs)
-                    if (elapsed.isNotBlank()) MiniActionsBadge(elapsed, TextSecondary)
                 }
             }
         }
 
         Spacer(Modifier.height(6.dp))
     }
+}
+
+@Composable
+private fun ActionsStatPair(
+    label: String,
+    value: String,
+    valueColor: Color,
+    palette: com.glassfiles.ui.theme.AiModuleColors,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "$label:",
+            color = palette.textMuted,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            value,
+            color = valueColor,
+            fontFamily = JetBrainsMono,
+            fontWeight = FontWeight.Medium,
+            fontSize = 13.sp,
+        )
+    }
+}
+
+@Composable
+private fun ActionsFieldLabel(
+    label: String,
+    palette: com.glassfiles.ui.theme.AiModuleColors,
+) {
+    Text(
+        "$label:",
+        color = palette.textSecondary,
+        fontFamily = JetBrainsMono,
+        fontSize = 11.sp,
+        letterSpacing = 0.4.sp,
+    )
 }
 
 @Composable
@@ -1974,80 +2308,106 @@ internal fun WorkflowRunDetailScreen(
         1 + (if (maxAttempt > 1) 1 else 0) + (if (firstFailedJob != null) 1 else 0)
     }
 
-    Column(Modifier.fillMaxSize().background(SurfaceLight)) {
-        GHTopBar(run?.let { "${it.name} #${it.runNumber}" } ?: "Run #$runId", onBack = onBack) {
-            IconButton(onClick = { scope.launch { refreshAll() } }) {
-                if (refreshing) CircularProgressIndicator(Modifier.size(18.dp), color = Blue, strokeWidth = 2.dp)
-                else Icon(Icons.Rounded.Refresh, null, tint = Blue)
-            }
-            run?.htmlUrl?.takeIf { it.isNotBlank() }?.let { url ->
-                IconButton(onClick = { openExternalUrl(context, url) }) {
-                    Icon(Icons.Rounded.Article, null, tint = Blue)
-                }
-            }
-            IconButton(onClick = {
-                scope.launch {
-                    val ok = GitHubManager.rerunWorkflow(context, repo.owner, repo.name, runId)
-                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                    refreshAll()
-                }
-            }) { Icon(Icons.Rounded.PlayArrow, null, tint = Blue) }
-            IconButton(onClick = {
-                scope.launch {
-                    val ok = GitHubManager.rerunFailedJobs(context, repo.owner, repo.name, runId)
-                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                    refreshAll()
-                }
-            }) { Icon(Icons.Rounded.Error, null, tint = Orange) }
-            // B — "Suggest fix" handoff to AI Agent. Only shown when
-            // (a) the agent integration is wired (onSuggestFix != null)
-            // and (b) this run actually failed; succeeded runs don't
-            // need a fix. Prompt is built from the run's name + the
-            // first failed job (when available) to give the agent a
-            // concrete starting point instead of a generic ask.
-            if (onSuggestFix != null && run?.conclusion == "failure") {
-                IconButton(onClick = {
-                    val r = run
-                    val firstFailed = jobs.firstOrNull { it.conclusion == "failure" }
-                    val prompt = buildString {
-                        append(Strings.aiAgentSuggestFixPrompt)
-                        append("\n\n")
-                        append("Workflow: ").append(r?.name ?: "?").append('\n')
-                        append("Run: #").append(r?.runNumber ?: runId).append('\n')
-                        if (firstFailed != null) {
-                            append("Failed job: ").append(firstFailed.name).append('\n')
-                        }
-                        r?.branch?.takeIf { it.isNotBlank() }?.let {
-                            append("Branch: ").append(it).append('\n')
-                        }
-                        r?.htmlUrl?.takeIf { it.isNotBlank() }?.let {
-                            append("URL: ").append(it).append('\n')
-                        }
+    AiModuleSurface {
+    val palette = AiModuleTheme.colors
+    Column(Modifier.fillMaxSize().background(palette.background)) {
+        AiModulePageBar(
+            title = "> ${run?.name?.ifBlank { "run" } ?: "run"} #${run?.runNumber ?: runId}",
+            subtitle = run?.let { displayRunStatus(it) },
+            onBack = onBack,
+            trailing = {
+                if (refreshing) {
+                    Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                        AiModuleSpinner()
                     }
-                    onSuggestFix(prompt)
+                } else {
+                    IconButton(onClick = { scope.launch { refreshAll() } }) {
+                        Icon(
+                            Icons.Rounded.Refresh,
+                            null,
+                            tint = palette.textSecondary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+                run?.htmlUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                    IconButton(onClick = { openExternalUrl(context, url) }) {
+                        Icon(
+                            Icons.Rounded.Article,
+                            null,
+                            tint = palette.textSecondary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+                IconButton(onClick = {
+                    scope.launch {
+                        val ok = GitHubManager.rerunWorkflow(context, repo.owner, repo.name, runId)
+                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        refreshAll()
+                    }
                 }) {
-                    Icon(Icons.Rounded.AutoAwesome, null, tint = Blue)
+                    Icon(Icons.Rounded.PlayArrow, null, tint = palette.accent, modifier = Modifier.size(18.dp))
                 }
-            }
-            IconButton(onClick = {
-                scope.launch {
-                    val ok = GitHubManager.cancelWorkflowRun(context, repo.owner, repo.name, runId)
-                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                    refreshAll()
+                IconButton(onClick = {
+                    scope.launch {
+                        val ok = GitHubManager.rerunFailedJobs(context, repo.owner, repo.name, runId)
+                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        refreshAll()
+                    }
+                }) {
+                    Icon(Icons.Rounded.Error, null, tint = palette.warning, modifier = Modifier.size(18.dp))
                 }
-            }) { Icon(Icons.Rounded.Cancel, null, tint = Red) }
-            IconButton(onClick = {
-                scope.launch {
-                    val ok = GitHubManager.forceCancelWorkflowRun(context, repo.owner, repo.name, runId)
-                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                    refreshAll()
+                if (onSuggestFix != null && run?.conclusion == "failure") {
+                    IconButton(onClick = {
+                        val r = run
+                        val firstFailed = jobs.firstOrNull { it.conclusion == "failure" }
+                        val prompt = buildString {
+                            append(Strings.aiAgentSuggestFixPrompt)
+                            append("\n\n")
+                            append("Workflow: ").append(r?.name ?: "?").append('\n')
+                            append("Run: #").append(r?.runNumber ?: runId).append('\n')
+                            if (firstFailed != null) {
+                                append("Failed job: ").append(firstFailed.name).append('\n')
+                            }
+                            r?.branch?.takeIf { it.isNotBlank() }?.let {
+                                append("Branch: ").append(it).append('\n')
+                            }
+                            r?.htmlUrl?.takeIf { it.isNotBlank() }?.let {
+                                append("URL: ").append(it).append('\n')
+                            }
+                        }
+                        onSuggestFix(prompt)
+                    }) {
+                        Icon(Icons.Rounded.AutoAwesome, null, tint = palette.accent, modifier = Modifier.size(18.dp))
+                    }
                 }
-            }) { Icon(Icons.Rounded.Warning, null, tint = Red) }
-        }
+                if (run != null && isRunActive(run!!)) {
+                    IconButton(onClick = {
+                        scope.launch {
+                            val ok = GitHubManager.cancelWorkflowRun(context, repo.owner, repo.name, runId)
+                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                            refreshAll()
+                        }
+                    }) {
+                        Icon(Icons.Rounded.Cancel, null, tint = palette.error, modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = {
+                        scope.launch {
+                            val ok = GitHubManager.forceCancelWorkflowRun(context, repo.owner, repo.name, runId)
+                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                            refreshAll()
+                        }
+                    }) {
+                        Icon(Icons.Rounded.Warning, null, tint = palette.error, modifier = Modifier.size(18.dp))
+                    }
+                }
+            },
+        )
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                AiModuleSpinner(label = "loading run\u2026")
             }
         } else {
             val successCount = jobs.count { it.conclusion == "success" }
@@ -2460,37 +2820,96 @@ internal fun WorkflowRunDetailScreen(
             }
         )
     }
+    }
 }
 
 @Composable
 private fun WorkflowRunDetailHeader(run: GHWorkflowRun, nowMs: Long) {
-    val statusColor = runStatusColor(run)
+    val palette = AiModuleTheme.colors
+    val badge = aiModuleStatusBadge(run.status, run.conclusion, palette)
     val elapsed = calcRunDuration(run, nowMs)
+    val started = run.createdAt.take(19).replace('T', ' ')
+
     Column(
-        Modifier.fillMaxWidth().ghGlassCard(16.dp).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(palette.surface)
+            .border(1.dp, palette.border, RoundedCornerShape(6.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(runStatusIcon(run), null, tint = statusColor, modifier = Modifier.size(22.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(run.displayTitle.ifBlank { run.name }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(
-                    buildRunSummary(run, elapsed),
-                    fontSize = 12.sp,
-                    color = TextSecondary,
-                    lineHeight = 17.sp
-                )
-            }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                badge.glyph,
+                color = badge.color.copy(alpha = badge.alpha),
+                fontFamily = JetBrainsMono,
+                fontSize = 16.sp,
+            )
+            Text(
+                run.displayTitle.ifBlank { run.name }.ifBlank { "workflow" } + " #${run.runNumber}",
+                color = palette.textPrimary,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
         }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MiniActionsBadge(displayRunStatus(run), statusColor)
-            MiniActionsBadge("#${run.runNumber}", TextSecondary)
-            if (run.runAttempt > 1) MiniActionsBadge("attempt ${run.runAttempt}", Orange)
-            if (run.branch.isNotBlank()) MiniActionsBadge(run.branch, Blue)
-            if (run.event.isNotBlank()) MiniActionsBadge(run.event, Purple)
-            if (run.headSha.length >= 7) MiniActionsBadge(run.headSha.take(7), TextSecondary)
-            if (run.headRepository.isNotBlank()) MiniActionsBadge(run.headRepository, TextSecondary)
+        Spacer(Modifier.height(4.dp))
+        ActionsHeaderField("status", "${badge.glyph} ${displayRunStatus(run)}", badge.color.copy(alpha = badge.alpha), palette)
+        if (run.event.isNotBlank()) {
+            ActionsHeaderField("trigger", run.event, palette.textPrimary, palette)
         }
+        if (run.branch.isNotBlank()) {
+            ActionsHeaderField("branch", run.branch, palette.textPrimary, palette)
+        }
+        if (run.headSha.length >= 7) {
+            ActionsHeaderField("commit", run.headSha.take(7), palette.textPrimary, palette)
+        }
+        if (run.actor.isNotBlank()) {
+            ActionsHeaderField("actor", run.actor, palette.textPrimary, palette)
+        }
+        if (run.runAttempt > 1) {
+            ActionsHeaderField("attempt", run.runAttempt.toString(), palette.warning, palette)
+        }
+        if (started.isNotBlank()) {
+            ActionsHeaderField("started", started, palette.textSecondary, palette)
+        }
+        if (elapsed.isNotBlank()) {
+            ActionsHeaderField("duration", elapsed, palette.textPrimary, palette)
+        }
+        if (run.headRepository.isNotBlank()) {
+            ActionsHeaderField("repo", run.headRepository, palette.textMuted, palette)
+        }
+    }
+}
+
+@Composable
+private fun ActionsHeaderField(
+    label: String,
+    value: String,
+    valueColor: Color,
+    palette: com.glassfiles.ui.theme.AiModuleColors,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "${label.padEnd(8)}: ",
+            color = palette.textMuted,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            letterSpacing = 0.2.sp,
+        )
+        Text(
+            value,
+            color = valueColor,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -2857,8 +3276,9 @@ private fun WorkflowJobCard(
     setLoadingJobId: (Long?) -> Unit,
     onRefreshRun: () -> Unit
 ) {
+    val palette = AiModuleTheme.colors
     val status = displayJobStatus(job)
-    val jColor = jobStatusColor(status)
+    val jobBadge = aiModuleStatusBadge(job.status, job.conclusion, palette)
     val jobElapsed = calcJobDuration(job, nowMs)
     val logMeta = jobLogMeta[job.id]
 
@@ -2874,30 +3294,55 @@ private fun WorkflowJobCard(
     }
 
     val statusBarColor = when (status) {
-        "failed", "failure", "timed_out", "action_required" -> MaterialTheme.colorScheme.error
-        "running", "in_progress" -> MaterialTheme.colorScheme.primary
+        "failed", "failure", "timed_out", "action_required" -> palette.error
+        "running", "in_progress" -> palette.warning
         else -> Color.Transparent
     }
-    Row(Modifier.fillMaxWidth().padding(bottom = 10.dp).ghGlassCard(14.dp)) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(palette.surface)
+            .border(1.dp, palette.border, RoundedCornerShape(6.dp)),
+    ) {
         Box(
-            Modifier.width(3.dp).fillMaxHeight().background(statusBarColor)
+            Modifier.width(2.dp).fillMaxHeight().background(statusBarColor)
         )
-        Column(Modifier.weight(1f).padding(12.dp)) {
+        Column(Modifier.weight(1f).padding(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(jobStatusIcon(status), null, Modifier.size(18.dp), tint = jColor)
-                Text(job.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(jobElapsed, fontSize = 10.sp, color = if (isJobActive(job)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace, letterSpacing = 0.4.sp)
+                Text(
+                    jobBadge.glyph,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 14.sp,
+                    color = jobBadge.color.copy(alpha = jobBadge.alpha),
+                )
+                Text(
+                    job.name,
+                    fontSize = 13.sp,
+                    fontFamily = JetBrainsMono,
+                    fontWeight = FontWeight.Medium,
+                    color = palette.textPrimary,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    jobElapsed,
+                    fontSize = 11.sp,
+                    color = if (isJobActive(job)) palette.warning else palette.textMuted,
+                    fontFamily = JetBrainsMono,
+                )
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             if (loadingJobId == job.id && jobLogs[job.id] == null) {
                 Row(
                     Modifier.fillMaxWidth().padding(bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
-                    Text("Loading job log...", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    AiModuleSpinner(label = "loading job log\u2026")
                 }
             }
             job.steps.forEach { step ->
@@ -2914,7 +3359,15 @@ private fun WorkflowJobCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         StepStatusMark(stepStatus, sColor)
-                        Text(step.name, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Text(
+                            step.name,
+                            fontSize = 12.sp,
+                            fontFamily = JetBrainsMono,
+                            color = palette.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
                         StepStatusPill(stepStatus, sColor)
                     }
                     if (expandedStepKey == stepKey) {
@@ -2928,10 +3381,13 @@ private fun WorkflowJobCard(
                         }
                         Box(
                             Modifier.fillMaxWidth().padding(start = 28.dp, top = 4.dp, bottom = 8.dp)
-                                .clip(RoundedCornerShape(9.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(palette.surfaceElevated)
+                                .border(1.dp, palette.border, RoundedCornerShape(4.dp))
+                                .padding(8.dp)
                         ) {
                             if (jobLogs[job.id] == null || loadingJobId == job.id) {
-                                CircularProgressIndicator(Modifier.size(16.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+                                AiModuleSpinner()
                             } else {
                                 LogLinesView(shownStepLog, Modifier.fillMaxWidth().heightIn(max = 220.dp))
                             }
@@ -2991,12 +3447,21 @@ private fun WorkflowJobCard(
             if (expandedJobId == job.id && jobLogs[job.id] != null) {
                 Spacer(Modifier.height(8.dp))
                 Box(
-                    Modifier.fillMaxWidth().heightIn(max = 420.dp).clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp)
+                    Modifier.fillMaxWidth().heightIn(max = 420.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(palette.surfaceElevated)
+                        .border(1.dp, palette.border, RoundedCornerShape(4.dp))
+                        .padding(10.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         logMeta?.warning?.let {
-                            Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.error, lineHeight = 15.sp)
+                            Text(
+                                it,
+                                fontSize = 11.sp,
+                                fontFamily = JetBrainsMono,
+                                color = palette.error,
+                                lineHeight = 15.sp,
+                            )
                         }
                         LogLinesView(compactLogForDisplay(jobLogs[job.id]!!), Modifier.fillMaxWidth().heightIn(max = 390.dp))
                     }
@@ -3036,16 +3501,17 @@ private fun StepStatusPill(status: String, color: Color) {
 
 @Composable
 private fun LogLinesView(log: String, modifier: Modifier = Modifier) {
+    val palette = AiModuleTheme.colors
     val lines = remember(log) { log.lineSequence().toList() }
     LazyColumn(modifier) {
         items(lines) { line ->
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                 Text(
                     line.ifEmpty { " " },
-                    fontSize = 9.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    lineHeight = 13.sp
+                    fontSize = 10.sp,
+                    fontFamily = JetBrainsMono,
+                    color = palette.textPrimary,
+                    lineHeight = 14.sp,
                 )
             }
         }
@@ -3482,15 +3948,26 @@ private fun FilterRow(content: @Composable () -> Unit) {
 
 @Composable
 private fun ActionsFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
+    val palette = AiModuleTheme.colors
     Box(
-        Modifier.clip(RoundedCornerShape(8.dp))
-            .background(if (selected) colors.primary.copy(alpha = 0.12f) else colors.surface)
-            .border(1.dp, if (selected) colors.primary.copy(alpha = 0.28f) else colors.outlineVariant, RoundedCornerShape(8.dp))
+        Modifier.clip(RoundedCornerShape(4.dp))
+            .background(if (selected) palette.accent.copy(alpha = 0.10f) else palette.surface)
+            .border(
+                1.dp,
+                if (selected) palette.accent.copy(alpha = 0.55f) else palette.border,
+                RoundedCornerShape(4.dp),
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
-        Text(label, fontSize = 12.sp, color = if (selected) colors.primary else colors.onSurfaceVariant, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(
+            label,
+            fontSize = 11.sp,
+            fontFamily = JetBrainsMono,
+            color = if (selected) palette.accent else palette.textSecondary,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            letterSpacing = 0.2.sp,
+        )
     }
 }
 
