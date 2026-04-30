@@ -3,12 +3,8 @@ package com.glassfiles.ui.screens.ai.terminal
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
-import com.glassfiles.R
 import com.glassfiles.ui.components.CodeColors
 
 /**
