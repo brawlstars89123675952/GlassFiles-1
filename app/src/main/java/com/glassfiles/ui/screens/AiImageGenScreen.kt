@@ -91,10 +91,8 @@ import java.io.File
  */
 @Composable
 fun AiImageGenScreen(onBack: () -> Unit) {
-    com.glassfiles.ui.screens.ai.terminal.AgentTerminalSurface {
-        com.glassfiles.ui.screens.ai.terminal.AiTerminalMaterialBridge {
-            AiImageGenScreenInner(onBack)
-        }
+    AiModuleSurface {
+        AiImageGenScreenInner(onBack)
     }
 }
 
