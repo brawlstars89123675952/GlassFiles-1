@@ -33,10 +33,13 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.*
+import com.glassfiles.ui.components.aiModuleRepoBadge
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.TimeZone
 
 // Compact mode — propagates through all sub-screens automatically
 
@@ -58,62 +61,77 @@ internal fun Modifier.ghGlassCard(radius: androidx.compose.ui.unit.Dp = 16.dp): 
 
 @Composable
 internal fun RepoCard(repo: GHRepo, onClick: () -> Unit, modifier: Modifier = Modifier, showStats: Boolean = false) {
-    val colors = MaterialTheme.colorScheme
-    val icon = when {
-        repo.isArchived -> Icons.Outlined.Archive
-        repo.isPrivate -> Icons.Outlined.Lock
-        repo.isFork -> Icons.Outlined.CallSplit
-        repo.isTemplate -> Icons.Outlined.Description
-        else -> Icons.Outlined.Folder
-    }
-    val iconTint = when {
-        repo.isArchived -> colors.error
-        repo.isPrivate -> colors.tertiary
-        repo.isFork -> colors.onSurfaceVariant
-        repo.isTemplate -> colors.secondary
-        else -> colors.primary
-    }
-    val iconBackground = when {
-        repo.isArchived -> colors.errorContainer.copy(alpha = 0.55f)
-        repo.isPrivate -> colors.tertiaryContainer.copy(alpha = 0.55f)
-        repo.isFork -> colors.surfaceVariant
-        repo.isTemplate -> colors.secondaryContainer.copy(alpha = 0.45f)
-        else -> colors.primaryContainer.copy(alpha = 0.45f)
-    }
+    val palette = AiModuleTheme.colors
+    val badge = aiModuleRepoBadge(repo.isArchived, repo.isPrivate, repo.isFork, repo.isTemplate, palette)
+    val ago = remember(repo.updatedAt) { repoUpdatedAgoMono(repo.updatedAt) }
     Row(
         modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .ghGlassCard(14.dp)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.Top
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(iconBackground), contentAlignment = Alignment.Center) {
-            Icon(icon, null, Modifier.size(24.dp), tint = iconTint)
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(repo.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            badge.glyph,
+            color = badge.color,
+            fontFamily = JetBrainsMono,
+            fontSize = 13.sp,
+            modifier = Modifier.width(14.dp),
+        )
+        Text(
+            repo.name,
+            color = palette.textPrimary,
+            fontFamily = JetBrainsMono,
+            fontWeight = FontWeight.Medium,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = repo.language.ifBlank { "—" }.lowercase(Locale.US),
+            color = if (repo.language.isBlank()) palette.textMuted else palette.textSecondary,
+            fontFamily = JetBrainsMono,
+            fontSize = 11.sp,
+            maxLines = 1,
+            modifier = Modifier.width(72.dp),
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (showStats || repo.stars > 0) {
             Text(
-                repo.description.ifBlank { "No description" },
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurfaceVariant,
-                fontStyle = if (repo.description.isBlank()) FontStyle.Italic else FontStyle.Normal,
-                lineHeight = 18.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                text = if (repo.stars > 0) "\u2605${formatGitHubNumber(repo.stars)}" else "  —",
+                color = if (repo.stars > 0) palette.warning else palette.textMuted,
+                fontFamily = JetBrainsMono,
+                fontSize = 11.sp,
+                modifier = Modifier.width(48.dp),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(if (repo.language.isBlank()) colors.outline else langColor(repo.language)))
-                    Text(repo.language.ifBlank { "Unknown" }, fontSize = 11.sp, color = colors.onSurfaceVariant, fontWeight = FontWeight.Medium)
-                }
-                if (showStats && repo.stars > 0) Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.Star, null, Modifier.size(13.dp), tint = colors.onSurfaceVariant); Text(formatGitHubNumber(repo.stars), fontSize = 11.sp, color = colors.onSurfaceVariant, fontFamily = FontFamily.Monospace) }
-                if (showStats && repo.forks > 0) Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Outlined.CallSplit, null, Modifier.size(13.dp), tint = colors.onSurfaceVariant); Text(formatGitHubNumber(repo.forks), fontSize = 11.sp, color = colors.onSurfaceVariant, fontFamily = FontFamily.Monospace) }
-                if (repo.isFork) Text("fork", fontSize = 10.sp, color = colors.onSurfaceVariant)
-            }
         }
+        Text(
+            text = ago,
+            color = palette.textMuted,
+            fontFamily = JetBrainsMono,
+            fontSize = 11.sp,
+            modifier = Modifier.width(40.dp),
+        )
+    }
+}
+
+private val REPO_AGO_FMT = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+
+private fun repoUpdatedAgoMono(iso: String): String {
+    if (iso.isBlank()) return "—"
+    val ms = runCatching { REPO_AGO_FMT.parse(iso)?.time }.getOrNull() ?: return "—"
+    val diff = (System.currentTimeMillis() - ms).coerceAtLeast(0L)
+    val sec = diff / 1000
+    return when {
+        sec < 60 -> "${sec}s"
+        sec < 3600 -> "${sec / 60}m"
+        sec < 86400 -> "${sec / 3600}h"
+        sec < 604800 -> "${sec / 86400}d"
+        sec < 2592000 -> "${sec / 604800}w"
+        sec < 31536000 -> "${sec / 2592000}mo"
+        else -> "${sec / 31536000}y"
     }
 }
 
