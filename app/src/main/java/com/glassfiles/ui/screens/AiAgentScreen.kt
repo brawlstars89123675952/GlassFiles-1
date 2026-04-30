@@ -96,6 +96,8 @@ import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
 import com.glassfiles.data.ai.AiChatSessionStore
 import com.glassfiles.data.ai.AiAgentApprovalPrefs
+import com.glassfiles.data.ai.AiAgentMemoryPrefs
+import com.glassfiles.data.ai.AiAgentMemoryStore
 import com.glassfiles.data.ai.AiKeyStore
 import com.glassfiles.data.ai.ModelRegistry
 import com.glassfiles.data.ai.agent.AiAgentApprovalCategory
@@ -223,6 +225,12 @@ fun AiAgentScreen(
     var writeLimitPerTask by remember { mutableStateOf(AiAgentApprovalPrefs.getWriteLimit(context)) }
     var backgroundExecution by remember { mutableStateOf(AiAgentApprovalPrefs.getBackgroundExecution(context)) }
     var keepCpuAwake by remember { mutableStateOf(AiAgentApprovalPrefs.getKeepCpuAwake(context)) }
+    var memoryProjectKnowledge by remember { mutableStateOf(AiAgentMemoryPrefs.getProjectKnowledge(context)) }
+    var memoryUserPreferences by remember { mutableStateOf(AiAgentMemoryPrefs.getUserPreferences(context)) }
+    var memoryChatSummaries by remember { mutableStateOf(AiAgentMemoryPrefs.getChatSummaries(context)) }
+    var memorySemanticSearch by remember { mutableStateOf(AiAgentMemoryPrefs.getSemanticSearch(context)) }
+    var showMemoryFiles by remember { mutableStateOf(false) }
+    var memoryFiles by remember { mutableStateOf<List<AiAgentMemoryStore.MemoryFile>>(emptyList()) }
     var protectedPathsText by remember {
         mutableStateOf(AiAgentApprovalPrefs.getProtectedPaths(context).joinToString("\n"))
     }
@@ -478,6 +486,17 @@ fun AiAgentScreen(
                 branch = selectedBranch.orEmpty(),
             ),
         )
+        selectedRepo?.fullName
+            ?.takeIf {
+                it.isNotBlank() &&
+                    (AiAgentMemoryPrefs.getProjectKnowledge(context) ||
+                        AiAgentMemoryPrefs.getUserPreferences(context) ||
+                        AiAgentMemoryPrefs.getChatSummaries(context) ||
+                        AiAgentMemoryPrefs.getSemanticSearch(context))
+            }
+            ?.let { repoFull ->
+            AiAgentMemoryStore.saveChatFull(context, repoFull, id, messages)
+        }
         refreshSessions()
     }
 
@@ -734,8 +753,14 @@ fun AiAgentScreen(
             // simply continues the conversation.
             val planFirst = com.glassfiles.data.ai.AiAgentPrefs
                 .getPlanThenExecute(context, repo.fullName)
+            val memoryPrompt = AiAgentMemoryStore
+                .buildMemoryPrompt(context, repo.fullName)
+                .takeIf { it.isNotBlank() }
             val baseMessages = transcript.toAiMessages()
             val systemMessages = buildList {
+                if (memoryPrompt != null) {
+                    add(AiMessage(role = "system", content = memoryPrompt))
+                }
                 if (systemOverride != null) {
                     add(AiMessage(role = "system", content = systemOverride))
                 }
@@ -812,6 +837,22 @@ fun AiAgentScreen(
                 }
             } finally {
                 persistSession()
+                val finalMessages = transcriptMessages()
+                if (finalMessages.isNotEmpty() &&
+                    (AiAgentMemoryPrefs.getChatSummaries(context) || AiAgentMemoryPrefs.getProjectKnowledge(context))
+                ) {
+                    scope.launch(Dispatchers.IO) {
+                        AiAgentMemoryStore.summarizeAndUpdate(
+                            context = context,
+                            repoFullName = repo.fullName,
+                            chatId = activeSessionId,
+                            messages = finalMessages,
+                            provider = provider,
+                            modelId = model.id,
+                            apiKey = key,
+                        )
+                    }
+                }
                 running = false
                 runJob = null
                 if (backgroundExecution && completedNormally) {
@@ -1343,6 +1384,10 @@ fun AiAgentScreen(
                 protectedPathsText,
                 backgroundExecution,
                 keepCpuAwake,
+                memoryProjectKnowledge,
+                memoryUserPreferences,
+                memoryChatSummaries,
+                memorySemanticSearch,
                 instantRender,
             ) {
                 com.glassfiles.ui.screens.ai.terminal.AgentSettingsState(
@@ -1371,6 +1416,10 @@ fun AiAgentScreen(
                     protectedPathsCount = protectedPathsText.lineSequence().count { it.trim().isNotBlank() },
                     backgroundExecution = backgroundExecution,
                     keepCpuAwake = keepCpuAwake,
+                    memoryProjectKnowledge = memoryProjectKnowledge,
+                    memoryUserPreferences = memoryUserPreferences,
+                    memoryChatSummaries = memoryChatSummaries,
+                    memorySemanticSearch = memorySemanticSearch,
                     instantRender = instantRender,
                 )
             }
@@ -1486,6 +1535,35 @@ fun AiAgentScreen(
                     keepCpuAwake = it
                     AiAgentApprovalPrefs.setKeepCpuAwake(context, it)
                 },
+                onMemoryProjectKnowledgeChange = {
+                    memoryProjectKnowledge = it
+                    AiAgentMemoryPrefs.setProjectKnowledge(context, it)
+                },
+                onMemoryUserPreferencesChange = {
+                    memoryUserPreferences = it
+                    AiAgentMemoryPrefs.setUserPreferences(context, it)
+                },
+                onMemoryChatSummariesChange = {
+                    memoryChatSummaries = it
+                    AiAgentMemoryPrefs.setChatSummaries(context, it)
+                },
+                onMemorySemanticSearchChange = {
+                    memorySemanticSearch = it
+                    AiAgentMemoryPrefs.setSemanticSearch(context, it)
+                },
+                onViewMemoryFiles = {
+                    val repoFull = selectedRepo?.fullName.orEmpty()
+                    if (repoFull.isNotBlank()) {
+                        memoryFiles = AiAgentMemoryStore.editableFiles(context, repoFull)
+                        showMemoryFiles = true
+                    }
+                },
+                onClearMemory = {
+                    AiAgentMemoryStore.clearAll(context)
+                    memoryFiles = emptyList()
+                    showMemoryFiles = false
+                    transcript += AgentEntry.Assistant("[system: AI Agent memory cleared.]")
+                },
                 onInstantRenderChange = { instantRender = it },
                 onClearChat = {
                     showSettings = false
@@ -1508,6 +1586,19 @@ fun AiAgentScreen(
                     pendingYoloConfirm = false
                 },
                 onDismiss = { pendingYoloConfirm = false },
+            )
+        }
+        if (showMemoryFiles) {
+            com.glassfiles.ui.screens.ai.terminal.AgentMemoryFilesDialog(
+                files = memoryFiles,
+                onSave = { key, content ->
+                    val repoFull = selectedRepo?.fullName.orEmpty()
+                    if (repoFull.isNotBlank()) {
+                        AiAgentMemoryStore.saveEditableFile(context, repoFull, key, content)
+                        memoryFiles = AiAgentMemoryStore.editableFiles(context, repoFull)
+                    }
+                },
+                onDismiss = { showMemoryFiles = false },
             )
         }
     }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,6 +67,12 @@ fun AgentSettingsBottomSheet(
     onProtectedPathsChange: (String) -> Unit,
     onBackgroundExecutionChange: (Boolean) -> Unit,
     onKeepCpuAwakeChange: (Boolean) -> Unit,
+    onMemoryProjectKnowledgeChange: (Boolean) -> Unit,
+    onMemoryUserPreferencesChange: (Boolean) -> Unit,
+    onMemoryChatSummariesChange: (Boolean) -> Unit,
+    onMemorySemanticSearchChange: (Boolean) -> Unit,
+    onViewMemoryFiles: () -> Unit,
+    onClearMemory: () -> Unit,
     onInstantRenderChange: (Boolean) -> Unit,
     onClearChat: () -> Unit,
     onExportChat: () -> Unit,
@@ -94,6 +101,7 @@ fun AgentSettingsBottomSheet(
         Column(
             Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .navigationBarsPadding(),
@@ -205,6 +213,40 @@ fun AgentSettingsBottomSheet(
                 checked = state.keepCpuAwake,
                 onChange = onKeepCpuAwakeChange,
             )
+            AgentSheetDivider()
+            AgentSheetLabel("MEMORY")
+            AgentSheetCheckbox(
+                label = "project knowledge (project.md)",
+                checked = state.memoryProjectKnowledge,
+                onChange = onMemoryProjectKnowledgeChange,
+            )
+            AgentSheetCheckbox(
+                label = "user preferences (preferences.md)",
+                checked = state.memoryUserPreferences,
+                onChange = onMemoryUserPreferencesChange,
+            )
+            AgentSheetCheckbox(
+                label = "chat summaries",
+                checked = state.memoryChatSummaries,
+                onChange = onMemoryChatSummariesChange,
+            )
+            AgentSheetCheckbox(
+                label = "semantic search across chats",
+                checked = state.memorySemanticSearch,
+                onChange = onMemorySemanticSearchChange,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                AgentSheetCommand(
+                    label = "[ view memory files \u2192 ]",
+                    color = colors.warning,
+                    onClick = onViewMemoryFiles,
+                )
+                AgentSheetCommand(
+                    label = "[ clear all memory ]",
+                    color = colors.error,
+                    onClick = onClearMemory,
+                )
+            }
             AgentSheetCheckbox(
                 label = "instant render (no streaming animation)",
                 checked = state.instantRender,
@@ -506,6 +548,10 @@ data class AgentSettingsState(
     val protectedPathsCount: Int,
     val backgroundExecution: Boolean,
     val keepCpuAwake: Boolean,
+    val memoryProjectKnowledge: Boolean,
+    val memoryUserPreferences: Boolean,
+    val memoryChatSummaries: Boolean,
+    val memorySemanticSearch: Boolean,
     val instantRender: Boolean,
 )
 
