@@ -79,9 +79,14 @@ data class AiModuleTypography(
 
 val AiModuleDefaultTypography = AiModuleTypography()
 
-val LocalAiModuleColors = compositionLocalOf<AiModuleColors> {
-    error("AiModuleColors not provided — wrap your composable in AiModuleSurface.")
-}
+// Default to AiModuleDarkColors instead of throwing. The AI module always
+// wraps its screens in AiModuleSurface, but the GitHub module reuses these
+// primitives in deeply-nested contexts (RepoCard called from Profile / Explore
+// / AdvancedSearch, BranchPickerDialog opened from RepoDetailScreen, etc.)
+// where forcing every call site to wrap is brittle and a missed wrap turns
+// into a hard crash on entry. Falling back to the dark palette keeps the
+// terminal-styled widgets visually consistent in any host composition.
+val LocalAiModuleColors = compositionLocalOf<AiModuleColors> { AiModuleDarkColors }
 
 val LocalAiModuleTypography = compositionLocalOf { AiModuleDefaultTypography }
 
