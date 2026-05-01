@@ -313,13 +313,8 @@ abstract class OpenAiCompatProvider(
         val argsJson: StringBuilder = StringBuilder(),
     )
 
-    private fun parseOpenAiUsage(usage: JSONObject?): AiTokenUsage? {
-        usage ?: return null
-        val input = usage.optInt("prompt_tokens", usage.optInt("input_tokens", 0))
-        val output = usage.optInt("completion_tokens", usage.optInt("output_tokens", 0))
-        if (input <= 0 && output <= 0) return null
-        return AiTokenUsage(inputTokens = input, outputTokens = output)
-    }
+    private fun parseOpenAiUsage(usage: JSONObject?): AiTokenUsage? =
+        OpenAiUsageExtractor.extract(usage)?.toTokenUsage()
 
     /**
      * Serialises an [AiMessage] for the function-calling endpoint. Tool-result
