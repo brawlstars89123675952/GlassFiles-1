@@ -275,7 +275,7 @@ private fun BucketRow(bucket: AiUsageBucket) {
 
 @Composable
 private fun ClearConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    val colors = AgentTerminal.colors
+    val colors = AiModuleTheme.colors
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
             Modifier
