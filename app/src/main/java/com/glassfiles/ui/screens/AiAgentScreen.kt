@@ -192,7 +192,14 @@ fun AiAgentScreen(
     val transcript = remember { mutableStateListOf<AgentEntry>() }
     var input by remember { mutableStateOf(TextFieldValue(initialPrompt.orEmpty())) }
     var pendingImage by remember { mutableStateOf<String?>(null) }
-    var autoApproveReads by remember { mutableStateOf(true) }
+    // Approval prefs are owned by AiAgentApprovalPrefs (DataStore-backed). The agent
+    // loop reads them via [snapshotApprovalSettings] at run start so YOLO / write
+    // limit / per-category toggles set anywhere in the app actually take effect.
+    // We mirror the read-auto-approve flag here purely so the inline switch in the
+    // top bar stays in sync without round-tripping through prefs every recomposition.
+    var autoApproveReads by remember {
+        mutableStateOf(com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveReads(context))
+    }
     var running by remember { mutableStateOf(false) }
     var runJob by remember { mutableStateOf<Job?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -604,6 +611,30 @@ fun AiAgentScreen(
                 }
             }
             val seed = systemMessages + baseMessages
+            // Snapshot every approval-related preference at the moment the task
+            // starts, so the loop's behaviour matches what the user saw in the
+            // settings sheet — even if a prefs read on a slow disk lagged the
+            // first turn. The loop itself does NOT re-read prefs mid-run.
+            val approvalSettings = com.glassfiles.data.ai.agent.AiAgentApprovalSettings(
+                autoApproveReads = com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveReads(context),
+                autoApproveEdits = com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveEdits(context),
+                autoApproveWrites = com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveWrites(context),
+                autoApproveCommits = com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveCommits(context),
+                autoApproveDestructive = com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveDestructive(context),
+                yoloMode = com.glassfiles.data.ai.AiAgentApprovalPrefs.getYoloMode(context),
+                sessionTrust = com.glassfiles.data.ai.AiAgentApprovalPrefs.getSessionTrust(context),
+                writeLimitPerTask = com.glassfiles.data.ai.AiAgentApprovalPrefs.getWriteLimit(context),
+                protectedPaths = com.glassfiles.data.ai.AiAgentApprovalPrefs.getProtectedPaths(context),
+                activeBranch = branch,
+            )
+            // Surface the resolved write-limit in the transcript so power-users
+            // running long tasks can verify the ∞ / 20 / 50 / 100 toggle landed
+            // where they expect. Hidden behind a "[debug] " prefix so casual
+            // users can ignore it.
+            transcript += AgentEntry.Assistant(
+                text = "[debug] write limit: " + writeLimitLabel(approvalSettings.writeLimitPerTask) +
+                    " · yolo=${approvalSettings.yoloMode}",
+            )
             try {
                 runAgentLoop(
                     seedMessages = seed,
@@ -614,7 +645,7 @@ fun AiAgentScreen(
                     executor = executor,
                     transcript = transcript,
                     approvals = approvals,
-                    autoApproveReads = autoApproveReads,
+                    approvalSettings = approvalSettings,
                     context = context,
                     fallbackCandidates = fallbacks,
                     estimate = estimate,
@@ -960,7 +991,11 @@ fun AiAgentScreen(
             }
             Switch(
                 checked = autoApproveReads,
-                onCheckedChange = { autoApproveReads = it },
+                onCheckedChange = { value ->
+                    autoApproveReads = value
+                    com.glassfiles.data.ai.AiAgentApprovalPrefs
+                        .setAutoApproveReads(context, value)
+                },
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = colors.onPrimary,
                     checkedTrackColor = colors.primary,
@@ -2294,7 +2329,14 @@ private suspend fun runAgentLoop(
     executor: GitHubToolExecutor,
     transcript: androidx.compose.runtime.snapshots.SnapshotStateList<AgentEntry>,
     approvals: androidx.compose.runtime.snapshots.SnapshotStateList<PendingApproval>,
-    autoApproveReads: Boolean,
+    /**
+     * Snapshot of all approval-related prefs at the start of the task. The loop
+     * runs every tool call through [com.glassfiles.data.ai.agent.AiAgentApprovalPolicy]
+     * with these settings, so YOLO / per-category auto-approve / session-trust /
+     * write-limit / protected-path toggles all take effect — not just
+     * `autoApproveReads`, which used to be the only one wired in.
+     */
+    approvalSettings: com.glassfiles.data.ai.agent.AiAgentApprovalSettings,
     context: android.content.Context,
     fallbackCandidates: List<FallbackCandidate>,
     onFallback: (AiModel) -> Unit,
@@ -2317,6 +2359,17 @@ private suspend fun runAgentLoop(
     var modelId = initialModelId
     var apiKey = initialApiKey
     val remainingFallbacks = ArrayDeque(fallbackCandidates)
+    // Per-task counter for the user's WRITE LIMIT PER TASK setting. Bumped
+    // on every approved write/edit/commit/destructive (anything that
+    // [AiAgentApprovalCheck.countsAsWrite] flags). When the configured limit
+    // is hit the loop stops with an explanatory message. A limit of 0 means
+    // "unlimited" — see [AiAgentApprovalPrefs.WRITE_LIMIT_UNLIMITED].
+    var writeCount = 0
+    val writeLimit = approvalSettings.writeLimitPerTask
+    val effectiveWriteLimit =
+        if (writeLimit <= com.glassfiles.data.ai.AiAgentApprovalPrefs.WRITE_LIMIT_UNLIMITED) {
+            Int.MAX_VALUE
+        } else writeLimit
     // Seed the cost estimate with the initial conversation so a long
     // pre-existing chat doesn't get a fresh "0 / N" budget when the
     // user resumes it.
@@ -2419,7 +2472,20 @@ private suspend fun runAgentLoop(
             val tool = AgentTools.byName(call.name)
             estimate?.bumpToolCall()
             if (tool?.readOnly == false) estimate?.bumpWriteProposal()
-            val approved = if (tool?.readOnly == true && autoApproveReads) {
+            // Run the call through the central approval policy so YOLO,
+            // per-category auto-approve toggles, session-trust and
+            // protected-paths all line up with what the user picked in
+            // settings — instead of the old "only autoApproveReads is wired"
+            // shortcut. Destructive / protected-path / commits-to-main
+            // calls still always require explicit approval, regardless of
+            // YOLO. See AiAgentApprovalPolicy.check kdoc.
+            val policyCheck = com.glassfiles.data.ai.agent.AiAgentApprovalPolicy.check(
+                call = call,
+                tool = tool,
+                settings = approvalSettings,
+                sessionTrusted = approvalSettings.sessionTrust,
+            )
+            val approved = if (policyCheck.autoApproved) {
                 true
             } else {
                 val pending = PendingApproval(call = call, deferred = CompletableDeferred())
@@ -2432,6 +2498,16 @@ private suspend fun runAgentLoop(
                 AiToolResult(callId = call.id, name = call.name, output = Strings.aiAgentRejected, isError = true)
             } else {
                 executor.execute(context, call)
+            }
+            // Bump the per-task write counter on any approved non-readOnly
+            // tool call. Read-only calls (list_dir / read_file / search_repo /
+            // …) are explicitly excluded so the limit reflects "destructive"
+            // work, not "look around" work.
+            val hitWriteLimit = if (approved && policyCheck.countsAsWrite) {
+                writeCount += 1
+                writeCount >= effectiveWriteLimit
+            } else {
+                false
             }
             // Accumulate the size of the tool result against the
             // per-task context budget. We cap each individual result
@@ -2456,6 +2532,14 @@ private suspend fun runAgentLoop(
                 toolCallId = result.callId,
                 toolName = result.name,
             )
+            if (hitWriteLimit) {
+                transcript += AgentEntry.Assistant(
+                    text = "[write-limit: per-task write cap reached " +
+                        "($writeCount / $effectiveWriteLimit). " +
+                        "Stopping. Raise WRITE LIMIT PER TASK in settings to continue.]",
+                )
+                return
+            }
         }
         // Approximate the assistant text against the running total too,
         // so the loop stops fairly even when the model just monologues.
@@ -2477,6 +2561,15 @@ private suspend fun runAgentLoop(
 
 private const val MAX_ITERATIONS = 8
 private const val AGENT_SESSION_MODE = "agent"
+
+/**
+ * Human-readable label for the user's WRITE LIMIT PER TASK setting. The
+ * storage convention is `0` ⇒ unlimited (see
+ * [com.glassfiles.data.ai.AiAgentApprovalPrefs.WRITE_LIMIT_UNLIMITED]); the
+ * UI renders that as ∞ and so do we.
+ */
+private fun writeLimitLabel(limit: Int): String =
+    if (limit <= com.glassfiles.data.ai.AiAgentApprovalPrefs.WRITE_LIMIT_UNLIMITED) "\u221E" else limit.toString()
 
 /**
  * C3 — plan-first preamble used when the per-repo plan-then-execute

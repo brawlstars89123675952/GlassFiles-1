@@ -45,7 +45,10 @@ object AiAgentApprovalPolicy {
     private val writeTools = setOf("write_file", "comment_pr", "comment_issue", "create_issue", "memory_write", "memory_append")
     private val commitTools = setOf("commit", "open_pr", "create_branch", "commit_changes", "create_pull_request")
     private val destructiveTools = setOf("delete_file", "reset_hard", "force_push", "memory_delete")
-    private val branchWriteTools = setOf("edit_file", "write_file", "commit")
+    // Only actual git-commit tool calls trigger the "commits to main/master require approval"
+    // safety stop. write_file / edit_file no longer fall under it — those are governed by
+    // the regular WRITE / EDIT auto-approve toggles (and YOLO when enabled).
+    private val branchWriteTools = setOf("commit", "commit_changes")
 
     fun check(
         call: AiToolCall,
