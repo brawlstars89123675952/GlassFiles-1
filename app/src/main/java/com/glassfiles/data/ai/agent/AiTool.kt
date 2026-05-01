@@ -25,9 +25,8 @@ data class AiTool(
 )
 
 /**
- * The seven canonical tools surfaced to the agent. Tools speak GitHub —
- * [GitHubToolExecutor] translates calls into [com.glassfiles.data.github.GitHubManager]
- * invocations.
+ * Canonical tools surfaced to the agent. Repo tools speak GitHub via
+ * [GitHubToolExecutor]; memory tools operate on app-owned local files.
  */
 object AgentTools {
 
@@ -469,6 +468,92 @@ object AgentTools {
         readOnly = false,
     )
 
+    val MEMORY_READ = AiTool(
+        name = "memory_read",
+        description = "Read a local AI Agent memory file for the active repository. Path is relative to the repo memory root, or preferences.md for global preferences.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj {
+                    put("type", "string")
+                    put("description", "Memory path, e.g. project.md, decisions.md, chats/<chat_id>/summary.md, or preferences.md.")
+                })
+            })
+            put("required", arr("path"))
+        },
+        readOnly = true,
+    )
+
+    val MEMORY_WRITE = AiTool(
+        name = "memory_write",
+        description = "Overwrite a local AI Agent memory file for the active repository, or global preferences.md.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+                put("content", obj { put("type", "string") })
+            })
+            put("required", arr("path", "content"))
+        },
+        readOnly = false,
+    )
+
+    val MEMORY_APPEND = AiTool(
+        name = "memory_append",
+        description = "Append text to a local AI Agent memory file, creating it if needed.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+                put("content", obj { put("type", "string") })
+            })
+            put("required", arr("path", "content"))
+        },
+        readOnly = false,
+    )
+
+    val MEMORY_LIST = AiTool(
+        name = "memory_list",
+        description = "List files in the active repository's local AI Agent memory directory.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("directory", obj {
+                    put("type", "string")
+                    put("description", "Directory relative to the repo memory root. Empty string lists the repo memory root.")
+                })
+            })
+            put("required", arr())
+        },
+        readOnly = true,
+    )
+
+    val MEMORY_SEARCH = AiTool(
+        name = "memory_search",
+        description = "Case-insensitive exact text search across local memory markdown files. Returns JSON results with path, line and snippet.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("query", obj { put("type", "string") })
+            })
+            put("required", arr("query"))
+        },
+        readOnly = true,
+    )
+
+    val MEMORY_DELETE = AiTool(
+        name = "memory_delete",
+        description = "Delete a local AI Agent memory file. Destructive: always requires explicit user approval.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+            })
+            put("required", arr("path"))
+        },
+        readOnly = false,
+    )
+
     /** All tools, in canonical order. */
     val ALL: List<AiTool> = listOf(
         LIST_DIR, READ_FILE, READ_FILE_RANGE, SEARCH_REPO,
@@ -478,6 +563,7 @@ object AgentTools {
         READ_CHECK_RUNS, READ_WORKFLOW_RUN,
         EDIT_FILE, WRITE_FILE, CREATE_BRANCH, COMMIT, OPEN_PR,
         COMMENT_PR, COMMENT_ISSUE, CREATE_ISSUE,
+        MEMORY_READ, MEMORY_WRITE, MEMORY_APPEND, MEMORY_LIST, MEMORY_SEARCH, MEMORY_DELETE,
     )
 
     fun byName(name: String): AiTool? = ALL.firstOrNull { it.name == name }

@@ -719,14 +719,13 @@ fun AiAgentScreen(
                 initialCache = warmCache,
             )
             val provider = AiProviders.get(model.providerId)
-            // Filter destructive tools out of the schema sent to the model
-            // when the active repo is read-only — without it, the model
-            // would happily emit `write_file` / `commit` calls that just
-            // 403 in the executor and waste a turn.
+            // Filter repo-write tools out when the active GitHub repo is
+            // read-only. Local memory tools stay available because they
+            // operate on app-owned storage, not on GitHub permissions.
             val tools = if (repo.canWrite()) {
                 AgentTools.ALL
             } else {
-                AgentTools.ALL.filter { it.readOnly }
+                AgentTools.ALL.filter { it.readOnly || AiAgentMemoryStore.isMemoryTool(it.name) }
             }
             // Build the ordered fallback list: every other tool-use
             // capable model the user has a key for, ranked by the same
@@ -839,7 +838,7 @@ fun AiAgentScreen(
                 persistSession()
                 val finalMessages = transcriptMessages()
                 if (finalMessages.isNotEmpty() &&
-                    (AiAgentMemoryPrefs.getChatSummaries(context) || AiAgentMemoryPrefs.getProjectKnowledge(context))
+                    AiAgentMemoryPrefs.getChatSummaries(context)
                 ) {
                     scope.launch(Dispatchers.IO) {
                         AiAgentMemoryStore.summarizeAndUpdate(
@@ -2516,14 +2515,26 @@ private const val CONTEXT_COMPACT_CHARS = 2_000_000
 private const val CONTEXT_KEEP_TAIL = 20
 
 private fun describeToolStatus(call: AiToolCall): String {
+    val obj = runCatching { org.json.JSONObject(call.argsJson) }.getOrNull()
     val path = runCatching {
-        val obj = org.json.JSONObject(call.argsJson)
-        obj.optString("path").takeIf { it.isNotBlank() }
+        obj?.optString("path")?.takeIf { it.isNotBlank() }
+    }.getOrNull()
+    val directory = runCatching {
+        obj?.optString("directory")?.takeIf { it.isNotBlank() }
+    }.getOrNull()
+    val query = runCatching {
+        obj?.optString("query")?.takeIf { it.isNotBlank() }
     }.getOrNull()
     return when (call.name) {
         "edit_file" -> "Editing ${path ?: "file"}"
         "write_file" -> "Writing ${path ?: "file"}"
         "read_file", "read_file_range" -> "Reading ${path ?: "file"}"
+        "memory_read" -> "Reading memory ${path ?: "file"}"
+        "memory_write" -> "Writing memory ${path ?: "file"}"
+        "memory_append" -> "Appending memory ${path ?: "file"}"
+        "memory_list" -> "Listing memory ${directory ?: "root"}"
+        "memory_search" -> "Searching memory${query?.let { " for $it" }.orEmpty()}"
+        "memory_delete" -> "Deleting memory ${path ?: "file"}"
         "commit" -> "Committing changes"
         "open_pr" -> "Opening pull request"
         "create_branch" -> "Creating branch"

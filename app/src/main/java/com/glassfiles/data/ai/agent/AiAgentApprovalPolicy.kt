@@ -42,9 +42,9 @@ data class AiAgentApprovalCheck(
 
 object AiAgentApprovalPolicy {
     private val editTools = setOf("edit_file")
-    private val writeTools = setOf("write_file", "comment_pr", "comment_issue", "create_issue")
+    private val writeTools = setOf("write_file", "comment_pr", "comment_issue", "create_issue", "memory_write", "memory_append")
     private val commitTools = setOf("commit", "open_pr", "create_branch", "commit_changes", "create_pull_request")
-    private val destructiveTools = setOf("delete_file", "reset_hard", "force_push")
+    private val destructiveTools = setOf("delete_file", "reset_hard", "force_push", "memory_delete")
     private val branchWriteTools = setOf("edit_file", "write_file", "commit")
 
     fun check(

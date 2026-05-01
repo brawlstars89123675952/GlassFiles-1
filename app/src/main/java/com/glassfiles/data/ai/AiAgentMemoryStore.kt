@@ -18,7 +18,7 @@ object AiAgentMemoryStore {
     private const val PREFERENCES_FILE = "preferences.md"
     private const val DECISIONS_FILE = "decisions.md"
     private const val MAX_CONTEXT_CHARS = 18_000
-    private const val MAX_SUMMARY_CHATS = 10
+    private const val MAX_SUMMARY_CHATS = 5
 
     data class MemoryFile(
         val key: String,
@@ -43,7 +43,7 @@ object AiAgentMemoryStore {
         }
         if (AiAgentMemoryPrefs.getChatSummaries(context)) {
             recentChatSummaries(context, repoFullName).takeIf { it.isNotEmpty() }?.let { summaries ->
-                blocks += "## Recent chat summaries\n" + summaries.joinToString("\n\n")
+                blocks += "## Recent conversations\n" + summaries.joinToString("\n\n")
             }
         }
         if (AiAgentMemoryPrefs.getSemanticSearch(context)) {
@@ -80,6 +80,122 @@ object AiAgentMemoryStore {
 
     fun clearAll(context: Context) {
         memoryRoot(context).deleteRecursively()
+    }
+
+    fun toolRead(context: Context, repoFullName: String, path: String): String {
+        ensureDefaults(context, repoFullName)
+        val file = resolveToolPath(context, repoFullName, path, mustExist = true)
+        if (!file.isFile) throw IllegalArgumentException("memory_read: file does not exist: $path")
+        val content = file.readText()
+        return buildString {
+            appendLine(memoryToolOutputHeader("memory_read", normalizeToolInput(path)))
+            appendLine("  → ${formatBytes(content.toByteArray().size)}, ${content.lineCount()} lines")
+            appendLine()
+            append(content)
+        }
+    }
+
+    fun toolWrite(context: Context, repoFullName: String, path: String, content: String): String {
+        ensureDefaults(context, repoFullName)
+        val file = resolveToolPath(context, repoFullName, path, mustExist = false)
+        file.parentFile?.mkdirs()
+        file.writeText(content)
+        return buildString {
+            appendLine(memoryToolOutputHeader("memory_write", normalizeToolInput(path)))
+            append("  → wrote ${formatBytes(content.toByteArray().size)}, ${content.lineCount()} lines")
+        }
+    }
+
+    fun toolAppend(context: Context, repoFullName: String, path: String, content: String): String {
+        ensureDefaults(context, repoFullName)
+        val file = resolveToolPath(context, repoFullName, path, mustExist = false)
+        file.parentFile?.mkdirs()
+        file.appendText(content)
+        return buildString {
+            appendLine(memoryToolOutputHeader("memory_append", normalizeToolInput(path)))
+            append("  → appended ${formatBytes(content.toByteArray().size)}, ${content.lineCount()} lines")
+        }
+    }
+
+    fun toolList(context: Context, repoFullName: String, directory: String): String {
+        ensureDefaults(context, repoFullName)
+        val dir = if (directory.isBlank()) {
+            repoDir(context, repoFullName)
+        } else {
+            resolveToolPath(context, repoFullName, directory, mustExist = true)
+        }
+        if (!dir.isDirectory) throw IllegalArgumentException("memory_list: not a directory: $directory")
+        val items = dir.listFiles()?.sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name.lowercase() }).orEmpty()
+        return buildString {
+            appendLine(memoryToolOutputHeader("memory_list", normalizeToolInput(directory)))
+            appendLine("  → ${items.size} item(s)")
+            if (items.isNotEmpty()) {
+                items.forEach { file ->
+                    val tag = if (file.isDirectory) "[dir]" else "[file]"
+                    appendLine("$tag ${displayToolPath(context, repoFullName, file)}")
+                }
+            }
+        }.trimEnd()
+    }
+
+    fun isMemoryTool(toolName: String): Boolean =
+        toolName.startsWith("memory_")
+
+    fun memoryToolOutputHeader(toolName: String, pathOrQuery: String): String {
+        val target = pathOrQuery.trim()
+        return if (target.isBlank()) "$ $toolName" else "$ $toolName $target"
+    }
+
+    fun formatToolResult(toolName: String, target: String, detail: String, body: String = ""): String =
+        buildString {
+            appendLine(memoryToolOutputHeader(toolName, target))
+            appendLine("  → $detail")
+            if (body.isNotBlank()) {
+                appendLine(body)
+            }
+        }
+    }
+
+    fun toolSearch(context: Context, repoFullName: String, query: String): String {
+        ensureDefaults(context, repoFullName)
+        val needle = query.trim()
+        if (needle.isBlank()) throw IllegalArgumentException("memory_search: query must not be blank")
+        val roots = listOf(repoDir(context, repoFullName), globalPreferencesFile(context))
+        val results = mutableListOf<JSONObject>()
+        roots.forEach { root ->
+            val files = if (root.isFile) listOf(root) else root.walkTopDown().filter { it.isFile && it.extension == "md" }.toList()
+            files.forEach { file ->
+                file.readLines().forEachIndexed { index, line ->
+                    if (line.contains(needle, ignoreCase = true)) {
+                        results += JSONObject()
+                            .put("path", displayToolPath(context, repoFullName, file))
+                            .put("line", index + 1)
+                            .put("snippet", line.trim().take(240))
+                    }
+                }
+            }
+        }
+        val arr = JSONArray()
+        results.forEach { arr.put(it) }
+        return formatToolResult(
+            toolName = "memory_search",
+            target = "\"$needle\"",
+            detail = "${results.size} match(es)",
+            body = arr.toString(2),
+        )
+    }
+
+    fun toolDelete(context: Context, repoFullName: String, path: String): String {
+        ensureDefaults(context, repoFullName)
+        val file = resolveToolPath(context, repoFullName, path, mustExist = true)
+        if (file.isDirectory) throw IllegalArgumentException("memory_delete: refusing to delete directory: $path")
+        val ok = file.delete()
+        if (!ok) throw IllegalStateException("memory_delete: failed to delete $path")
+        return formatToolResult(
+            toolName = "memory_delete",
+            target = normalizeToolInput(path),
+            detail = "deleted",
+        )
     }
 
     fun saveChatFull(
@@ -123,14 +239,12 @@ object AiAgentMemoryStore {
         if (repoFullName.isBlank() || chatId.isBlank() || messages.isEmpty()) return@withContext
         ensureDefaults(context, repoFullName)
         saveChatFull(context, repoFullName, chatId, messages)
-        if (!AiAgentMemoryPrefs.getChatSummaries(context) && !AiAgentMemoryPrefs.getProjectKnowledge(context)) {
+        if (!AiAgentMemoryPrefs.getChatSummaries(context)) {
             return@withContext
         }
         val summary = generateSummary(context, messages, provider, modelId, apiKey)
         val chatDir = File(File(repoDir(context, repoFullName), "chats"), chatId).apply { mkdirs() }
-        if (AiAgentMemoryPrefs.getChatSummaries(context)) {
-            File(chatDir, "summary.md").writeText(summary)
-        }
+        File(chatDir, "summary.md").writeText(summary)
         if (AiAgentMemoryPrefs.getProjectKnowledge(context)) {
             updateProjectKnowledge(context, repoFullName, summary)
         }
@@ -241,6 +355,46 @@ object AiAgentMemoryStore {
         return File(memoryRoot(context), safe)
     }
 
+    private fun resolveToolPath(
+        context: Context,
+        repoFullName: String,
+        path: String,
+        mustExist: Boolean,
+    ): File {
+        val clean = path.trim().replace('\\', '/').trim('/')
+        if (clean.isBlank()) throw IllegalArgumentException("memory path must not be blank")
+        if (File(clean).isAbsolute || clean.split('/').any { it == ".." }) {
+            throw IllegalArgumentException("memory path must be relative and must not contain '..'")
+        }
+        val repo = repoDir(context, repoFullName)
+        val repoName = repo.name
+        val candidate = when {
+            clean == PREFERENCES_FILE -> globalPreferencesFile(context)
+            clean.startsWith("$repoName/") -> File(memoryRoot(context), clean)
+            else -> File(repo, clean)
+        }
+        if (mustExist && !candidate.exists()) {
+            throw IllegalArgumentException("memory file does not exist: $path")
+        }
+        val canonical = if (candidate.exists()) candidate.canonicalFile else candidate.absoluteFile.canonicalFile
+        val repoCanonical = repo.canonicalFile
+        val prefsCanonical = globalPreferencesFile(context).canonicalFile
+        val insideRepo = canonical.path == repoCanonical.path || canonical.path.startsWith(repoCanonical.path + File.separator)
+        val isPrefs = canonical.path == prefsCanonical.path
+        if (!insideRepo && !isPrefs) {
+            throw IllegalArgumentException("memory path escapes allowed memory roots: $path")
+        }
+        if (candidate.exists() && java.nio.file.Files.isSymbolicLink(candidate.toPath())) {
+            throw IllegalArgumentException("memory path must not be a symbolic link: $path")
+        }
+        return canonical
+    }
+
+    private fun displayToolPath(context: Context, repoFullName: String, file: File): String {
+        val root = memoryRoot(context).canonicalFile
+        return file.canonicalFile.relativeTo(root).path.replace('\\', '/')
+    }
+
     private fun globalPreferencesFile(context: Context): File =
         File(memoryRoot(context), PREFERENCES_FILE)
 
@@ -276,4 +430,15 @@ object AiAgentMemoryStore {
         ## Tech preferences
 
     """.trimIndent()
+
+    private fun String.lineCount(): Int = if (isEmpty()) 0 else lineSequence().count()
+
+    private fun formatBytes(bytes: Int): String = when {
+        bytes >= 1024 * 1024 -> String.format(Locale.US, "%.1fMB", bytes / (1024.0 * 1024.0))
+        bytes >= 1024 -> String.format(Locale.US, "%.1fKB", bytes / 1024.0)
+        else -> "${bytes}B"
+    }
+
+    private fun normalizeToolInput(value: String): String =
+        value.trim().replace('\\', '/').trim('/')
 }

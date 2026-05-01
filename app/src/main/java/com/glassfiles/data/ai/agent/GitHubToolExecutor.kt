@@ -1,6 +1,7 @@
 package com.glassfiles.data.ai.agent
 
 import android.content.Context
+import com.glassfiles.data.ai.AiAgentMemoryStore
 import com.glassfiles.data.github.GHContent
 import com.glassfiles.data.github.GitHubManager
 import org.json.JSONObject
@@ -137,6 +138,38 @@ class GitHubToolExecutor(
                     args.getString("title"),
                     args.optString("body", ""),
                 )
+                AgentTools.MEMORY_READ.name -> AiAgentMemoryStore.toolRead(
+                    context,
+                    repoFullName(),
+                    args.getString("path"),
+                )
+                AgentTools.MEMORY_WRITE.name -> AiAgentMemoryStore.toolWrite(
+                    context,
+                    repoFullName(),
+                    args.getString("path"),
+                    args.getString("content"),
+                )
+                AgentTools.MEMORY_APPEND.name -> AiAgentMemoryStore.toolAppend(
+                    context,
+                    repoFullName(),
+                    args.getString("path"),
+                    args.getString("content"),
+                )
+                AgentTools.MEMORY_LIST.name -> AiAgentMemoryStore.toolList(
+                    context,
+                    repoFullName(),
+                    args.optString("directory", ""),
+                )
+                AgentTools.MEMORY_SEARCH.name -> AiAgentMemoryStore.toolSearch(
+                    context,
+                    repoFullName(),
+                    args.getString("query"),
+                )
+                AgentTools.MEMORY_DELETE.name -> AiAgentMemoryStore.toolDelete(
+                    context,
+                    repoFullName(),
+                    args.getString("path"),
+                )
                 else -> "Unknown tool: ${call.name}"
             }
             AiToolResult(callId = call.id, name = call.name, output = capped(output))
@@ -151,6 +184,8 @@ class GitHubToolExecutor(
     }
 
     // ─── tool impls ───────────────────────────────────────────────────────
+
+    private fun repoFullName(): String = "$owner/$repo"
 
     private suspend fun listDir(context: Context, path: String): String {
         val cleaned = path.trim().trim('/')
