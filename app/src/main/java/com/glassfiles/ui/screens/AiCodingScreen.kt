@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,7 +46,6 @@ import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Stop
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
@@ -76,6 +76,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
 import com.glassfiles.data.ai.AiChatSessionStore
@@ -89,8 +90,17 @@ import com.glassfiles.data.ai.models.AiMessage
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import com.glassfiles.data.ai.providers.AiProviders
-import com.glassfiles.ui.components.AiCodeBlock
+import com.glassfiles.data.ai.usage.AiUsageAccounting
+import com.glassfiles.data.ai.usage.AiUsageEstimate
+import com.glassfiles.data.ai.usage.AiUsageMode
 import com.glassfiles.ui.components.AiPickerChip
+import com.glassfiles.ui.screens.ai.terminal.AgentMessageRow
+import com.glassfiles.ui.screens.ai.terminal.AgentRole
+import com.glassfiles.ui.screens.ai.terminal.AgentTerminal
+import com.glassfiles.ui.screens.ai.terminal.AgentTerminalCodeBlock
+import com.glassfiles.ui.screens.ai.terminal.TerminalHairline
+import com.glassfiles.ui.screens.ai.terminal.TerminalPageBar
+import com.glassfiles.ui.screens.ai.terminal.TerminalPillButton
 import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -441,7 +451,7 @@ private fun CodingChatView(
 ) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
-    val colors = MaterialTheme.colorScheme
+    val colors = AgentTerminal.colors
     val scope = rememberCoroutineScope()
     val sessionId = initialSession.id
     val sessionCreatedAt = initialSession.createdAt
@@ -478,6 +488,15 @@ private fun CodingChatView(
     var pendingImage by remember { mutableStateOf<String?>(null) }
     var streaming by remember { mutableStateOf(false) }
     var streamJob by remember { mutableStateOf<Job?>(null) }
+    val usageFingerprint = transcript.joinToString("|") { "${it.role}:${it.content.length}:${it.imageBase64?.length ?: 0}:${it.isError}" }
+    val usageEstimate = remember(usageFingerprint, provider, modelId) {
+        AiUsageAccounting.estimate(
+            providerId = provider?.name.orEmpty(),
+            modelId = modelId,
+            inputChars = codingInputChars(transcript),
+            outputChars = codingOutputChars(transcript),
+        )
+    }
 
     val listState = rememberLazyListState()
 
@@ -593,6 +612,14 @@ private fun CodingChatView(
                 if (last >= 0 && transcript[last].content.isBlank()) {
                     transcript[last] = transcript[last].copy(content = full)
                 }
+                AiUsageAccounting.appendEstimated(
+                    context = context,
+                    providerId = p.name,
+                    modelId = mid,
+                    mode = AiUsageMode.CODING,
+                    messages = messages,
+                    output = full,
+                )
                 persist()
             } catch (e: Exception) {
                 val last = transcript.lastIndex
@@ -665,55 +692,34 @@ private fun CodingChatView(
     Column(
         Modifier
             .fillMaxSize()
-            .background(colors.surface)
-            .statusBarsPadding(),
+            .background(colors.background),
     ) {
-        // ── Top bar ─────────────────────────────────────────────────────
-        Row(
-            Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = colors.onSurface)
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    Strings.aiCoding.uppercase(),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    color = colors.onSurface,
-                    fontFamily = JetBrainsMono,
-                )
-                Text(
-                    Strings.aiCodingHint,
-                    fontSize = 10.sp,
-                    color = colors.onSurfaceVariant,
-                    maxLines = 1,
-                )
-            }
-            if (transcript.isNotEmpty()) {
-                IconButton(onClick = ::regenerate, enabled = !streaming) {
-                    Icon(
-                        Icons.Rounded.Refresh,
-                        null,
-                        Modifier.size(20.dp),
-                        tint = if (streaming) colors.onSurfaceVariant.copy(alpha = 0.4f) else colors.onSurfaceVariant,
-                    )
+        TerminalPageBar(
+            title = "> coding",
+            subtitle = Strings.aiCodingHint,
+            onBack = onBack,
+            trailing = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    CodingUsageChip(usageEstimate)
+                    if (transcript.isNotEmpty()) {
+                        TerminalPillButton(
+                            label = "regen",
+                            onClick = ::regenerate,
+                            enabled = !streaming,
+                            accent = false,
+                        )
+                        TerminalPillButton(
+                            label = "clear",
+                            onClick = ::clearAll,
+                            destructive = true,
+                        )
+                    }
                 }
-                IconButton(onClick = ::clearAll) {
-                    Icon(
-                        Icons.Rounded.DeleteSweep,
-                        null,
-                        Modifier.size(20.dp),
-                        tint = colors.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        // 1px hairline divider — replaces the visual weight of a card border.
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.12f)))
+            },
+        )
 
         // ── Model picker bar ────────────────────────────────────────────
         ModelPickerBar(
@@ -733,7 +739,7 @@ private fun CodingChatView(
             modelLoadError = modelLoadError,
         )
 
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.12f)))
+        TerminalHairline()
 
         // ── Transcript ──────────────────────────────────────────────────
         if (transcript.isEmpty()) {
@@ -744,7 +750,8 @@ private fun CodingChatView(
                 Text(
                     Strings.aiCodingHint,
                     fontSize = 13.sp,
-                    color = colors.onSurfaceVariant,
+                    color = colors.textMuted,
+                    fontFamily = JetBrainsMono,
                 )
             }
         } else {
@@ -757,16 +764,13 @@ private fun CodingChatView(
                 items(transcript) { message -> CodingMessageRow(message, context) }
                 if (streaming) {
                     item {
-                        Row(
-                            Modifier.fillMaxWidth().padding(start = 12.dp, top = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(12.dp),
-                                color = colors.primary,
-                                strokeWidth = 1.dp,
-                            )
-                        }
+                        Text(
+                            text = "⠋ thinking...",
+                            color = colors.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.sp,
+                            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, top = 4.dp),
+                        )
                     }
                 }
             }
@@ -878,47 +882,74 @@ private data class CodingMessage(
 )
 
 @Composable
-private fun CodingMessageRow(message: CodingMessage, context: Context) {
-    val colors = MaterialTheme.colorScheme
-    val isUser = message.role == "user"
-    val container = when {
-        message.isError -> colors.error.copy(alpha = 0.10f)
-        isUser -> colors.primary.copy(alpha = 0.10f)
-        else -> colors.surfaceVariant.copy(alpha = 0.5f)
+private fun CodingUsageChip(estimate: AiUsageEstimate) {
+    val colors = AgentTerminal.colors
+    val text = buildString {
+        append(AiUsageAccounting.formatTokens(estimate.totalTokens))
+        append(" tok")
+        estimate.costUsd?.let {
+            append(" · ")
+            append(AiUsageAccounting.formatUsd(it))
+        }
     }
-    val onContainer = when {
-        message.isError -> colors.error
-        else -> colors.onSurface
+    Text(
+        text = text,
+        color = colors.textMuted,
+        fontFamily = JetBrainsMono,
+        fontSize = 11.sp,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+    )
+}
+
+private fun codingInputChars(messages: List<CodingMessage>): Int =
+    messages.sumOf { message ->
+        if (message.role == "assistant" || message.isError) {
+            0
+        } else {
+            message.content.length + ((message.imageBase64?.length ?: 0) / 8)
+        }
     }
 
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+private fun codingOutputChars(messages: List<CodingMessage>): Int =
+    messages.sumOf { message ->
+        if (message.role == "assistant" && !message.isError) message.content.length else 0
+    }
+
+@Composable
+private fun CodingMessageRow(message: CodingMessage, context: Context) {
+    val colors = AgentTerminal.colors
+    val isUser = message.role == "user"
+    AgentMessageRow(
+        role = when {
+            message.isError -> AgentRole.ERROR
+            isUser -> AgentRole.USER
+            else -> AgentRole.ASSISTANT
+        },
     ) {
-        Column(
-            modifier = Modifier
-                .padding(
-                    start = if (isUser) 32.dp else 0.dp,
-                    end = if (isUser) 0.dp else 32.dp,
-                )
-                .clip(RoundedCornerShape(12.dp))
-                .background(container)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (message.imageBase64 != null) {
-                MessageImage(message.imageBase64)
-            }
-            if (message.content.isNotBlank()) {
-                renderMessageBody(message.content, onContainer, context)
-            }
+        if (message.imageBase64 != null) {
+            MessageImage(message.imageBase64)
+        }
+        if (message.content.isNotBlank()) {
+            renderMessageBody(
+                content = message.content,
+                textColor = when {
+                    message.isError -> colors.error
+                    isUser -> colors.accent
+                    else -> colors.textPrimary
+                },
+                context = context,
+            )
         }
     }
 }
 
 @Composable
 private fun MessageImage(base64: String) {
-    val colors = MaterialTheme.colorScheme
+    val colors = AgentTerminal.colors
     val bitmap = remember(base64) { decodeBitmap(base64) }
     if (bitmap != null) {
         Image(
@@ -929,33 +960,36 @@ private fun MessageImage(base64: String) {
                 .fillMaxWidth()
                 .heightIn(max = 200.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(colors.surface),
+                .border(1.dp, colors.border, RoundedCornerShape(8.dp)),
         )
     }
 }
 
 @Composable
 private fun renderMessageBody(content: String, textColor: Color, context: Context) {
-    val theme = remember { AiSettingsStore.getSyntaxTheme(context) }
-    val codeFontSize = remember { AiSettingsStore.getCodeFontSize(context) }
     val chatFontSize = remember { AiSettingsStore.getChatFontSize(context) }
     splitOnFences(content).forEach { part ->
         if (part.isFence) {
-            AiCodeBlock(
+            AgentTerminalCodeBlock(
                 text = part.text,
                 lang = part.lang,
-                theme = theme,
-                fontSizeSp = codeFontSize,
                 context = context,
             )
         } else if (part.text.isNotBlank()) {
-            Text(
-                part.text,
-                fontSize = chatFontSize.sp,
-                color = textColor,
-            )
+            AgentMessageTextBlock(part.text, textColor, chatFontSize)
         }
     }
+}
+
+@Composable
+private fun AgentMessageTextBlock(text: String, color: Color, fontSizeSp: Int) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = fontSizeSp.sp,
+        fontFamily = JetBrainsMono,
+        lineHeight = 1.45.em,
+    )
 }
 
 private data class MsgPart(val text: String, val lang: String, val isFence: Boolean)
@@ -987,15 +1021,16 @@ private fun splitOnFences(text: String): List<MsgPart> {
 
 @Composable
 private fun AttachmentPreview(base64: String, visionAvailable: Boolean, onRemove: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
+    val colors = AgentTerminal.colors
     val bitmap = remember(base64) { decodeBitmap(base64) }
 
     Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(colors.surfaceVariant.copy(alpha = 0.5f))
+            .clip(RoundedCornerShape(6.dp))
+            .background(colors.surface)
+            .border(1.dp, colors.border, RoundedCornerShape(6.dp))
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1006,7 +1041,7 @@ private fun AttachmentPreview(base64: String, visionAvailable: Boolean, onRemove
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(6.dp)),
+                    .clip(RoundedCornerShape(4.dp)),
             )
         }
         Spacer(Modifier.size(12.dp))
@@ -1015,14 +1050,15 @@ private fun AttachmentPreview(base64: String, visionAvailable: Boolean, onRemove
                 Strings.aiCodingAttachImage,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = colors.onSurface,
+                color = colors.textPrimary,
                 fontFamily = JetBrainsMono,
             )
             Text(
                 if (visionAvailable) Strings.aiCodingScreenshotHint else Strings.aiCodingNoVision,
                 fontSize = 10.sp,
-                color = if (visionAvailable) colors.onSurfaceVariant else colors.error,
+                color = if (visionAvailable) colors.textMuted else colors.error,
                 maxLines = 2,
+                fontFamily = JetBrainsMono,
             )
         }
         IconButton(onClick = onRemove) {
@@ -1030,7 +1066,7 @@ private fun AttachmentPreview(base64: String, visionAvailable: Boolean, onRemove
                 Icons.Rounded.Close,
                 null,
                 Modifier.size(18.dp),
-                tint = colors.onSurfaceVariant,
+                tint = colors.textMuted,
             )
         }
     }
@@ -1052,9 +1088,9 @@ private fun InputBar(
     onPickImage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colors = MaterialTheme.colorScheme
-    Column(modifier.fillMaxWidth().background(colors.surface)) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.12f)))
+    val colors = AgentTerminal.colors
+    Column(modifier.fillMaxWidth().background(colors.background)) {
+        TerminalHairline()
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1067,14 +1103,15 @@ private fun InputBar(
                     Icons.Rounded.AddPhotoAlternate,
                     null,
                     Modifier.size(22.dp),
-                    tint = if (enabled && !streaming) colors.onSurfaceVariant else colors.onSurfaceVariant.copy(alpha = 0.4f),
+                    tint = if (enabled && !streaming) colors.textSecondary else colors.textMuted,
                 )
             }
             Box(
                 Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(colors.surfaceVariant.copy(alpha = 0.5f))
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(colors.surface)
+                    .border(1.dp, colors.border, RoundedCornerShape(6.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
                 BasicTextField(
@@ -1084,18 +1121,18 @@ private fun InputBar(
                     modifier = Modifier.fillMaxWidth().widthIn(min = 0.dp),
                     textStyle = LocalTextStyle.current.merge(
                         TextStyle(
-                            color = colors.onSurface,
+                            color = colors.textPrimary,
                             fontSize = 14.sp,
                             fontFamily = JetBrainsMono,
                         ),
                     ),
-                    cursorBrush = SolidColor(colors.primary),
+                    cursorBrush = SolidColor(colors.accent),
                     decorationBox = { inner ->
                         if (value.text.isEmpty()) {
                             Text(
                                 Strings.aiCodingPlaceholder,
                                 fontSize = 14.sp,
-                                color = colors.onSurfaceVariant,
+                                color = colors.textMuted,
                                 fontFamily = JetBrainsMono,
                             )
                         }
@@ -1116,7 +1153,7 @@ private fun InputBar(
                     if (streaming) Icons.Rounded.Stop else Icons.AutoMirrored.Rounded.Send,
                     null,
                     Modifier.size(22.dp),
-                    tint = if (streaming) colors.error else colors.primary,
+                    tint = if (streaming) colors.error else colors.accent,
                 )
             }
         }

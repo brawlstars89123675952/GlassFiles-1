@@ -169,7 +169,7 @@ object AiAgentMemoryIndex {
     private fun insertDoc(db: SQLiteDatabase, doc: IndexedDoc) {
         db.execSQL(
             "INSERT OR REPLACE INTO documents(doc_id, repo, path, kind, title, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            arrayOf(doc.id, doc.repoFullName, doc.path, doc.kind, doc.title, doc.updatedAt),
+            arrayOf<Any>(doc.id, doc.repoFullName, doc.path, doc.kind, doc.title, doc.updatedAt),
         )
         db.execSQL(
             "INSERT INTO memory_fts(doc_id, repo, path, kind, title, body) VALUES (?, ?, ?, ?, ?, ?)",
@@ -180,7 +180,7 @@ object AiAgentMemoryIndex {
     private fun insertFact(db: SQLiteDatabase, repoFullName: String, fact: ExtractedFact, sourcePath: String, updatedAt: Long) {
         db.execSQL(
             "INSERT OR IGNORE INTO facts(repo, type, text, source_path, updated_at) VALUES (?, ?, ?, ?, ?)",
-            arrayOf(repoFullName, fact.type, fact.text, sourcePath, updatedAt),
+            arrayOf<Any>(repoFullName, fact.type, fact.text, sourcePath, updatedAt),
         )
     }
 
@@ -195,7 +195,7 @@ object AiAgentMemoryIndex {
     private fun setMeta(db: SQLiteDatabase, repoFullName: String, fingerprint: String) {
         db.execSQL(
             "INSERT OR REPLACE INTO index_meta(repo, fingerprint, rebuilt_at) VALUES (?, ?, ?)",
-            arrayOf(repoFullName, fingerprint, System.currentTimeMillis()),
+            arrayOf<Any>(repoFullName, fingerprint, System.currentTimeMillis()),
         )
     }
 

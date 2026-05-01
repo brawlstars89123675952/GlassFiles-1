@@ -1854,7 +1854,10 @@ private fun TerminalTranscriptEntry(
             com.glassfiles.ui.screens.ai.terminal.AgentMessageRow(
                 role = com.glassfiles.ui.screens.ai.terminal.AgentRole.USER,
             ) {
-                com.glassfiles.ui.screens.ai.terminal.AgentMessageText(text = entry.text)
+                com.glassfiles.ui.screens.ai.terminal.AgentMessageText(
+                    text = entry.text,
+                    color = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors.accent,
+                )
                 if (entry.imageBase64 != null) {
                     Spacer(Modifier.height(4.dp))
                     Text(

@@ -68,7 +68,6 @@ import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.StopCircle
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -107,6 +106,10 @@ import com.glassfiles.data.ai.ChatHistoryManager
 import com.glassfiles.data.ai.ChatMessage
 import com.glassfiles.data.ai.ChatSession
 import com.glassfiles.data.ai.GeminiKeyStore
+import com.glassfiles.data.ai.models.AiProviderId
+import com.glassfiles.data.ai.usage.AiUsageAccounting
+import com.glassfiles.data.ai.usage.AiUsageEstimate
+import com.glassfiles.data.ai.usage.AiUsageMode
 import com.glassfiles.ui.components.AiModuleBlinkingCursor
 import com.glassfiles.ui.components.AiModuleCard
 import com.glassfiles.ui.components.AiModuleChip
@@ -307,30 +310,23 @@ private fun ChatHistoryList(
         onBack = onBack,
         subtitle = if (sessions.isNotEmpty()) "${sessions.size} session${if (sessions.size == 1) "" else "s"}" else null,
         trailing = {
-            if (sessions.isNotEmpty()) {
-                IconButton(onClick = onDelAll, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Rounded.DeleteSweep,
-                        contentDescription = "clear all",
-                        modifier = Modifier.size(18.dp),
-                        tint = colors.warning,
-                    )
-                }
-            }
-        },
-        bottomBar = {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .background(colors.background)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 AiModulePillButton(
-                    label = "new chat",
+                    label = "new",
                     onClick = onNew,
                     leadingIcon = Icons.Rounded.Add,
                     accent = true,
                 )
+                if (sessions.isNotEmpty()) {
+                    IconButton(onClick = onDelAll, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Rounded.DeleteSweep,
+                            contentDescription = "clear all",
+                            modifier = Modifier.size(18.dp),
+                            tint = colors.warning,
+                        )
+                    }
+                }
             }
         },
     ) {
@@ -389,7 +385,7 @@ private fun ChatHistoryList(
                     if (searchQ.isBlank()) {
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            text = "tap [ new chat ] below to start.",
+                            text = "tap [ new ] above to start.",
                             color = colors.textMuted,
                             fontFamily = JetBrainsMono,
                             fontSize = 12.sp,
@@ -471,6 +467,15 @@ private fun ChatView(
     var editIdx by remember { mutableIntStateOf(-1) }
     var editTxt by remember { mutableStateOf("") }
     val colors = AiModuleTheme.colors
+    val usageEstimate = remember(messages, currentResponse, provider) {
+        val providerId = legacyUsageProviderId(provider).name
+        AiUsageAccounting.estimate(
+            providerId = providerId,
+            modelId = provider.modelId,
+            inputChars = chatInputChars(messages),
+            outputChars = chatOutputChars(messages) + currentResponse.length,
+        )
+    }
 
     // TTS
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
@@ -599,6 +604,16 @@ private fun ChatView(
             Toast.makeText(context, "Voice not available", Toast.LENGTH_SHORT).show()
         }
     }
+    fun recordUsage(requestProvider: AiProvider, requestMessages: List<ChatMessage>, output: String) {
+        AiUsageAccounting.appendEstimated(
+            context = context,
+            providerId = legacyUsageProviderId(requestProvider).name,
+            modelId = requestProvider.modelId,
+            mode = AiUsageMode.CHAT,
+            messages = requestMessages,
+            output = output,
+        )
+    }
 
     fun doSend(text: String, image: String? = null, fc: String? = null) {
         if (isLoading) return
@@ -608,15 +623,19 @@ private fun ChatView(
         messages = messages + um
         isLoading = true
         val msgsForApi = if (folderFiles != null && messages.size == 1) listOf(ChatMessage("user", fullText, image, fc)) else messages
+        val requestProvider = provider
         currentJob = scope.launch {
             try {
-                val r = AiManager.chat(provider, msgsForApi, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
+                val r = AiManager.chat(requestProvider, msgsForApi, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
+                recordUsage(requestProvider, msgsForApi, r)
                 messages = messages + ChatMessage("assistant", r)
                 currentResponse = ""
                 save(messages)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException && currentResponse.isNotBlank()) {
-                    messages = messages + ChatMessage("assistant", currentResponse + "\n\n*(stopped)*")
+                    val partial = currentResponse
+                    recordUsage(requestProvider, msgsForApi, partial)
+                    messages = messages + ChatMessage("assistant", partial + "\n\n*(stopped)*")
                     currentResponse = ""
                 } else {
                     messages = messages + ChatMessage("assistant", "Error: ${e.message}")
@@ -653,15 +672,20 @@ private fun ChatView(
         messages = m
         isLoading = true
         currentResponse = ""
+        val requestProvider = provider
+        val requestMessages = messages
         currentJob = scope.launch {
             try {
-                val r = AiManager.chat(provider, messages, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
+                val r = AiManager.chat(requestProvider, requestMessages, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
+                recordUsage(requestProvider, requestMessages, r)
                 messages = messages + ChatMessage("assistant", r)
                 currentResponse = ""
                 save(messages)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException && currentResponse.isNotBlank()) {
-                    messages = messages + ChatMessage("assistant", currentResponse + "\n\n*(stopped)*")
+                    val partial = currentResponse
+                    recordUsage(requestProvider, requestMessages, partial)
+                    messages = messages + ChatMessage("assistant", partial + "\n\n*(stopped)*")
                 } else {
                     messages = messages + ChatMessage("assistant", "Error: ${e.message}")
                 }
@@ -694,9 +718,12 @@ private fun ChatView(
         editTxt = ""
         isLoading = true
         currentResponse = ""
+        val requestProvider = provider
+        val requestMessages = messages
         currentJob = scope.launch {
             try {
-                val r = AiManager.chat(provider, messages, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
+                val r = AiManager.chat(requestProvider, requestMessages, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
+                recordUsage(requestProvider, requestMessages, r)
                 messages = messages + ChatMessage("assistant", r)
                 currentResponse = ""
                 save(messages)
@@ -792,6 +819,7 @@ private fun ChatView(
                             tint = colors.textMuted,
                         )
                     }
+                    AiChatUsageChip(usageEstimate)
                     IconButton(onClick = { exportChat() }, modifier = Modifier.size(32.dp)) {
                         Icon(
                             Icons.Rounded.FileDownload,
@@ -876,13 +904,8 @@ private fun ChatView(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        CircularProgressIndicator(
-                            Modifier.size(12.dp),
-                            color = if (provider.isQwen) colors.warning else colors.accent,
-                            strokeWidth = 1.5.dp,
-                        )
                         Text(
-                            "thinking…",
+                            "⠋ thinking...",
                             color = colors.textMuted,
                             fontFamily = JetBrainsMono,
                             fontSize = 12.sp,
@@ -1021,6 +1044,51 @@ private fun ChatView(
         )
     }
 }
+
+@Composable
+private fun AiChatUsageChip(estimate: AiUsageEstimate) {
+    val colors = AiModuleTheme.colors
+    val text = buildString {
+        append(AiUsageAccounting.formatTokens(estimate.totalTokens))
+        append(" tok")
+        estimate.costUsd?.let {
+            append(" · ")
+            append(AiUsageAccounting.formatUsd(it))
+        }
+    }
+    Text(
+        text = text,
+        color = colors.textMuted,
+        fontFamily = JetBrainsMono,
+        fontSize = 11.sp,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+    )
+}
+
+private fun legacyUsageProviderId(provider: AiProvider): AiProviderId =
+    when {
+        provider.isGemini -> AiProviderId.GOOGLE
+        provider.isQwen -> AiProviderId.ALIBABA
+        else -> AiProviderId.OPENROUTER
+    }
+
+private fun chatInputChars(messages: List<ChatMessage>): Int =
+    messages.sumOf { message ->
+        if (message.role == "assistant") {
+            0
+        } else {
+            message.content.length +
+                (message.fileContent?.length ?: 0) +
+                ((message.imageBase64?.length ?: 0) / 8)
+        }
+    }
+
+private fun chatOutputChars(messages: List<ChatMessage>): Int =
+    messages.sumOf { message -> if (message.role == "assistant") message.content.length else 0 }
 
 // ═══════════════════════════════════
 // Empty banner
@@ -1216,30 +1284,42 @@ private fun TerminalChatMessage(
 
             // Action row
             Row(
-                Modifier.padding(top = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(0.dp),
+                Modifier
+                    .padding(top = 2.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                MsgActionButton(Icons.Rounded.ContentCopy, onCopy)
-                if (onEdit != null) MsgActionButton(Icons.Rounded.Edit, onEdit)
-                MsgActionButton(Icons.Rounded.Delete, onDelete)
+                MsgActionButton("copy", onCopy)
+                if (onEdit != null) MsgActionButton("edit", onEdit)
+                MsgActionButton("delete", onDelete, destructive = true)
                 if (!isUser) {
-                    MsgActionButton(
-                        if (speakingIdx == msgIdx) Icons.Rounded.StopCircle else Icons.AutoMirrored.Rounded.VolumeUp,
-                        onSpeak,
-                    )
+                    MsgActionButton(if (speakingIdx == msgIdx) "stop" else "speak", onSpeak)
                 }
-                if (onRegenerate != null) MsgActionButton(Icons.Rounded.Refresh, onRegenerate)
-                if (onRunScript != null) MsgActionButton(Icons.Rounded.Terminal, onRunScript)
+                if (onRegenerate != null) MsgActionButton("regen", onRegenerate)
+                if (onRunScript != null) MsgActionButton("term", onRunScript)
             }
         }
     }
 }
 
 @Composable
-private fun MsgActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun MsgActionButton(label: String, onClick: () -> Unit, destructive: Boolean = false) {
     val colors = AiModuleTheme.colors
-    IconButton(onClick = onClick, modifier = Modifier.size(26.dp)) {
-        Icon(icon, null, Modifier.size(12.dp), tint = colors.textMuted)
+    val tint = if (destructive) colors.error else colors.textMuted
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(4.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = "[ $label ]",
+            color = tint,
+            fontFamily = JetBrainsMono,
+            fontSize = 10.sp,
+            maxLines = 1,
+        )
     }
 }
 
