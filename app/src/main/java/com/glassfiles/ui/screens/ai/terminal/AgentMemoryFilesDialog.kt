@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.window.Dialog
 import com.glassfiles.data.ai.AiAgentMemoryStore
+import com.glassfiles.ui.components.terminal.TerminalTabsRow
 import com.glassfiles.ui.theme.JetBrainsMono
 
 @Composable
@@ -67,7 +68,11 @@ fun AgentMemoryFilesDialog(
                 fontSize = AgentTerminal.type.message,
                 lineHeight = 1.3.em,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TerminalTabsRow(
+                spacing = 8.dp,
+                fadeColor = colors.surfaceElevated,
+                chevronColor = colors.textMuted,
+            ) {
                 files.forEach { file ->
                     val selected = file.key == selectedKey
                     Text(
@@ -140,7 +145,11 @@ fun AgentMemoryFilesDialog(
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TerminalTabsRow(
+                spacing = 12.dp,
+                fadeColor = colors.surfaceElevated,
+                chevronColor = colors.textMuted,
+            ) {
                 if (selectedKey !in setOf("facts", "search")) {
                     AgentTextButton(
                         label = "[ save ]",
