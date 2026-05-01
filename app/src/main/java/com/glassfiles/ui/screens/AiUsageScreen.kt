@@ -183,7 +183,7 @@ fun AiUsageScreen(onBack: () -> Unit) {
                     item { UsageSectionHeader("cost tracking accuracy") }
                     items(calibrations) { calibration ->
                         AiModuleKeyValueRow(
-                            label = "${calibration.provider} · ${calibration.model}",
+                            key = "${calibration.provider} · ${calibration.model}",
                             value = "factor ${String.format(java.util.Locale.US, "%.2f", calibration.factor)} (${calibration.sampleCount} samples)",
                             valueColor = colors.accent,
                         )
