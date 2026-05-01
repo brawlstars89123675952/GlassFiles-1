@@ -100,6 +100,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.glassfiles.data.ai.AiCostPreviewPrefs
 import com.glassfiles.data.ai.AiManager
 import com.glassfiles.data.ai.AiProvider
 import com.glassfiles.data.ai.ChatHistoryManager
@@ -110,6 +111,7 @@ import com.glassfiles.data.ai.models.AiProviderId
 import com.glassfiles.data.ai.usage.AiUsageAccounting
 import com.glassfiles.data.ai.usage.AiUsageEstimate
 import com.glassfiles.data.ai.usage.AiUsageMode
+import com.glassfiles.ui.screens.ai.AiCostPreviewDialog
 import com.glassfiles.ui.components.AiModuleBlinkingCursor
 import com.glassfiles.ui.components.AiModuleCard
 import com.glassfiles.ui.components.AiModuleChip
@@ -615,8 +617,16 @@ private fun ChatView(
         )
     }
 
-    fun doSend(text: String, image: String? = null, fc: String? = null) {
-        if (isLoading) return
+    /**
+     * Pending send args captured while the pre-request cost preview
+     * dialog is on screen. Non-null means a `doSend(...)` call has
+     * been deferred — confirming the dialog re-invokes [actuallyDoSend]
+     * with the same args, dismissing it discards the request.
+     */
+    var pendingSend by remember {
+        mutableStateOf<PendingChatSend?>(null)
+    }
+    fun actuallyDoSend(text: String, image: String?, fc: String?) {
         val fullText = if (folderFiles != null && messages.isEmpty()) "Current folder: $currentFolder\nFiles:\n$folderFiles\n\nUser: $text" else text
         val um = ChatMessage("user", text, image, fc)
         currentResponse = ""
@@ -646,6 +656,27 @@ private fun ChatView(
             isLoading = false
             currentJob = null
         }
+    }
+    fun doSend(text: String, image: String? = null, fc: String? = null) {
+        if (isLoading) return
+        // Pre-request cost preview: if the user enabled the feature
+        // (default on) and the projected cost is above their threshold
+        // (default $0.10), park the args and let the confirm dialog
+        // decide whether to actually fire the request. The estimate
+        // re-uses the same `usageEstimate` rendered in the top-bar
+        // chip, so the dialog and the chip always agree.
+        val cost = usageEstimate.costUsd
+        if (cost != null && AiCostPreviewPrefs.shouldPreview(context, cost)) {
+            pendingSend = PendingChatSend(
+                text = text,
+                image = image,
+                fileContent = fc,
+                estimatedCostUsd = cost,
+                estimatedTokens = usageEstimate.totalTokens,
+            )
+            return
+        }
+        actuallyDoSend(text, image, fc)
     }
     fun send() {
         var t = input.trim()
@@ -1043,17 +1074,42 @@ private fun ChatView(
             onDismiss = { showSettings = false },
         )
     }
+
+    pendingSend?.let { pending ->
+        AiCostPreviewDialog(
+            estimatedCostUsd = pending.estimatedCostUsd,
+            estimatedTokens = pending.estimatedTokens,
+            thresholdUsd = AiCostPreviewPrefs.getThresholdUsd(context),
+            onConfirm = {
+                pendingSend = null
+                actuallyDoSend(pending.text, pending.image, pending.fileContent)
+            },
+            onDismiss = { pendingSend = null },
+        )
+    }
 }
+
+/**
+ * Args captured while the pre-request cost preview dialog is on
+ * screen. See [AiChatScreen]'s `doSend` / `actuallyDoSend` split.
+ */
+private data class PendingChatSend(
+    val text: String,
+    val image: String?,
+    val fileContent: String?,
+    val estimatedCostUsd: Double,
+    val estimatedTokens: Int,
+)
 
 @Composable
 private fun AiChatUsageChip(estimate: AiUsageEstimate) {
     val colors = AiModuleTheme.colors
     val text = buildString {
-        append(AiUsageAccounting.formatTokens(estimate.totalTokens))
+        append(AiUsageAccounting.formatTokens(estimate.totalTokens, estimated = estimate.estimated))
         append(" tok")
         estimate.costUsd?.let {
             append(" · ")
-            append(AiUsageAccounting.formatUsd(it))
+            append(AiUsageAccounting.formatUsd(it, estimated = estimate.estimated))
         }
     }
     Text(

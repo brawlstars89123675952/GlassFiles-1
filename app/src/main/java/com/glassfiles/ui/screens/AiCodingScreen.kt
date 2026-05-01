@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
 import com.glassfiles.data.ai.AiChatSessionStore
+import com.glassfiles.data.ai.AiCostPreviewPrefs
 import com.glassfiles.data.ai.AiKeyStore
 import com.glassfiles.data.ai.AiSettingsStore
 import com.glassfiles.data.ai.ChatHistoryStore
@@ -94,6 +95,7 @@ import com.glassfiles.data.ai.usage.AiUsageAccounting
 import com.glassfiles.data.ai.usage.AiUsageEstimate
 import com.glassfiles.data.ai.usage.AiUsageMode
 import com.glassfiles.ui.components.AiPickerChip
+import com.glassfiles.ui.screens.ai.AiCostPreviewDialog
 import com.glassfiles.ui.screens.ai.terminal.AgentMessageRow
 import com.glassfiles.ui.screens.ai.terminal.AgentRole
 import com.glassfiles.ui.screens.ai.terminal.AgentTerminal
@@ -637,13 +639,16 @@ private fun CodingChatView(
         }
     }
 
-    fun send() {
-        provider ?: return
-        modelId.takeIf { it.isNotBlank() } ?: return
-        val text = draft.text.trim()
-        if ((text.isBlank() && pendingImage == null) || streaming) return
+    /**
+     * Pending send args parked while the pre-request cost preview
+     * dialog is on screen — see [AiCostPreviewPrefs.shouldPreview].
+     * Confirming the dialog re-runs the send via [actuallyDoSend];
+     * dismissing it discards the pending args and the user keeps
+     * editing.
+     */
+    var pendingSend by remember { mutableStateOf<PendingCodingSend?>(null) }
 
-        val image = pendingImage?.takeIf { visionAvailable }
+    fun actuallyDoSend(text: String, image: String?) {
         transcript += CodingMessage("user", text, imageBase64 = image)
         draft = TextFieldValue("")
         pendingImage = null
@@ -658,6 +663,31 @@ private fun CodingChatView(
             )
         }
         sendInternal(msgs)
+    }
+
+    fun send() {
+        provider ?: return
+        modelId.takeIf { it.isNotBlank() } ?: return
+        val text = draft.text.trim()
+        if ((text.isBlank() && pendingImage == null) || streaming) return
+
+        val image = pendingImage?.takeIf { visionAvailable }
+        // Pre-request cost preview: if the projected cost is over the
+        // threshold (default $0.10) park the user's text + image and
+        // let the confirm dialog decide. Same `usageEstimate` as the
+        // chip in the top bar — what the user sees is what gets
+        // checked.
+        val cost = usageEstimate.costUsd
+        if (cost != null && AiCostPreviewPrefs.shouldPreview(context, cost)) {
+            pendingSend = PendingCodingSend(
+                text = text,
+                image = image,
+                estimatedCostUsd = cost,
+                estimatedTokens = usageEstimate.totalTokens,
+            )
+            return
+        }
+        actuallyDoSend(text, image)
     }
 
     fun stop() {
@@ -798,7 +828,31 @@ private fun CodingChatView(
             modifier = Modifier.imePadding().navigationBarsPadding(),
         )
     }
+
+    pendingSend?.let { pending ->
+        AiCostPreviewDialog(
+            estimatedCostUsd = pending.estimatedCostUsd,
+            estimatedTokens = pending.estimatedTokens,
+            thresholdUsd = AiCostPreviewPrefs.getThresholdUsd(context),
+            onConfirm = {
+                pendingSend = null
+                actuallyDoSend(pending.text, pending.image)
+            },
+            onDismiss = { pendingSend = null },
+        )
+    }
 }
+
+/**
+ * Args captured while the coding-screen pre-request cost preview
+ * dialog is on screen. Mirrors `PendingChatSend` in [AiChatScreen].
+ */
+private data class PendingCodingSend(
+    val text: String,
+    val image: String?,
+    val estimatedCostUsd: Double,
+    val estimatedTokens: Int,
+)
 
 // ─────────────────────────────────────────────────────────────────────────
 // Model picker
@@ -885,11 +939,11 @@ private data class CodingMessage(
 private fun CodingUsageChip(estimate: AiUsageEstimate) {
     val colors = AgentTerminal.colors
     val text = buildString {
-        append(AiUsageAccounting.formatTokens(estimate.totalTokens))
+        append(AiUsageAccounting.formatTokens(estimate.totalTokens, estimated = estimate.estimated))
         append(" tok")
         estimate.costUsd?.let {
             append(" · ")
-            append(AiUsageAccounting.formatUsd(it))
+            append(AiUsageAccounting.formatUsd(it, estimated = estimate.estimated))
         }
     }
     Text(

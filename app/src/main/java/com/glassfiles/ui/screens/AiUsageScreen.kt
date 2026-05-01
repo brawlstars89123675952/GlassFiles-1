@@ -182,10 +182,29 @@ fun AiUsageScreen(onBack: () -> Unit) {
                 if (calibrations.isNotEmpty()) {
                     item { UsageSectionHeader("cost tracking accuracy") }
                     items(calibrations) { calibration ->
+                        // Map the EMA factor to a coarse accuracy
+                        // status: factor ≈ 1.0 with enough samples →
+                        // accurate; mild drift / not enough samples →
+                        // partial; large drift → off (user's estimates
+                        // for this model are consistently wrong, so we
+                        // flag it explicitly).
+                        val deviation = kotlin.math.abs(calibration.factor - 1.0)
+                        val status = when {
+                            calibration.sampleCount >= 5 && deviation <= 0.10 -> "✓ accurate"
+                            calibration.sampleCount < 5 -> "⚠ partial"
+                            deviation <= 0.25 -> "⚠ partial"
+                            else -> "⚠ off"
+                        }
+                        val statusColor = when (status) {
+                            "✓ accurate" -> colors.accent
+                            else -> colors.warning
+                        }
                         AiModuleKeyValueRow(
                             key = "${calibration.provider} · ${calibration.model}",
-                            value = "factor ${String.format(java.util.Locale.US, "%.2f", calibration.factor)} (${calibration.sampleCount} samples)",
-                            valueColor = colors.accent,
+                            value = "$status · factor ${
+                                String.format(java.util.Locale.US, "%.2f", calibration.factor)
+                            } (${calibration.sampleCount} samples)",
+                            valueColor = statusColor,
                         )
                     }
                 }

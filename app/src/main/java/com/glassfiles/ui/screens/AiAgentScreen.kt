@@ -1685,12 +1685,16 @@ private fun computeSessionStats(
 @Composable
 private fun CostMeter(stats: SessionStats) {
     val colors = MaterialTheme.colorScheme
-    val tokenLabel = when {
+    // SessionStats values come from a chars-based estimator (no
+    // provider-reported usage), so prefix the visible numbers with the
+    // module-wide "~" estimated marker. Keeping the marker right next
+    // to the value avoids any ambiguity for cost-sensitive users.
+    val tokenLabel = "~" + when {
         stats.tokens >= 1000 -> "%.1fk".format(stats.tokens / 1000.0)
         else -> stats.tokens.toString()
     }
     val costLabel = stats.costUsd?.let { c ->
-        when {
+        "~" + when {
             c < 0.01 -> "<\$0.01"
             c < 1.0 -> "\$%.3f".format(c)
             else -> "\$%.2f".format(c)
