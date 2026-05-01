@@ -2,25 +2,17 @@ package com.glassfiles.data.ai
 
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
+import com.glassfiles.data.ai.providers.AiTokenUsage
+import com.glassfiles.data.ai.usage.TokenizerRegistry
 
-/**
- * Best-effort USD pricing for chat completions. Numbers are public list
- * prices in USD per **one million tokens** as of late 2025 — they will
- * drift over time, but the order of magnitude is what matters for the
- * agent's session cost meter, not exact billing.
- *
- * Providers that we don't have a price table for (OpenRouter forwards
- * many models, Alibaba's Qwen is region-priced, etc.) fall through to
- * [Fallback]. The cost meter degrades gracefully — when the rate is
- * `null` it just shows token count without the dollar number.
- *
- * Pricing is matched against [AiModel.id] using a longest-prefix match
- * so versioned snapshots (`gpt-4o-2024-08-06`) hit the same rate as the
- * unversioned id (`gpt-4o`).
- */
+/** Best-effort USD pricing for chat completions, per 1M tokens. */
 object ModelPricing {
-    /** USD per 1 000 000 input / output tokens. */
-    data class Rate(val inputUsdPerM: Double, val outputUsdPerM: Double)
+    data class Rate(
+        val inputUsdPerM: Double,
+        val outputUsdPerM: Double,
+        val cacheCreationUsdPerM: Double? = null,
+        val cacheReadUsdPerM: Double? = null,
+    )
 
     private val openAi = mapOf(
         "gpt-5" to Rate(2.50, 10.0),
@@ -35,13 +27,13 @@ object ModelPricing {
     )
 
     private val anthropic = mapOf(
-        "claude-opus-4" to Rate(15.0, 75.0),
-        "claude-sonnet-4" to Rate(3.0, 15.0),
-        "claude-3-7-sonnet" to Rate(3.0, 15.0),
-        "claude-3-5-sonnet" to Rate(3.0, 15.0),
-        "claude-3-5-haiku" to Rate(0.80, 4.0),
-        "claude-3-haiku" to Rate(0.25, 1.25),
-        "claude-3-opus" to Rate(15.0, 75.0),
+        "claude-opus-4" to Rate(15.0, 75.0, cacheCreationUsdPerM = 18.75, cacheReadUsdPerM = 1.50),
+        "claude-sonnet-4" to Rate(3.0, 15.0, cacheCreationUsdPerM = 3.75, cacheReadUsdPerM = 0.30),
+        "claude-3-7-sonnet" to Rate(3.0, 15.0, cacheCreationUsdPerM = 3.75, cacheReadUsdPerM = 0.30),
+        "claude-3-5-sonnet" to Rate(3.0, 15.0, cacheCreationUsdPerM = 3.75, cacheReadUsdPerM = 0.30),
+        "claude-3-5-haiku" to Rate(0.80, 4.0, cacheCreationUsdPerM = 1.0, cacheReadUsdPerM = 0.08),
+        "claude-3-haiku" to Rate(0.25, 1.25, cacheCreationUsdPerM = 0.30, cacheReadUsdPerM = 0.03),
+        "claude-3-opus" to Rate(15.0, 75.0, cacheCreationUsdPerM = 18.75, cacheReadUsdPerM = 1.50),
     )
 
     private val xai = mapOf(
@@ -65,91 +57,67 @@ object ModelPricing {
         "kimi-k2" to Rate(0.60, 2.50),
     )
 
-    /**
-     * @return rate in USD per million tokens, or null if we have no data
-     *   for that model. Caller should treat null as "unknown — show
-     *   token count without dollars".
-     */
-    fun rateFor(model: AiModel): Rate? {
-        return rateFor(model.providerId.name, model.id)
-    }
+    private val alibaba = mapOf(
+        "qwen-max" to Rate(1.60, 6.40),
+        "qwen-plus" to Rate(0.40, 1.20),
+        "qwen-turbo" to Rate(0.05, 0.20),
+        "qwen3" to Rate(0.30, 1.20),
+    )
+
+    fun rateFor(model: AiModel): Rate? = rateFor(model.providerId.name, model.id)
 
     fun rateFor(providerId: String, modelId: String): Rate? {
-        val id = modelId.lowercase()
-        val provider = runCatching { AiProviderId.valueOf(providerId) }.getOrNull()
-        val direct = when (provider) {
-            AiProviderId.OPENAI -> longestPrefix(openAi, id)
-            AiProviderId.ANTHROPIC -> longestPrefix(anthropic, id)
-            AiProviderId.XAI -> longestPrefix(xai, id)
-            AiProviderId.GOOGLE -> longestPrefix(google, id)
-            AiProviderId.MOONSHOT -> longestPrefix(moonshot, id)
-            else -> null
+        val provider = providerId.lowercase()
+        val model = modelId.lowercase()
+        val table = when (provider) {
+            AiProviderId.OPENAI.name.lowercase(), "openai" -> openAi
+            AiProviderId.ANTHROPIC.name.lowercase(), "anthropic" -> anthropic
+            AiProviderId.XAI.name.lowercase(), "xai" -> xai
+            AiProviderId.GOOGLE.name.lowercase(), "google" -> google
+            AiProviderId.MOONSHOT.name.lowercase(), "moonshot" -> moonshot
+            AiProviderId.ALIBABA.name.lowercase(), "alibaba" -> alibaba
+            AiProviderId.OPENROUTER.name.lowercase(), "openrouter" -> openRouterRate(model)
+            else -> return null
         }
-        if (direct != null) return direct
-        return when {
-            id.contains("gpt-") || id.contains("o1") || id.contains("o3") || id.contains("o4") ->
-                longestPrefix(openAi, id.substringAfter('/'))
-            id.contains("claude") -> longestPrefix(anthropic, id.substringAfter('/'))
-            id.contains("gemini") -> longestPrefix(google, id.substringAfter('/'))
-            id.contains("grok") -> longestPrefix(xai, id.substringAfter('/'))
-            id.contains("moonshot") || id.contains("kimi") -> longestPrefix(moonshot, id.substringAfter('/'))
-            else -> null
-        }
+        return longestPrefix(table, model)
     }
 
-    private fun longestPrefix(table: Map<String, Rate>, id: String): Rate? {
-        return table.entries
+    private fun openRouterRate(model: String): Map<String, Rate> = when {
+        model.startsWith("openai/") -> openAi.mapKeys { "openai/${it.key}" }
+        model.startsWith("anthropic/") -> anthropic.mapKeys { "anthropic/${it.key}" }
+        model.startsWith("google/") -> google.mapKeys { "google/${it.key}" }
+        model.startsWith("x-ai/") || model.startsWith("xai/") -> xai
+        else -> openAi + anthropic + google + xai + moonshot + alibaba
+    }
+
+    private fun longestPrefix(table: Map<String, Rate>, id: String): Rate? =
+        table.entries
             .filter { id.startsWith(it.key) || id.contains(it.key) }
             .maxByOrNull { it.key.length }
             ?.value
-    }
 
-    /**
-     * Rough char-count → token estimate. 4 chars/token is the published
-     * heuristic for English+code; we use the same on input and output
-     * since the agent's transcript mixes both. Off by maybe 20% — fine
-     * for a UI meter, not for billing.
-     */
     fun estimateTokens(chars: Int): Int = (chars + 3) / 4
 
-    fun estimateTokens(providerId: String, modelId: String, chars: Int): Int {
-        if (chars <= 0) return 0
-        val divisor = tokenCharDivisor(providerId, modelId)
-        return kotlin.math.ceil(chars / divisor).toInt().coerceAtLeast(1)
-    }
+    fun estimateTokens(providerId: String, modelId: String, chars: Int): Int =
+        TokenizerRegistry.forProvider(providerId, modelId).countTokens("x".repeat(chars.coerceAtLeast(0)))
 
-    fun estimateCostUsd(rate: Rate, inputChars: Int, outputChars: Int): Double {
-        val inTok = estimateTokens(inputChars)
-        val outTok = estimateTokens(outputChars)
-        return estimateCostUsdFromTokens(rate, inTok, outTok)
-    }
+    fun estimateTextTokens(providerId: String, modelId: String, text: String): Int =
+        TokenizerRegistry.forProvider(providerId, modelId).countTokens(text)
 
-    fun estimateCostUsdFromChars(
-        rate: Rate,
-        providerId: String,
-        modelId: String,
-        inputChars: Int,
-        outputChars: Int,
-    ): Double {
-        val inTok = estimateTokens(providerId, modelId, inputChars)
-        val outTok = estimateTokens(providerId, modelId, outputChars)
-        return estimateCostUsdFromTokens(rate, inTok, outTok)
-    }
+    fun estimateCostUsd(rate: Rate, inputChars: Int, outputChars: Int): Double =
+        estimateCostUsdFromTokens(rate, estimateTokens(inputChars), estimateTokens(outputChars))
 
-    fun estimateCostUsdFromTokens(rate: Rate, inputTokens: Int, outputTokens: Int): Double {
-        return (inputTokens * rate.inputUsdPerM + outputTokens * rate.outputUsdPerM) / 1_000_000.0
-    }
+    fun estimateCostUsdFromTokens(rate: Rate, inputTokens: Int, outputTokens: Int): Double =
+        (inputTokens * rate.inputUsdPerM + outputTokens * rate.outputUsdPerM) / 1_000_000.0
 
-    private fun tokenCharDivisor(providerId: String, modelId: String): Double {
-        val id = modelId.lowercase()
-        val provider = runCatching { AiProviderId.valueOf(providerId) }.getOrNull()
-        return when {
-            provider == AiProviderId.ANTHROPIC || id.contains("claude") -> 3.6
-            provider == AiProviderId.ALIBABA || id.contains("qwen") -> 3.0
-            provider == AiProviderId.GOOGLE || id.contains("gemini") -> 4.1
-            provider == AiProviderId.XAI || id.contains("grok") -> 3.8
-            provider == AiProviderId.MOONSHOT || id.contains("kimi") || id.contains("moonshot") -> 3.2
-            else -> 4.0
+    fun calculateCostUsd(rate: Rate, usage: AiTokenUsage): Double {
+        var cost = estimateCostUsdFromTokens(rate, usage.inputTokens, usage.outputTokens)
+        if (usage.cacheCreationTokens > 0 && rate.cacheCreationUsdPerM != null) {
+            cost += usage.cacheCreationTokens * rate.cacheCreationUsdPerM / 1_000_000.0
         }
+        if (usage.cacheReadTokens > 0 && rate.cacheReadUsdPerM != null) {
+            cost += usage.cacheReadTokens * rate.cacheReadUsdPerM / 1_000_000.0
+        }
+        return cost
     }
 }
