@@ -24,6 +24,10 @@ data class AiUsageSummary(
     val totalChars: Long,
     val totalCostUsd: Double?,
     val estimatedRecordCount: Int,
+    val estimatedTokens: Long,
+    val reportedTokens: Long,
+    val estimatedCostUsd: Double?,
+    val reportedCostUsd: Double?,
     val toolCallsCount: Long,
     val filesReadCount: Long,
     val filesWrittenCount: Long,
@@ -33,6 +37,9 @@ data class AiUsageSummary(
 ) {
     val hasAnyRealUsage: Boolean
         get() = recordCount > estimatedRecordCount
+
+    val reportedPercent: Int
+        get() = if (recordCount == 0) 0 else ((recordCount - estimatedRecordCount) * 100 / recordCount)
 }
 
 /** Single grouping row inside an [AiUsageSummary]. */
