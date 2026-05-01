@@ -104,17 +104,19 @@ internal fun RepoTeamsScreen(
 
     LaunchedEffect(repoOwner, repoName) { loadTeams() }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> teams",
-            subtitle = "$repoOwner/$repoName",
-            onBack = onBack,
-            trailing = {
-                IconButton(onClick = { showAddDialog = true }, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                }
-            },
-        )
+    GitHubScreenFrame(
+        title = "> teams",
+        subtitle = "$repoOwner/$repoName",
+        onBack = onBack,
+        trailing = {
+            GitHubTopBarAction(
+                glyph = GhGlyphs.PLUS,
+                onClick = { showAddDialog = true },
+                tint = AiModuleTheme.colors.accent,
+                contentDescription = "add team",
+            )
+        },
+    ) {
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

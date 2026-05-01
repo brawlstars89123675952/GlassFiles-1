@@ -88,7 +88,8 @@ internal fun GistsScreen(
                     subtitle = "${current.files.size} file${if (current.files.size == 1) "" else "s"}",
                     onBack = { viewingGist = null; gistContent = emptyMap() },
                     trailing = {
-                        IconButton(
+                        GitHubTopBarAction(
+                            glyph = GhGlyphs.DELETE,
                             onClick = {
                                 scope.launch {
                                     GitHubManager.deleteGist(context, current.id)
@@ -97,14 +98,11 @@ internal fun GistsScreen(
                                     gistContent = emptyMap()
                                 }
                             },
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = palette.error)
-                        }
+                            tint = palette.error,
+                            contentDescription = "delete gist",
+                        )
                         if (onClose != null) {
-                            IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = palette.error)
-                            }
+                            GitHubTopBarAction(GhGlyphs.CLOSE, onClose, palette.error, contentDescription = "close")
                         }
                     },
                 )
@@ -153,16 +151,10 @@ internal fun GistsScreen(
                 subtitle = if (loading) "loading…" else "${gists.size} gist${if (gists.size == 1) "" else "s"}",
                 onBack = onBack,
                 trailing = {
-                    IconButton(onClick = { showCreate = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = palette.accent)
-                    }
-                    IconButton(onClick = onMinimize, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.PictureInPictureAlt, null, Modifier.size(18.dp), tint = palette.textSecondary)
-                    }
+                    GitHubTopBarAction(GhGlyphs.PLUS, { showCreate = true }, palette.accent, contentDescription = "create gist")
+                    GitHubTopBarAction(GhGlyphs.PIP, onMinimize, palette.textSecondary, contentDescription = "minimize")
                     if (onClose != null) {
-                        IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = palette.error)
-                        }
+                        GitHubTopBarAction(GhGlyphs.CLOSE, onClose, palette.error, contentDescription = "close")
                     }
                 },
             )

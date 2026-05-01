@@ -206,8 +206,7 @@ internal fun AdvancedSearchScreen(
         AdvancedSearchKind.USERS -> users.size
     }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(title = "> advanced search", onBack = onBack)
+    GitHubScreenFrame(title = "> advanced search", onBack = onBack) {
         LazyColumn(
             Modifier.fillMaxSize(),
             state = listState,

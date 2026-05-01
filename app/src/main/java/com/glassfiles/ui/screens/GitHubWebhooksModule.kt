@@ -82,22 +82,28 @@ internal fun WebhooksScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> webhooks",
-            subtitle = "$repoOwner/$repoName",
-            onBack = onBack,
-            trailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { loadWebhooks() }, enabled = !loading, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                    IconButton(onClick = { createNew = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                }
-            },
-        )
+    GitHubScreenFrame(
+        title = "> webhooks",
+        subtitle = "$repoOwner/$repoName",
+        onBack = onBack,
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.REFRESH,
+                    onClick = { loadWebhooks() },
+                    enabled = !loading,
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "refresh webhooks",
+                )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.PLUS,
+                    onClick = { createNew = true },
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "create webhook",
+                )
+            }
+        },
+    ) {
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -593,17 +599,20 @@ private fun WebhookDeliveriesScreen(
 
     LaunchedEffect(hook.id) { loadDeliveries() }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> webhook deliveries",
-            subtitle = hook.url.ifBlank { "$repoOwner/$repoName" },
-            onBack = onBack,
-            trailing = {
-                IconButton(onClick = { loadDeliveries() }, enabled = !loading, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                }
-            },
-        )
+    GitHubScreenFrame(
+        title = "> webhook deliveries",
+        subtitle = hook.url.ifBlank { "$repoOwner/$repoName" },
+        onBack = onBack,
+        trailing = {
+            GitHubTopBarAction(
+                glyph = GhGlyphs.REFRESH,
+                onClick = { loadDeliveries() },
+                enabled = !loading,
+                tint = AiModuleTheme.colors.accent,
+                contentDescription = "refresh deliveries",
+            )
+        },
+    ) {
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

@@ -307,30 +307,43 @@ private fun ProjectV2DetailScreen(project: GHProjectV2, onBack: () -> Unit) {
 
     LaunchedEffect(project.id) { loadDetail() }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> ${(detail?.title ?: project.title).lowercase()}",
-            subtitle = "project v2 #${project.number}",
-            onBack = onBack,
-            trailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { loadDetail() }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                    detail?.url?.takeIf { it.isNotBlank() }?.let { url ->
-                        IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Rounded.Language, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary)
-                        }
-                    }
-                    IconButton(onClick = { showEditProject = true }, enabled = detail != null, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                    IconButton(onClick = { showAddDraft = true }, enabled = detail != null, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
+    GitHubScreenFrame(
+        title = "> ${(detail?.title ?: project.title).lowercase()}",
+        subtitle = "project v2 #${project.number}",
+        onBack = onBack,
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.REFRESH,
+                    onClick = { loadDetail() },
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "refresh project",
+                )
+                detail?.url?.takeIf { it.isNotBlank() }?.let { url ->
+                    GitHubTopBarAction(
+                        glyph = GhGlyphs.OPEN_NEW,
+                        onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                        tint = AiModuleTheme.colors.textSecondary,
+                        contentDescription = "open project",
+                    )
                 }
-            },
-        )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.EDIT,
+                    onClick = { showEditProject = true },
+                    enabled = detail != null,
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "edit project",
+                )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.PLUS,
+                    onClick = { showAddDraft = true },
+                    enabled = detail != null,
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "add draft",
+                )
+            }
+        },
+    ) {
 
         val current = detail
         if (loading) {
@@ -1023,27 +1036,35 @@ private fun ClassicProjectDetail(
 
     LaunchedEffect(project.id) { loadProject() }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> ${currentProject.name.lowercase()}",
-            subtitle = "classic project #${currentProject.number}",
-            onBack = onBack,
-            trailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (currentProject.htmlUrl.isNotBlank()) {
-                        IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentProject.htmlUrl))) }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Rounded.Language, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary)
-                        }
-                    }
-                    IconButton(onClick = { showEditDialog = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                    IconButton(onClick = { showDeleteDialog = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.error)
-                    }
+    GitHubScreenFrame(
+        title = "> ${currentProject.name.lowercase()}",
+        subtitle = "classic project #${currentProject.number}",
+        onBack = onBack,
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (currentProject.htmlUrl.isNotBlank()) {
+                    GitHubTopBarAction(
+                        glyph = GhGlyphs.OPEN_NEW,
+                        onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentProject.htmlUrl))) },
+                        tint = AiModuleTheme.colors.textSecondary,
+                        contentDescription = "open project",
+                    )
                 }
-            },
-        )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.EDIT,
+                    onClick = { showEditDialog = true },
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "edit project",
+                )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.DELETE,
+                    onClick = { showDeleteDialog = true },
+                    tint = AiModuleTheme.colors.error,
+                    contentDescription = "delete project",
+                )
+            }
+        },
+    ) {
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

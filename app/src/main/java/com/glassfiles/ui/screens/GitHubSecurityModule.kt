@@ -99,22 +99,29 @@ internal fun RulesetsScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> rulesets",
-            subtitle = "$repoOwner/$repoName",
-            onBack = onBack,
-            trailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { loadRulesets() }, enabled = !loading, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                    IconButton(onClick = { showCreateRuleset = true }, enabled = !loading, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                }
-            },
-        )
+    GitHubScreenFrame(
+        title = "> rulesets",
+        subtitle = "$repoOwner/$repoName",
+        onBack = onBack,
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.REFRESH,
+                    onClick = { loadRulesets() },
+                    enabled = !loading,
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "refresh rulesets",
+                )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.PLUS,
+                    onClick = { showCreateRuleset = true },
+                    enabled = !loading,
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "create ruleset",
+                )
+            }
+        },
+    ) {
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -269,28 +276,43 @@ private fun RulesetDetailScreen(
 
     LaunchedEffect(ruleset.id) { loadDetail() }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> ${ruleset.name.ifBlank { "ruleset #${ruleset.id}" }.lowercase()}",
-            subtitle = "$repoOwner/$repoName",
-            onBack = onBack,
-            trailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { loadDetail() }, enabled = !loading, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                    IconButton(onClick = { showEditDialog = true }, enabled = detail != null, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                    IconButton(onClick = { showDeleteDialog = true }, enabled = !actionInFlight, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.error)
-                    }
-                    IconButton(onClick = { openGitHubSecurityUrl(context, ruleset.htmlUrl) }, enabled = ruleset.htmlUrl.isNotBlank(), modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                }
-            },
-        )
+    GitHubScreenFrame(
+        title = "> ${ruleset.name.ifBlank { "ruleset #${ruleset.id}" }.lowercase()}",
+        subtitle = "$repoOwner/$repoName",
+        onBack = onBack,
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.REFRESH,
+                    onClick = { loadDetail() },
+                    enabled = !loading,
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "refresh ruleset",
+                )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.EDIT,
+                    onClick = { showEditDialog = true },
+                    enabled = detail != null,
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "edit ruleset",
+                )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.DELETE,
+                    onClick = { showDeleteDialog = true },
+                    enabled = !actionInFlight,
+                    tint = AiModuleTheme.colors.error,
+                    contentDescription = "delete ruleset",
+                )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.OPEN_NEW,
+                    onClick = { openGitHubSecurityUrl(context, ruleset.htmlUrl) },
+                    enabled = ruleset.htmlUrl.isNotBlank(),
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "open ruleset",
+                )
+            }
+        },
+    ) {
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -675,17 +697,20 @@ internal fun SecurityScreen(
 
     LaunchedEffect(repoOwner, repoName, selectedTab) { loadAlerts() }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> security",
-            subtitle = "$repoOwner/$repoName - ${selectedTab.lowercase()}",
-            onBack = onBack,
-            trailing = {
-                IconButton(onClick = { loadAlerts() }, enabled = !loading, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                }
-            },
-        )
+    GitHubScreenFrame(
+        title = "> security",
+        subtitle = "$repoOwner/$repoName - ${selectedTab.lowercase()}",
+        onBack = onBack,
+        trailing = {
+            GitHubTopBarAction(
+                glyph = GhGlyphs.REFRESH,
+                onClick = { loadAlerts() },
+                enabled = !loading,
+                tint = AiModuleTheme.colors.accent,
+                contentDescription = "refresh security",
+            )
+        },
+    ) {
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

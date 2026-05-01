@@ -79,22 +79,17 @@ fun NotificationsScreen(onBack: () -> Unit) {
         onBack = onBack,
         subtitle = if (showAll) "scope: all" else "scope: unread",
         trailing = {
-            IconButton(
+            GitHubTopBarAction(
+                glyph = GhGlyphs.CHECK,
                 onClick = {
                     scope.launch {
                         GitHubManager.markAllNotificationsRead(context)
                         notifications = GitHubManager.getNotifications(context, showAll)
                     }
                 },
-                modifier = Modifier.size(36.dp),
-            ) {
-                Icon(
-                    Icons.Rounded.DoneAll,
-                    contentDescription = "mark all read",
-                    modifier = Modifier.size(18.dp),
-                    tint = palette.accent,
-                )
-            }
+                tint = palette.accent,
+                contentDescription = "mark all read",
+            )
         },
     ) {
         Column(Modifier.fillMaxSize()) {
@@ -415,4 +410,3 @@ fun EmptyState(icon: ImageVector, title: String, subtitle: String) {
         }
     }
 }
-

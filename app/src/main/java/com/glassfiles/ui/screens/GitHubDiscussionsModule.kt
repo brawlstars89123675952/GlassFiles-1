@@ -115,19 +115,21 @@ internal fun DiscussionsScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> discussions",
-            subtitle = "$repoOwner/$repoName",
-            onBack = onBack,
-            trailing = if (canWrite) {
+    GitHubScreenFrame(
+        title = "> discussions",
+        subtitle = "$repoOwner/$repoName",
+        onBack = onBack,
+        trailing = if (canWrite) {
                 {
-                    IconButton(onClick = { showCreateDialog = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
+                    GitHubTopBarAction(
+                        glyph = GhGlyphs.PLUS,
+                        onClick = { showCreateDialog = true },
+                        tint = AiModuleTheme.colors.accent,
+                        contentDescription = "new discussion",
+                    )
                 }
             } else null,
-        )
+    ) {
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -303,27 +305,35 @@ private fun DiscussionDetailScreen(
 
     LaunchedEffect(initialDiscussion.number) { loadDetail() }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> #${discussion.number}",
-            subtitle = discussion.title,
-            onBack = onBack,
-            trailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (discussion.htmlUrl.isNotBlank()) {
-                        IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(discussion.htmlUrl))) }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Rounded.Language, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary)
-                        }
-                    }
-                    IconButton(onClick = { showEditDialog = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                    IconButton(onClick = { showDeleteDialog = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.error)
-                    }
+    GitHubScreenFrame(
+        title = "> #${discussion.number}",
+        subtitle = discussion.title,
+        onBack = onBack,
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (discussion.htmlUrl.isNotBlank()) {
+                    GitHubTopBarAction(
+                        glyph = GhGlyphs.OPEN_NEW,
+                        onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(discussion.htmlUrl))) },
+                        tint = AiModuleTheme.colors.textSecondary,
+                        contentDescription = "open discussion",
+                    )
                 }
-            },
-        )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.EDIT,
+                    onClick = { showEditDialog = true },
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "edit discussion",
+                )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.DELETE,
+                    onClick = { showDeleteDialog = true },
+                    tint = AiModuleTheme.colors.error,
+                    contentDescription = "delete discussion",
+                )
+            }
+        },
+    ) {
 
         LazyColumn(
             Modifier.fillMaxSize(),

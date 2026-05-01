@@ -84,7 +84,8 @@ fun ProfileScreen(
         trailing = {
             val me = profile
             if (me != null && me.login != cachedSelf) {
-                IconButton(
+                GitHubTopBarAction(
+                    glyph = if (isFollowing) GhGlyphs.MINUS else GhGlyphs.PLUS,
                     onClick = {
                         scope.launch {
                             if (isFollowing) {
@@ -95,15 +96,9 @@ fun ProfileScreen(
                             isFollowing = !isFollowing
                         }
                     },
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(
-                        if (isFollowing) Icons.Rounded.PersonRemove else Icons.Rounded.PersonAdd,
-                        contentDescription = if (isFollowing) "unfollow" else "follow",
-                        modifier = Modifier.size(18.dp),
-                        tint = if (isFollowing) palette.textSecondary else palette.accent,
-                    )
-                }
+                    tint = if (isFollowing) palette.textSecondary else palette.accent,
+                    contentDescription = if (isFollowing) "unfollow" else "follow",
+                )
             }
         },
     ) {

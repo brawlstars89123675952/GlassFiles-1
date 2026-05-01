@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.*
+import com.glassfiles.ui.components.AiModuleGlyphAction
+import com.glassfiles.ui.components.AiModuleScreenScaffold
 import com.glassfiles.ui.components.aiModuleRepoBadge
 import com.glassfiles.ui.theme.*
 import kotlinx.coroutines.launch
@@ -150,6 +152,67 @@ private fun formatCompactDecimal(value: Double, suffix: String): String {
 
 @Composable
 internal fun GitHubWarningAmber(): Color = Color(0xFFFF9500)
+
+@Composable
+internal fun GitHubScreenFrame(
+    title: String,
+    onBack: () -> Unit,
+    subtitle: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    bottomBar: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    AiModuleScreenScaffold(
+        title = title,
+        subtitle = subtitle,
+        onBack = onBack,
+        trailing = trailing,
+        bottomBar = bottomBar,
+        content = content,
+    )
+}
+
+@Composable
+internal fun GitHubTopBarAction(
+    glyph: String,
+    onClick: () -> Unit,
+    tint: Color = AiModuleTheme.colors.textSecondary,
+    enabled: Boolean = true,
+    contentDescription: String? = null,
+) {
+    AiModuleGlyphAction(
+        glyph = glyph,
+        onClick = onClick,
+        tint = tint,
+        enabled = enabled,
+        contentDescription = contentDescription,
+    )
+}
+
+@Composable
+internal fun GitHubTopBarTextAction(
+    label: String,
+    onClick: () -> Unit,
+    tint: Color = AiModuleTheme.colors.textSecondary,
+    enabled: Boolean = true,
+) {
+    Box(
+        Modifier
+            .height(36.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .let { if (enabled) it.clickable(onClick = onClick) else it }
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (enabled) tint else tint.copy(alpha = 0.45f),
+            fontFamily = JetBrainsMono,
+            fontWeight = FontWeight.Medium,
+            fontSize = 12.sp,
+        )
+    }
+}
 
 internal fun releaseAssetKind(name: String): String {
     val lower = name.lowercase(Locale.US)

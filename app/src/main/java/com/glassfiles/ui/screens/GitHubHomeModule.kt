@@ -60,13 +60,19 @@ internal fun LoginScreen(onBack: () -> Unit, onMinimize: () -> Unit, onClose: ((
                 subtitle = "sign in",
                 onBack = onBack,
                 trailing = {
-                    IconButton(onClick = onMinimize, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.PictureInPictureAlt, null, Modifier.size(18.dp), tint = palette.textSecondary)
-                    }
+                    GitHubTopBarAction(
+                        glyph = GhGlyphs.PIP,
+                        onClick = onMinimize,
+                        tint = palette.textSecondary,
+                        contentDescription = "minimize",
+                    )
                     if (onClose != null) {
-                        IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = palette.error)
-                        }
+                        GitHubTopBarAction(
+                            glyph = GhGlyphs.CLOSE,
+                            onClick = onClose,
+                            tint = palette.error,
+                            contentDescription = "close",
+                        )
                     }
                 },
             )
@@ -230,25 +236,13 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
             title = "> github",
             onBack = onBack,
             trailing = {
-                IconButton(onClick = onNotifications, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Notifications, null, Modifier.size(18.dp), tint = palette.accent)
-                }
-                IconButton(onClick = onGists, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Description, null, Modifier.size(18.dp), tint = palette.accent)
-                }
-                IconButton(onClick = { showCreate = true }, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = palette.accent)
-                }
-                IconButton(onClick = onSettings, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Settings, null, Modifier.size(18.dp), tint = palette.textSecondary)
-                }
-                IconButton(onClick = onMinimize, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.PictureInPictureAlt, null, Modifier.size(18.dp), tint = palette.textSecondary)
-                }
+                GitHubTopBarAction(GhGlyphs.NOTIFY, onNotifications, palette.accent, contentDescription = "notifications")
+                GitHubTopBarAction(GhGlyphs.FILE, onGists, palette.accent, contentDescription = "gists")
+                GitHubTopBarAction(GhGlyphs.PLUS, { showCreate = true }, palette.accent, contentDescription = "create repository")
+                GitHubTopBarAction(GhGlyphs.SETTINGS, onSettings, palette.textSecondary, contentDescription = "settings")
+                GitHubTopBarAction(GhGlyphs.PIP, onMinimize, palette.textSecondary, contentDescription = "minimize")
                 if (onClose != null) {
-                    IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = palette.error)
-                    }
+                    GitHubTopBarAction(GhGlyphs.CLOSE, onClose, palette.error, contentDescription = "close")
                 }
             },
         )

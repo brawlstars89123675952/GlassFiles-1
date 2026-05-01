@@ -187,13 +187,19 @@ fun GitHubRepoSettingsScreen(
         refreshCurrentTab()
     }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        RepoSettingsTopBar(
-            title = "Repository settings",
-            subtitle = repo.fullName,
-            onBack = onBack,
-            onRefresh = { scope.launch { refreshCurrentTab() } }
-        )
+    GitHubScreenFrame(
+        title = "> repository settings",
+        subtitle = repo.fullName,
+        onBack = onBack,
+        trailing = {
+            AiModuleGlyphAction(
+                glyph = GhGlyphs.REFRESH,
+                onClick = { scope.launch { refreshCurrentTab() } },
+                tint = AiModuleTheme.colors.accent,
+                contentDescription = "refresh",
+            )
+        },
+    ) {
 
         Row(
             Modifier

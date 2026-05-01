@@ -81,25 +81,27 @@ fun DiffViewerScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> ${title.lowercase()}",
-            subtitle = subtitle,
-            onBack = onBack,
-            trailing = {
+    GitHubScreenFrame(
+        title = "> ${title.lowercase()}",
+        subtitle = subtitle,
+        onBack = onBack,
+        trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("+$totalAdditions", color = Color(0xFF34C759), fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = JetBrainsMono)
                         Text("-$totalDeletions", color = Color(0xFFFF3B30), fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = JetBrainsMono)
                     }
                     if (pullNumber != null) {
-                        IconButton(onClick = { showComments = true }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Rounded.Comment, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                        }
+                        GitHubTopBarAction(
+                            glyph = GhGlyphs.REACT,
+                            onClick = { showComments = true },
+                            tint = AiModuleTheme.colors.accent,
+                            contentDescription = "review comments",
+                        )
                     }
                 }
-            },
-        )
+        },
+    ) {
 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
             items(files) { file ->
@@ -171,24 +173,21 @@ private fun FileDiffScreen(
     var commentActionInFlight by remember { mutableStateOf(false) }
     val canMutateComments = repoOwner != null && repoName != null && pullNumber != null
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> ${file.filename.substringAfterLast("/")}",
-            subtitle = "${file.status} +${file.additions} -${file.deletions}",
-            onBack = onBack,
-            trailing = {
-                IconButton(onClick = {
+    GitHubScreenFrame(
+        title = "> ${file.filename.substringAfterLast("/")}",
+        subtitle = "${file.status} +${file.additions} -${file.deletions}",
+        onBack = onBack,
+        trailing = {
+                GitHubTopBarAction(
+                    glyph = if (viewMode == DiffViewMode.UNIFIED) GhGlyphs.LIST else GhGlyphs.LINES,
+                    onClick = {
                     onViewModeChange(if (viewMode == DiffViewMode.UNIFIED) DiffViewMode.SPLIT else DiffViewMode.UNIFIED)
-                }, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        if (viewMode == DiffViewMode.UNIFIED) Icons.Rounded.ViewColumn else Icons.Rounded.ViewAgenda,
-                        null,
-                        Modifier.size(18.dp),
-                        tint = AiModuleTheme.colors.accent
-                    )
-                }
-            },
-        )
+                    },
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "toggle diff view",
+                )
+        },
+    ) {
 
         LazyColumn(
             Modifier.fillMaxSize().padding(horizontal = 8.dp),
@@ -459,12 +458,11 @@ fun PRReviewCommentsScreen(
     var deleteComment by remember { mutableStateOf<GHReviewComment?>(null) }
     var commentActionInFlight by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> review comments",
-            subtitle = "#$pullNumber · ${comments.size} comments",
-            onBack = onBack,
-        )
+    GitHubScreenFrame(
+        title = "> review comments",
+        subtitle = "#$pullNumber · ${comments.size} comments",
+        onBack = onBack,
+    ) {
 
         if (comments.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

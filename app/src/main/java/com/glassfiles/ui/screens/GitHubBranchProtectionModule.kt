@@ -171,21 +171,23 @@ internal fun BranchProtectionScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> branch protection",
-            subtitle = "$repoOwner/$repoName",
-            onBack = onBack,
-            trailing = {
+    GitHubScreenFrame(
+        title = "> branch protection",
+        subtitle = "$repoOwner/$repoName",
+        onBack = onBack,
+        trailing = {
                 if (saving) {
-                    CircularProgressIndicator(Modifier.size(16.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
+                    AiModuleSpinner()
                 } else {
-                    TextButton(onClick = { saveProtection() }, enabled = hasUnsavedChanges) {
-                        Text(if (hasUnsavedChanges) "save" else "saved", color = if (hasUnsavedChanges) AiModuleTheme.colors.accent else AiModuleTheme.colors.textMuted, fontWeight = FontWeight.SemiBold)
-                    }
+                    GitHubTopBarTextAction(
+                        label = if (hasUnsavedChanges) "save" else "saved",
+                        onClick = { saveProtection() },
+                        enabled = hasUnsavedChanges,
+                        tint = if (hasUnsavedChanges) AiModuleTheme.colors.accent else AiModuleTheme.colors.textMuted,
+                    )
                 }
-            },
-        )
+        },
+    ) {
 
         // Branch selector
         Row(

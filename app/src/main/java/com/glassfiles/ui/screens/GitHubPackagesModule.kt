@@ -114,16 +114,18 @@ internal fun PackagesScreen(userLogin: String, onBack: () -> Unit) {
             it.repositoryName.contains(query, ignoreCase = true)
     }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> packages",
-            onBack = onBack,
-            trailing = {
-                IconButton(onClick = { loadPackages() }, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                }
-            },
-        )
+    GitHubScreenFrame(
+        title = "> packages",
+        onBack = onBack,
+        trailing = {
+            GitHubTopBarAction(
+                glyph = GhGlyphs.REFRESH,
+                onClick = { loadPackages() },
+                tint = AiModuleTheme.colors.accent,
+                contentDescription = "refresh packages",
+            )
+        },
+    ) {
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
@@ -202,26 +204,35 @@ private fun PackageDetailScreen(owner: PackageOwner, pkg: GHPackage, onBack: () 
 
     LaunchedEffect(owner, pkg.id) { loadDetail() }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> ${detail.name.ifBlank { "package" }.lowercase()}",
-            onBack = onBack,
-            trailing = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { loadDetail() }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
-                    if (detail.htmlUrl.isNotBlank()) {
-                        IconButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(detail.htmlUrl))) }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                        }
-                    }
-                    IconButton(onClick = { deletePackageConfirm = true }, enabled = !actionInFlight, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.error)
-                    }
+    GitHubScreenFrame(
+        title = "> ${detail.name.ifBlank { "package" }.lowercase()}",
+        onBack = onBack,
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.REFRESH,
+                    onClick = { loadDetail() },
+                    tint = AiModuleTheme.colors.accent,
+                    contentDescription = "refresh package",
+                )
+                if (detail.htmlUrl.isNotBlank()) {
+                    GitHubTopBarAction(
+                        glyph = GhGlyphs.OPEN_NEW,
+                        onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(detail.htmlUrl))) },
+                        tint = AiModuleTheme.colors.accent,
+                        contentDescription = "open package",
+                    )
                 }
-            },
-        )
+                GitHubTopBarAction(
+                    glyph = GhGlyphs.DELETE,
+                    onClick = { deletePackageConfirm = true },
+                    enabled = !actionInFlight,
+                    tint = AiModuleTheme.colors.error,
+                    contentDescription = "delete package",
+                )
+            }
+        },
+    ) {
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),

@@ -72,17 +72,19 @@ internal fun CollaboratorsScreen(
 
     LaunchedEffect(repoOwner, repoName) { loadCollaborators() }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> collaborators",
-            subtitle = "$repoOwner/$repoName",
-            onBack = onBack,
-            trailing = {
-                IconButton(onClick = { showAddDialog = true }, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.PersonAdd, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                }
-            },
-        )
+    GitHubScreenFrame(
+        title = "> collaborators",
+        subtitle = "$repoOwner/$repoName",
+        onBack = onBack,
+        trailing = {
+            GitHubTopBarAction(
+                glyph = GhGlyphs.PLUS,
+                onClick = { showAddDialog = true },
+                tint = AiModuleTheme.colors.accent,
+                contentDescription = "add collaborator",
+            )
+        },
+    ) {
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

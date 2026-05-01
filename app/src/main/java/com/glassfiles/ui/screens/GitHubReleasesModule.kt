@@ -65,25 +65,27 @@ fun ReleasesScreen(
         loading = false
     }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> releases",
-            subtitle = repoName,
-            onBack = onBack,
-            trailing = if (canWrite) {
+    GitHubScreenFrame(
+        title = "> releases",
+        subtitle = repoName,
+        onBack = onBack,
+        trailing = if (canWrite) {
                 {
-                    IconButton(onClick = { showCreate = true }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                    }
+                    GitHubTopBarAction(
+                        glyph = GhGlyphs.PLUS,
+                        onClick = { showCreate = true },
+                        tint = AiModuleTheme.colors.accent,
+                        contentDescription = "create release",
+                    )
                 }
             } else null,
-        )
+    ) {
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AiModuleTheme.colors.accent)
             }
-            return@Column
+            return@GitHubScreenFrame
         }
 
         if (releases.isEmpty()) {
@@ -92,7 +94,7 @@ fun ReleasesScreen(
                 title = "No releases",
                 subtitle = "Create your first release"
             )
-            return@Column
+            return@GitHubScreenFrame
         }
 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {

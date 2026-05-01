@@ -200,28 +200,33 @@ internal fun GitHubSettingsScreen(
 
     LaunchedEffect(currentSection) { refreshSection(currentSection) }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> ${(currentSection?.title ?: "settings").lowercase()}",
-            subtitle = currentSection?.let { user?.name?.takeIf { n -> n.isNotBlank() } ?: user?.login },
-            onBack = { if (currentSection == null) onBack() else currentSection = null },
-            trailing = {
+    GitHubScreenFrame(
+        title = "> ${(currentSection?.title ?: "settings").lowercase()}",
+        subtitle = currentSection?.let { user?.name?.takeIf { n -> n.isNotBlank() } ?: user?.login },
+        onBack = { if (currentSection == null) onBack() else currentSection = null },
+        trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (loading) {
-                        CircularProgressIndicator(Modifier.size(16.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
+                        AiModuleSpinner()
                     } else {
-                        IconButton(onClick = { scope.launch { refreshSection(currentSection) } }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Rounded.Refresh, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                        }
+                        GitHubTopBarAction(
+                            glyph = GhGlyphs.REFRESH,
+                            onClick = { scope.launch { refreshSection(currentSection) } },
+                            tint = AiModuleTheme.colors.accent,
+                            contentDescription = "refresh settings",
+                        )
                     }
                     if (onClose != null) {
-                        IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.error)
-                        }
+                        GitHubTopBarAction(
+                            glyph = GhGlyphs.CLOSE,
+                            onClick = onClose,
+                            tint = AiModuleTheme.colors.error,
+                            contentDescription = "close",
+                        )
                     }
                 }
-            },
-        )
+        },
+    ) {
 
         if (currentSection == null) {
             HomeSettingsMenu(user = user, onOpen = { currentSection = it })

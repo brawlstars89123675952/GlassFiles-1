@@ -152,21 +152,23 @@ internal fun RepoSettingsScreen(
             topics.map(::normalizeRepoTopic).filter { it.isNotBlank() }.distinct() != s.topics.map(::normalizeRepoTopic).filter { it.isNotBlank() }.distinct()
     } ?: false
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> repo settings",
-            subtitle = "$repoOwner/$repoName",
-            onBack = onBack,
-            trailing = {
+    GitHubScreenFrame(
+        title = "> repo settings",
+        subtitle = "$repoOwner/$repoName",
+        onBack = onBack,
+        trailing = {
                 if (saving) {
-                    CircularProgressIndicator(Modifier.size(16.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
+                    AiModuleSpinner()
                 } else {
-                    TextButton(onClick = { saveChanges() }, enabled = hasUnsavedChanges) {
-                        Text(if (hasUnsavedChanges) "save" else "saved", color = if (hasUnsavedChanges) AiModuleTheme.colors.accent else AiModuleTheme.colors.textMuted, fontWeight = FontWeight.SemiBold)
-                    }
+                    GitHubTopBarTextAction(
+                        label = if (hasUnsavedChanges) "save" else "saved",
+                        onClick = { saveChanges() },
+                        enabled = hasUnsavedChanges,
+                        tint = if (hasUnsavedChanges) AiModuleTheme.colors.accent else AiModuleTheme.colors.textMuted,
+                    )
                 }
-            },
-        )
+        },
+    ) {
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

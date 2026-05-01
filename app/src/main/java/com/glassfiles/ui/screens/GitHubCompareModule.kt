@@ -115,26 +115,25 @@ internal fun CompareCommitsScreen(
         return
     }
 
-    Column(Modifier.fillMaxSize().background(AiModuleTheme.colors.background)) {
-        AiModulePageBar(
-            title = "> compare",
-            subtitle = "$repoOwner/$repoName",
-            onBack = onBack,
-            trailing = {
-                IconButton(
-                    onClick = {
-                        val oldBase = baseBranch
-                        baseBranch = headBranch
-                        headBranch = oldBase
-                        compareResult = null
-                    },
-                    enabled = baseBranch.isNotBlank() && headBranch.isNotBlank(),
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(Icons.Rounded.SwapHoriz, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
-                }
-            },
-        )
+    GitHubScreenFrame(
+        title = "> compare",
+        subtitle = "$repoOwner/$repoName",
+        onBack = onBack,
+        trailing = {
+            GitHubTopBarAction(
+                glyph = GhGlyphs.COMPARE,
+                onClick = {
+                    val oldBase = baseBranch
+                    baseBranch = headBranch
+                    headBranch = oldBase
+                    compareResult = null
+                },
+                enabled = baseBranch.isNotBlank() && headBranch.isNotBlank(),
+                tint = AiModuleTheme.colors.accent,
+                contentDescription = "swap branches",
+            )
+        },
+    ) {
 
         Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             CompareSelectorCard(
