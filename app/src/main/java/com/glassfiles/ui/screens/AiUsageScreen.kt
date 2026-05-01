@@ -179,6 +179,16 @@ fun AiUsageScreen(onBack: () -> Unit) {
                 items(summary.byModel) { BucketRow(it) }
                 item { UsageSectionHeader(Strings.aiUsageByMode) }
                 items(summary.byMode) { BucketRow(it) }
+                if (calibrations.isNotEmpty()) {
+                    item { UsageSectionHeader("cost tracking accuracy") }
+                    items(calibrations) { calibration ->
+                        AiModuleKeyValueRow(
+                            label = "${calibration.provider} · ${calibration.model}",
+                            value = "factor ${String.format(java.util.Locale.US, "%.2f", calibration.factor)} (${calibration.sampleCount} samples)",
+                            valueColor = colors.accent,
+                        )
+                    }
+                }
                 item {
                     Text(
                         text = "// " + Strings.aiUsageDisclaimer,
