@@ -207,6 +207,7 @@ fun AiUsageScreen(onBack: () -> Unit) {
         ClearConfirmDialog(
             onConfirm = {
                 AiUsageStore.clear(context)
+                com.glassfiles.data.ai.usage.AiUsageDatabase.get(context).clearUsage()
                 refreshTick += 1
                 confirmClear = false
             },
