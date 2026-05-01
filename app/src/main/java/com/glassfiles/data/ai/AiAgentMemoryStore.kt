@@ -55,9 +55,15 @@ object AiAgentMemoryStore {
         val messages: List<AiChatSessionStore.Message>,
     )
 
+    data class MemoryIndexSnapshot(
+        val facts: List<AiAgentMemoryIndex.Fact>,
+        val searchResults: List<AiAgentMemoryIndex.SearchResult> = emptyList(),
+    )
+
     fun buildMemoryPrompt(context: Context, repoFullName: String): String {
         if (repoFullName.isBlank()) return ""
         ensureDefaults(context, repoFullName)
+        AiAgentMemoryIndex.markDirtyAndRebuild(context, repoFullName)
         val blocks = mutableListOf<String>()
         if (AiAgentMemoryPrefs.getUserPreferences(context)) {
             readGlobalPreferences(context).takeIf { it.isNotBlank() }?.let {
@@ -73,6 +79,9 @@ object AiAgentMemoryStore {
             recentChatSummaries(context, repoFullName).takeIf { it.isNotEmpty() }?.let { summaries ->
                 blocks += "## Recent conversations\n" + summaries.joinToString("\n\n")
             }
+        }
+        structuredMemoryFacts(context, repoFullName).takeIf { it.isNotEmpty() }?.let { facts ->
+            blocks += "## Structured memory facts\n" + facts.joinToString("\n")
         }
         if (AiAgentMemoryPrefs.getSemanticSearch(context)) {
             blocks += "## Semantic memory\nSemantic search index is not available yet; no related snippets were loaded."
@@ -104,10 +113,25 @@ object AiAgentMemoryStore {
         }
         file.parentFile?.mkdirs()
         file.writeText(content)
+        AiAgentMemoryIndex.markDirtyAndRebuild(context, repoFullName)
     }
 
     fun clearAll(context: Context) {
         memoryRoot(context).deleteRecursively()
+    }
+
+    fun rebuildIndex(context: Context, repoFullName: String) {
+        ensureDefaults(context, repoFullName)
+        AiAgentMemoryIndex.rebuildRepo(context, repoFullName)
+    }
+
+    fun memoryIndexSnapshot(context: Context, repoFullName: String, query: String = ""): MemoryIndexSnapshot {
+        if (repoFullName.isBlank()) return MemoryIndexSnapshot(emptyList())
+        ensureDefaults(context, repoFullName)
+        return MemoryIndexSnapshot(
+            facts = AiAgentMemoryIndex.facts(context, repoFullName),
+            searchResults = if (query.isBlank()) emptyList() else AiAgentMemoryIndex.search(context, repoFullName, query),
+        )
     }
 
     fun toolRead(context: Context, repoFullName: String, path: String): String {
@@ -128,6 +152,7 @@ object AiAgentMemoryStore {
         val file = resolveToolPath(context, repoFullName, path, mustExist = false)
         file.parentFile?.mkdirs()
         file.writeText(content)
+        AiAgentMemoryIndex.markDirtyAndRebuild(context, repoFullName)
         return buildString {
             appendLine(memoryToolOutputHeader("memory_write", normalizeToolInput(path)))
             append("  → wrote ${formatBytes(content.toByteArray().size)}, ${content.lineCount()} lines")
@@ -139,6 +164,7 @@ object AiAgentMemoryStore {
         val file = resolveToolPath(context, repoFullName, path, mustExist = false)
         file.parentFile?.mkdirs()
         file.appendText(content)
+        AiAgentMemoryIndex.markDirtyAndRebuild(context, repoFullName)
         return buildString {
             appendLine(memoryToolOutputHeader("memory_append", normalizeToolInput(path)))
             append("  → appended ${formatBytes(content.toByteArray().size)}, ${content.lineCount()} lines")
@@ -218,6 +244,7 @@ object AiAgentMemoryStore {
         if (file.isDirectory) throw IllegalArgumentException("memory_delete: refusing to delete directory: $path")
         val ok = file.delete()
         if (!ok) throw IllegalStateException("memory_delete: failed to delete $path")
+        AiAgentMemoryIndex.markDirtyAndRebuild(context, repoFullName)
         return formatToolResult(
             toolName = "memory_delete",
             target = normalizeToolInput(path),
@@ -260,6 +287,7 @@ object AiAgentMemoryStore {
             .put("updatedAt", System.currentTimeMillis())
             .put("messages", arr)
             .let { File(chatDir, "full.json").writeText(it.toString(2)) }
+        AiAgentMemoryIndex.markDirtyAndRebuild(context, repoFullName)
     }
 
     fun listChats(context: Context, repoFullName: String): List<ChatRecord> {
@@ -299,13 +327,16 @@ object AiAgentMemoryStore {
                 full.writeText(obj.toString(2))
             }
         }
+        AiAgentMemoryIndex.markDirtyAndRebuild(context, repoFullName)
     }
 
     fun deleteChat(context: Context, repoFullName: String, chatId: String): Boolean {
         if (repoFullName.isBlank() || chatId.isBlank()) return false
         ensureDefaults(context, repoFullName)
         val chatDir = File(File(repoDir(context, repoFullName), "chats"), chatId)
-        return chatDir.exists() && chatDir.deleteRecursively()
+        val deleted = chatDir.exists() && chatDir.deleteRecursively()
+        if (deleted) AiAgentMemoryIndex.markDirtyAndRebuild(context, repoFullName)
+        return deleted
     }
 
     fun searchChats(context: Context, repoFullName: String, query: String): List<ChatSearchResult> {
@@ -363,6 +394,7 @@ object AiAgentMemoryStore {
         if (AiAgentMemoryPrefs.getProjectKnowledge(context)) {
             updateProjectKnowledge(context, repoFullName, summary)
         }
+        AiAgentMemoryIndex.markDirtyAndRebuild(context, repoFullName)
     }
 
     private suspend fun generateSummary(
@@ -435,6 +467,24 @@ object AiAgentMemoryStore {
             ?.map { file -> "### ${file.parentFile?.name.orEmpty()}\n${file.readText().take(2_000)}" }
             ?.toList()
             ?: emptyList()
+    }
+
+    private fun structuredMemoryFacts(context: Context, repoFullName: String): List<String> {
+        val allowPreferences = AiAgentMemoryPrefs.getUserPreferences(context)
+        val allowProject = AiAgentMemoryPrefs.getProjectKnowledge(context)
+        val allowChats = AiAgentMemoryPrefs.getChatSummaries(context)
+        if (!allowPreferences && !allowProject && !allowChats) return emptyList()
+        return AiAgentMemoryIndex.facts(context, repoFullName, limit = 32)
+            .asSequence()
+            .filter { fact ->
+                when {
+                    fact.sourcePath == PREFERENCES_FILE -> allowPreferences
+                    fact.sourcePath.startsWith("chats/") -> allowChats
+                    else -> allowProject
+                }
+            }
+            .map { fact -> "- [${fact.type}] ${fact.text} (${fact.sourcePath})" }
+            .toList()
     }
 
     private fun chatRecordFromDir(dir: File): ChatRecord {
@@ -545,6 +595,15 @@ object AiAgentMemoryStore {
 
     private fun readDecisions(context: Context, repoFullName: String): String =
         File(repoDir(context, repoFullName), DECISIONS_FILE).takeIf { it.exists() }?.readText().orEmpty()
+
+    fun repoMemoryDir(context: Context, repoFullName: String): File =
+        repoDir(context, repoFullName)
+
+    fun globalPreferencesMemoryFile(context: Context): File =
+        globalPreferencesFile(context)
+
+    fun memoryRootDir(context: Context): File =
+        memoryRoot(context)
 
     private fun repoDir(context: Context, repoFullName: String): File {
         val safe = repoFullName.replace("/", "__").replace(Regex("[^A-Za-z0-9_.-]"), "_")

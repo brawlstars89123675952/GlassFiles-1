@@ -111,6 +111,46 @@ object AgentTools {
         readOnly = true,
     )
 
+    val WEB_SEARCH = AiTool(
+        name = "web_search",
+        description = "Search the public web for current information. Returns compact title, URL and snippet results.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("query", obj {
+                    put("type", "string")
+                    put("description", "Search query.")
+                })
+                put("limit", obj {
+                    put("type", "integer")
+                    put("description", "Maximum number of results to return, clamped to 1-10. Defaults to 5.")
+                })
+            })
+            put("required", arr("query"))
+        },
+        readOnly = true,
+    )
+
+    val WEB_FETCH = AiTool(
+        name = "web_fetch",
+        description = "Fetch a public HTTP/HTTPS URL and return readable text, capped by maxChars.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("url", obj {
+                    put("type", "string")
+                    put("description", "HTTP or HTTPS URL to fetch.")
+                })
+                put("maxChars", obj {
+                    put("type", "integer")
+                    put("description", "Maximum returned text characters, clamped to 1,000-20,000. Defaults to 8,000.")
+                })
+            })
+            put("required", arr("url"))
+        },
+        readOnly = true,
+    )
+
     /**
      * Surgical find-and-replace edit on a single file. Fails when the
      * `old_string` anchor is missing or appears more than once, so the
@@ -557,6 +597,7 @@ object AgentTools {
     /** All tools, in canonical order. */
     val ALL: List<AiTool> = listOf(
         LIST_DIR, READ_FILE, READ_FILE_RANGE, SEARCH_REPO,
+        WEB_SEARCH, WEB_FETCH,
         LIST_BRANCHES, COMPARE_REFS,
         LIST_PULLS, READ_PR,
         LIST_ISSUES, READ_ISSUE,

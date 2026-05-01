@@ -237,6 +237,7 @@ fun AiAgentScreen(
     var memorySemanticSearch by remember { mutableStateOf(AiAgentMemoryPrefs.getSemanticSearch(context)) }
     var showMemoryFiles by remember { mutableStateOf(false) }
     var memoryFiles by remember { mutableStateOf<List<AiAgentMemoryStore.MemoryFile>>(emptyList()) }
+    var memoryIndexSnapshot by remember { mutableStateOf(AiAgentMemoryStore.MemoryIndexSnapshot(emptyList())) }
     var protectedPathsText by remember {
         mutableStateOf(AiAgentApprovalPrefs.getProtectedPaths(context).joinToString("\n"))
     }
@@ -1639,13 +1640,16 @@ fun AiAgentScreen(
                 onViewMemoryFiles = {
                     val repoFull = selectedRepo?.fullName.orEmpty()
                     if (repoFull.isNotBlank()) {
+                        AiAgentMemoryStore.rebuildIndex(context, repoFull)
                         memoryFiles = AiAgentMemoryStore.editableFiles(context, repoFull)
+                        memoryIndexSnapshot = AiAgentMemoryStore.memoryIndexSnapshot(context, repoFull)
                         showMemoryFiles = true
                     }
                 },
                 onClearMemory = {
                     AiAgentMemoryStore.clearAll(context)
                     memoryFiles = emptyList()
+                    memoryIndexSnapshot = AiAgentMemoryStore.MemoryIndexSnapshot(emptyList())
                     showMemoryFiles = false
                     transcript += AgentEntry.Assistant("[system: AI Agent memory cleared.]")
                 },
@@ -1676,11 +1680,24 @@ fun AiAgentScreen(
         if (showMemoryFiles) {
             com.glassfiles.ui.screens.ai.terminal.AgentMemoryFilesDialog(
                 files = memoryFiles,
+                index = memoryIndexSnapshot,
+                onSearch = { query ->
+                    val repoFull = selectedRepo?.fullName.orEmpty()
+                    memoryIndexSnapshot = AiAgentMemoryStore.memoryIndexSnapshot(context, repoFull, query)
+                },
+                onRebuildIndex = {
+                    val repoFull = selectedRepo?.fullName.orEmpty()
+                    if (repoFull.isNotBlank()) {
+                        AiAgentMemoryStore.rebuildIndex(context, repoFull)
+                        memoryIndexSnapshot = AiAgentMemoryStore.memoryIndexSnapshot(context, repoFull)
+                    }
+                },
                 onSave = { key, content ->
                     val repoFull = selectedRepo?.fullName.orEmpty()
                     if (repoFull.isNotBlank()) {
                         AiAgentMemoryStore.saveEditableFile(context, repoFull, key, content)
                         memoryFiles = AiAgentMemoryStore.editableFiles(context, repoFull)
+                        memoryIndexSnapshot = AiAgentMemoryStore.memoryIndexSnapshot(context, repoFull)
                     }
                 },
                 onDismiss = { showMemoryFiles = false },

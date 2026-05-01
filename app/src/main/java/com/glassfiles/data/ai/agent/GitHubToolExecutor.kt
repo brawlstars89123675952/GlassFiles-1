@@ -4,7 +4,16 @@ import android.content.Context
 import com.glassfiles.data.ai.AiAgentMemoryStore
 import com.glassfiles.data.github.GHContent
 import com.glassfiles.data.github.GitHubManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.Reader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLDecoder
+import java.net.URLEncoder
+import java.nio.charset.Charset
+import java.util.Locale
 
 /**
  * Maps an [AiToolCall] onto a sequence of [GitHubManager] calls scoped to
@@ -81,6 +90,14 @@ class GitHubToolExecutor(
                     args.getInt("end_line"),
                 )
                 AgentTools.SEARCH_REPO.name -> searchRepo(context, args.getString("query"))
+                AgentTools.WEB_SEARCH.name -> webSearch(
+                    args.getString("query"),
+                    args.optInt("limit", 5),
+                )
+                AgentTools.WEB_FETCH.name -> webFetch(
+                    args.getString("url"),
+                    args.optInt("maxChars", 8_000),
+                )
                 AgentTools.LIST_BRANCHES.name -> listBranches(context)
                 AgentTools.COMPARE_REFS.name -> compareRefs(
                     context,
@@ -652,6 +669,52 @@ class GitHubToolExecutor(
         else throw RuntimeException("create_issue: GitHub rejected the request.")
     }
 
+    private suspend fun webSearch(query: String, limit: Int): String = withContext(Dispatchers.IO) {
+        val needle = query.trim()
+        if (needle.isBlank()) throw IllegalArgumentException("web_search: query must not be blank")
+        val maxResults = if (limit <= 0) 5 else limit.coerceIn(1, 10)
+        val url = "https://duckduckgo.com/html/?q=${URLEncoder.encode(needle, "UTF-8")}"
+        val response = httpGet(url, maxChars = 160_000)
+        val results = parseDuckDuckGoResults(response.text).take(maxResults)
+        buildString {
+            appendLine("\$ web_search \"$needle\"")
+            appendLine("  → ${results.size} result(s)")
+            results.forEachIndexed { index, result ->
+                appendLine()
+                appendLine("${index + 1}. ${result.title}")
+                appendLine("   ${result.url}")
+                if (result.snippet.isNotBlank()) appendLine("   ${result.snippet}")
+            }
+        }.trimEnd()
+    }
+
+    private suspend fun webFetch(url: String, maxChars: Int): String = withContext(Dispatchers.IO) {
+        val cleanUrl = url.trim()
+        if (cleanUrl.isBlank()) throw IllegalArgumentException("web_fetch: url must not be blank")
+        val parsed = URL(cleanUrl)
+        val protocol = parsed.protocol.lowercase(Locale.US)
+        if (protocol != "http" && protocol != "https") {
+            throw IllegalArgumentException("web_fetch: only http and https URLs are allowed")
+        }
+        if (isBlockedWebHost(parsed.host)) {
+            throw IllegalArgumentException("web_fetch: local/private network hosts are not allowed")
+        }
+        val cap = if (maxChars <= 0) 8_000 else maxChars.coerceIn(1_000, 20_000)
+        val response = httpGet(cleanUrl, maxChars = cap + 20_000)
+        val readable = if (response.contentType.contains("html", ignoreCase = true)) {
+            htmlToText(response.text)
+        } else {
+            response.text
+        }.trim().take(cap)
+        buildString {
+            appendLine("\$ web_fetch $cleanUrl")
+            appendLine("  → ${formatBytes(readable.toByteArray().size)}, ${readable.lineCount()} lines")
+            if (response.finalUrl != cleanUrl) appendLine("  → final url: ${response.finalUrl}")
+            appendLine()
+            append(readable.ifBlank { "(empty response)" })
+        }
+    }
+
     // ─── helpers ──────────────────────────────────────────────────────────
 
     private fun parentOf(path: String): String {
@@ -661,6 +724,149 @@ class GitHubToolExecutor(
 
     private fun capped(s: String, max: Int = 6_000): String =
         if (s.length <= max) s else s.take(max) + "\n\n[truncated, ${s.length - max} chars omitted]"
+
+    private data class WebResponse(
+        val text: String,
+        val contentType: String,
+        val finalUrl: String,
+    )
+
+    private data class WebSearchResult(
+        val title: String,
+        val url: String,
+        val snippet: String,
+    )
+
+    private fun httpGet(url: String, maxChars: Int): WebResponse {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 20_000
+            instanceFollowRedirects = true
+            setRequestProperty("User-Agent", "GlassFiles-AIAgent/1.0")
+            setRequestProperty("Accept", "text/html,text/plain,application/json;q=0.9,*/*;q=0.5")
+        }
+        return try {
+            val code = connection.responseCode
+            val stream = if (code >= 400) connection.errorStream ?: connection.inputStream else connection.inputStream
+            val charset = charsetFromContentType(connection.contentType)
+            val text = stream.bufferedReader(charset).use { readLimited(it, maxChars) }
+            if (code !in 200..299) throw IllegalStateException("HTTP $code from $url")
+            WebResponse(
+                text = text,
+                contentType = connection.contentType.orEmpty(),
+                finalUrl = connection.url.toString(),
+            )
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun readLimited(reader: Reader, maxChars: Int): String {
+        val out = StringBuilder()
+        val buffer = CharArray(4096)
+        while (out.length < maxChars) {
+            val read = reader.read(buffer, 0, minOf(buffer.size, maxChars - out.length))
+            if (read < 0) break
+            out.append(buffer, 0, read)
+        }
+        return out.toString()
+    }
+
+    private fun charsetFromContentType(contentType: String?): Charset {
+        val charset = contentType
+            ?.split(';')
+            ?.map { it.trim() }
+            ?.firstOrNull { it.startsWith("charset=", ignoreCase = true) }
+            ?.substringAfter('=')
+            ?.trim()
+            ?.trim('"')
+        return runCatching { if (charset.isNullOrBlank()) Charsets.UTF_8 else Charset.forName(charset) }
+            .getOrDefault(Charsets.UTF_8)
+    }
+
+    private fun parseDuckDuckGoResults(html: String): List<WebSearchResult> {
+        val anchorRegex = Regex(
+            """<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>""",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+        )
+        val snippetRegex = Regex(
+            """<a[^>]+class="result__snippet"[^>]*>(.*?)</a>""",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+        )
+        return anchorRegex.findAll(html).mapNotNull { match ->
+            val title = htmlToInlineText(match.groupValues[2]).ifBlank { return@mapNotNull null }
+            val href = cleanSearchUrl(match.groupValues[1])
+            if (href.isBlank()) return@mapNotNull null
+            val windowEnd = minOf(html.length, match.range.last + 2_000)
+            val window = html.substring(match.range.last + 1, windowEnd)
+            WebSearchResult(
+                title = title.take(160),
+                url = href,
+                snippet = snippetRegex.find(window)?.groupValues?.getOrNull(1)?.let { htmlToInlineText(it) }.orEmpty().take(260),
+            )
+        }.distinctBy { it.url }.toList()
+    }
+
+    private fun cleanSearchUrl(raw: String): String {
+        val decoded = htmlDecode(raw)
+        val absolute = when {
+            decoded.startsWith("//") -> "https:$decoded"
+            decoded.startsWith("/") -> "https://duckduckgo.com$decoded"
+            else -> decoded
+        }
+        val uddg = absolute.substringAfter("uddg=", missingDelimiterValue = "")
+            .substringBefore('&')
+            .takeIf { it.isNotBlank() }
+        return runCatching {
+            if (uddg != null) URLDecoder.decode(uddg, "UTF-8") else absolute
+        }.getOrDefault(absolute)
+    }
+
+    private fun htmlToText(html: String): String {
+        val withoutScripts = html
+            .replace(Regex("(?is)<script[^>]*>.*?</script>"), " ")
+            .replace(Regex("(?is)<style[^>]*>.*?</style>"), " ")
+            .replace(Regex("(?i)<br\\s*/?>"), "\n")
+            .replace(Regex("(?i)</(p|div|li|h[1-6]|tr|section|article)>"), "\n")
+            .replace(Regex("<[^>]+>"), " ")
+        return htmlDecode(withoutScripts)
+            .lineSequence()
+            .map { it.replace(Regex("\\s+"), " ").trim() }
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+    }
+
+    private fun htmlToInlineText(html: String): String =
+        htmlDecode(html.replace(Regex("<[^>]+>"), " "))
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    private fun htmlDecode(text: String): String =
+        text.replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&nbsp;", " ")
+
+    private fun isBlockedWebHost(host: String?): Boolean {
+        val h = host.orEmpty().trim().lowercase(Locale.US).removePrefix("[").removeSuffix("]")
+        if (h.isBlank()) return true
+        if (h == "localhost" || h.endsWith(".localhost")) return true
+        if (h == "::1" || h == "0.0.0.0") return true
+        if (h.startsWith("127.") || h.startsWith("10.") || h.startsWith("192.168.") || h.startsWith("169.254.")) return true
+        return Regex("""^172\.(1[6-9]|2[0-9]|3[0-1])\.""").containsMatchIn(h)
+    }
+
+    private fun formatBytes(bytes: Int): String {
+        if (bytes < 1024) return "$bytes B"
+        val kb = bytes / 1024.0
+        if (kb < 1024) return String.format(Locale.US, "%.1f KB", kb)
+        return String.format(Locale.US, "%.1f MB", kb / 1024.0)
+    }
+
+    private fun String.lineCount(): Int =
+        if (isEmpty()) 0 else count { it == '\n' } + 1
 
     /**
      * Cost-policy gate for any path that the agent wants to read.
