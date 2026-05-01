@@ -302,13 +302,8 @@ object AnthropicProvider : AiProvider {
         val argsJson: StringBuilder = StringBuilder(),
     )
 
-    private fun parseAnthropicUsage(usage: JSONObject?): AiTokenUsage? {
-        usage ?: return null
-        val input = usage.optInt("input_tokens", 0)
-        val output = usage.optInt("output_tokens", 0)
-        if (input <= 0 && output <= 0) return null
-        return AiTokenUsage(inputTokens = input, outputTokens = output)
-    }
+    private fun parseAnthropicUsage(usage: JSONObject?): AiTokenUsage? =
+        AnthropicUsageExtractor.extract(usage)?.toTokenUsage()
 
     private fun toolMessageToJson(msg: AiMessage): JSONObject {
         // Anthropic only accepts user/assistant in `messages`; map "system" → "user".
