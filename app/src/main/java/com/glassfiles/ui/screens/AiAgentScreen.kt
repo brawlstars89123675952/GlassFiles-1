@@ -3116,7 +3116,8 @@ private fun targetsProtectedBranch(
 private fun redactedToolArgsJson(call: AiToolCall): String =
     runCatching {
         val obj = org.json.JSONObject(call.argsJson)
-        redactJsonValue(obj).toString(2)
+        val redacted = redactJsonValue(obj)
+        if (redacted is org.json.JSONObject) redacted.toString(2) else redacted.toString()
     }.getOrElse { call.argsJson }
 
 private fun redactJsonValue(value: Any?): Any? = when (value) {
