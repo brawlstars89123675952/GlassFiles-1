@@ -453,14 +453,30 @@ object AiSkillStore {
         return body.take(maxChars)
     }
 
-    fun promptFor(skill: AiSkill, allowedTools: Set<String>): String = buildString {
+    fun promptFor(context: Context, skill: AiSkill, allowedTools: Set<String>): String =
+        promptFor(
+            skill = skill,
+            allowedTools = allowedTools,
+            baseDirectory = File(packsRoot(context), skill.packId).absolutePath,
+        )
+
+    fun promptFor(skill: AiSkill, allowedTools: Set<String>): String =
+        promptFor(skill = skill, allowedTools = allowedTools, baseDirectory = null)
+
+    private fun promptFor(
+        skill: AiSkill,
+        allowedTools: Set<String>,
+        baseDirectory: String?,
+    ): String = buildString {
         appendLine("Active skill:")
         appendLine("Name: ${skill.name}")
         appendLine("Pack: ${skill.packId}/${skill.id}")
         appendLine("Risk: ${skill.risk.name.lowercase(Locale.US)}")
+        baseDirectory?.let { appendLine("Base directory for this skill: $it") }
         appendLine("Allowed tools:")
         allowedTools.sorted().forEach { appendLine("- $it") }
-        appendLine("Bundled references/assets can be inspected with skill_read using skill_id '${skill.packId}/${skill.id}' and a relative path.")
+        appendLine("Bundled references/assets are read-only. Inspect them only with skill_read using skill_id '${skill.packId}/${skill.id}' and a relative path.")
+        appendLine("Do not execute files from the skill directory.")
         appendLine()
         appendLine("Skill instructions:")
         appendLine(skill.instructions)

@@ -934,7 +934,7 @@ fun AiAgentScreen(
                     }
                     if (skillAllowedTools != null) {
                         activeSkills.forEach { skill ->
-                            add(AiMessage("system", AiSkillStore.promptFor(skill, AiSkillStore.allowedToolsForSkill(context, skill))))
+                            add(AiMessage("system", AiSkillStore.promptFor(context, skill, AiSkillStore.allowedToolsForSkill(context, skill))))
                         }
                     }
                     addAll(transcript.dropLast(1).toAiMessages())
@@ -1238,7 +1238,7 @@ fun AiAgentScreen(
                 }
                 if (skillAllowedTools != null) {
                     activeSkills.forEach { skill ->
-                        add(AiMessage(role = "system", content = AiSkillStore.promptFor(skill, AiSkillStore.allowedToolsForSkill(context, skill))))
+                        add(AiMessage(role = "system", content = AiSkillStore.promptFor(context, skill, AiSkillStore.allowedToolsForSkill(context, skill))))
                     }
                 }
                 if (workspaceRecord != null) {
