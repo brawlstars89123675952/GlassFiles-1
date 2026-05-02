@@ -1,163 +1,299 @@
 # GlassFiles GitHub Module
 
-This README describes the local GitHub module architecture in GlassFiles: where the code lives, how screens are split, what style rules apply, and how to add new GitHub features without reintroducing Material UI or duplicating transport logic.
+![module](https://img.shields.io/badge/module-GitHub-24292f)
+![ui](https://img.shields.io/badge/UI-terminal_style-39d353)
+![compose](https://img.shields.io/badge/Android-Compose-58a6ff)
+![material3](https://img.shields.io/badge/Material3-not_used-f85149)
 
-## Scope
+GlassFiles GitHub Module is the in-app GitHub client used by GlassFiles.
+It brings repositories, code browsing, issues, pull requests, Actions,
+settings, security surfaces and AI Agent GitHub tools into one terminal-style
+mobile workflow.
 
-The GitHub module is the in-app GitHub client. It covers:
+The module is built for dense repository work: quick scanning, explicit write
+actions, compact dialogs, readable code, and no Material UI surfaces inside
+GitHub screens.
 
-- authentication and profile state;
-- repository browsing and search;
-- file tree, README rendering, diff and code editor;
-- issues, pull requests, reviews and comments;
-- commits, branches and compare views;
-- Actions, workflow runs, logs, artifacts and checks;
-- releases, assets, gists, discussions, projects, packages, teams, webhooks and security settings;
-- AI Agent GitHub tools through `GitHubToolExecutor`.
+## Overview
 
-The module is Android/Compose UI backed by direct GitHub REST/GraphQL helpers. It is not a standalone library.
+GlassFiles uses this module to work with GitHub without leaving the app.
 
-## Main Files
+It provides:
+
+- **Repository workspace**: browse repositories, branches, files, README files,
+  commits, compare views and releases.
+- **Collaboration flows**: issues, pull requests, reviews, comments,
+  discussions, projects, teams and collaborators.
+- **CI and automation**: workflow runs, jobs, logs, artifacts, check runs,
+  reruns and manual workflow dispatch.
+- **Repository administration**: settings, branch protection, webhooks,
+  packages, security alerts and rules.
+- **AI Agent bridge**: authenticated GitHub tools exposed through the agent
+  executor and approval policy.
+
+## Quick Start
+
+Open the GitHub module from the app navigation, sign in, then choose a
+repository.
+
+Typical repository workflow:
+
+1. Open **GitHub**.
+2. Select a repository from home, search, profile, organization or recent list.
+3. Use the repo tabs to switch between code, issues, pull requests, Actions,
+   releases, security and settings.
+4. Use terminal-style action buttons for write operations such as edits,
+   comments, dispatches, reruns or settings changes.
+5. For agent work, call GitHub tools through AI Agent instead of using local
+   filesystem tools for authenticated repository operations.
+
+```text
+GitHub
+├── Home / Explore / Search
+├── Repository
+│   ├── Code
+│   ├── Issues
+│   ├── Pull requests
+│   ├── Actions
+│   ├── Releases
+│   ├── Security
+│   └── Settings
+└── AI Agent GitHub tools
+```
+
+## Key Features
+
+### Terminal-Style UI
+
+All GitHub screens use the same visual language as the AI module: dark
+surfaces, compact bordered controls, monospace metadata, dense lists and
+bottom sheets that look like terminal panels.
+
+Use shared primitives instead of Material components:
+
+```kotlin
+AiModuleSurface(...)
+AiModuleText(...)
+AiModuleIcon(...)
+AiModuleIconButton(...)
+GitHubTerminalButton(...)
+GitHubTerminalSection(...)
+```
+
+### Repository Browser
+
+The repository module handles the core GitHub workspace: file tree, README
+rendering, code preview, code editing, diffs, branches, commits and compare
+views.
+
+Main entry points:
+
+```text
+GitHubScreen.kt
+GitHubHomeModule.kt
+GitHubRepoModule.kt
+GitHubCodeEditorModule.kt
+GitHubDiffModule.kt
+GitHubMarkdownModule.kt
+```
+
+### Pull Requests And Issues
+
+Issues, pull requests, comments and review surfaces should stay scannable on
+mobile. Lists show compact metadata first; full content opens in a terminal
+sheet or detail screen.
+
+Write actions must be explicit:
+
+```text
+open item -> inspect content -> choose action -> confirm/write
+```
+
+Avoid hidden mutations on row taps.
+
+### Actions And Checks
+
+Actions screens cover workflow runs, jobs, logs, artifacts, check runs, reruns
+and dispatch. Logs and check output should render in code-like blocks with
+clear loading, empty and error states.
+
+### AI Agent Integration
+
+The AI Agent uses GitHub tools for authenticated repository work.
+
+Relevant files:
+
+```text
+app/src/main/java/com/glassfiles/data/ai/agent/AiTool.kt
+app/src/main/java/com/glassfiles/data/ai/agent/AgentToolRegistry.kt
+app/src/main/java/com/glassfiles/data/ai/agent/GitHubToolExecutor.kt
+app/src/main/java/com/glassfiles/ui/screens/AiAgentScreen.kt
+```
+
+Rules:
+
+- repository operations go through GitHub tools;
+- local tools are for chat/session files and workspace files;
+- chat-only mode must not inject repository assumptions;
+- destructive or write operations must respect approval policy.
+
+## Architecture
+
+The module is split into a data facade, terminal UI primitives and feature
+screens.
+
+```text
+app/src/main/java/com/glassfiles/
+├── data/github/
+│   ├── GitHubManager.kt
+│   ├── GitHubRepoSettingsManager.kt
+│   ├── GitHubSecretCrypto.kt
+│   └── KernelErrorPatterns.kt
+└── ui/screens/
+    ├── GitHubScreen.kt
+    ├── GitHubHomeModule.kt
+    ├── GitHubRepoModule.kt
+    ├── GitHubSharedUiModule.kt
+    ├── GitHubActionsModule.kt
+    ├── GitHubCodeEditorModule.kt
+    ├── GitHubSecurityModule.kt
+    ├── GitHubRepoSettingsModule.kt
+    └── GitHub*Module.kt
+```
 
 ### Data Layer
 
-- `app/src/main/java/com/glassfiles/data/github/GitHubManager.kt`
-  Main GitHub API facade. Contains auth/session helpers, REST/GraphQL request helpers, parsers and most endpoint wrappers.
+`GitHubManager.kt` is the main API facade. It owns auth/session helpers,
+REST/GraphQL helpers, parsers and most endpoint wrappers.
 
-- `app/src/main/java/com/glassfiles/data/github/GitHubRepoSettingsManager.kt`
-  Repository settings APIs that are large enough to keep separate from `GitHubManager`.
+`GitHubRepoSettingsManager.kt` contains repository settings APIs that are large
+enough to keep separate from the main manager.
 
-- `app/src/main/java/com/glassfiles/data/github/GitHubSecretCrypto.kt`
-  Local secret/token crypto helpers.
+`GitHubSecretCrypto.kt` handles local secret/token crypto helpers.
 
-- `app/src/main/java/com/glassfiles/data/github/KernelErrorPatterns.kt`
-  Known error pattern helpers used by Actions/log analysis flows.
+`KernelErrorPatterns.kt` contains known error pattern helpers used by
+Actions/log analysis flows.
 
-### UI Entry Points
+### UI Layer
 
-- `app/src/main/java/com/glassfiles/ui/screens/GitHubScreen.kt`
-  Top-level GitHub module entry point and navigation shell.
+`GitHubScreen.kt` is the top-level navigation shell.
 
-- `app/src/main/java/com/glassfiles/ui/screens/GitHubHomeModule.kt`
-  Main signed-in home/dashboard surface.
+`GitHubRepoModule.kt` is the repository detail screen and tab host.
 
-- `app/src/main/java/com/glassfiles/ui/screens/GitHubRepoModule.kt`
-  Repository detail screen and tab host for repo-level views.
+`GitHubSharedUiModule.kt` contains shared GitHub terminal components. Add new
+reusable GitHub controls there before styling one-off widgets in a feature
+screen.
 
-- `app/src/main/java/com/glassfiles/ui/screens/GitHubSharedUiModule.kt`
-  Shared terminal-style GitHub UI primitives. Prefer these over creating per-screen button/card/input styles.
+## Module Map
 
-### Repo Tabs And Feature Screens
+```text
+GitHubActionsModule.kt             workflow runs, jobs, logs, artifacts
+GitHubAdvancedSearchModule.kt      advanced GitHub search
+GitHubBranchProtectionModule.kt    branch protection
+GitHubCheckRunsModule.kt           check run presentation
+GitHubCodeEditorModule.kt          editor, search, outline, preview, commit
+GitHubCollaboratorsModule.kt       collaborators and access
+GitHubCompareModule.kt             compare refs and changed files
+GitHubDiffModule.kt                reusable diff rendering
+GitHubDiscussionsModule.kt         discussions
+GitHubExploreModule.kt             explore, search and discovery
+GitHubGistsAndDialogsModule.kt     gists and shared dialogs
+GitHubMarkdownModule.kt            lightweight README/comment markdown
+GitHubNotificationsModule.kt       GitHub notifications
+GitHubPackagesModule.kt            packages
+GitHubProfileModule.kt             profile and org surfaces
+GitHubProjectsModule.kt            projects
+GitHubReleasesModule.kt            releases and assets
+GitHubRepoSettingsModule.kt        repo settings sections
+GitHubRepoSettingsScreen.kt        repo settings screen wrapper
+GitHubSecurityModule.kt            alerts, rules and security settings
+GitHubSettingsModule.kt            module-level settings
+GitHubTeamsModule.kt               teams
+GitHubWebhooksModule.kt            webhooks
+GitHubGlyphs.kt                    shared terminal glyph constants
+```
 
-- `GitHubActionsModule.kt` - workflow runs, jobs, logs, artifacts, checks, reruns and dispatch.
-- `GitHubAdvancedSearchModule.kt` - advanced GitHub search flows.
-- `GitHubBranchProtectionModule.kt` - branch protection UI.
-- `GitHubCheckRunsModule.kt` - check run presentation.
-- `GitHubCodeEditorModule.kt` - file editor, search, outline, preview and commit flow.
-- `GitHubCollaboratorsModule.kt` - collaborators/access surfaces.
-- `GitHubCompareModule.kt` - compare refs and changed files.
-- `GitHubDiffModule.kt` - reusable diff rendering.
-- `GitHubDiscussionsModule.kt` - discussions UI.
-- `GitHubExploreModule.kt` - explore/search/discovery.
-- `GitHubGistsAndDialogsModule.kt` - gists and shared dialogs.
-- `GitHubMarkdownModule.kt` - lightweight markdown rendering for README/comments.
-- `GitHubNotificationsModule.kt` - GitHub notifications.
-- `GitHubPackagesModule.kt` - packages.
-- `GitHubProfileModule.kt` - profile/org style surfaces.
-- `GitHubProjectsModule.kt` - projects.
-- `GitHubReleasesModule.kt` - releases and assets.
-- `GitHubRepoSettingsModule.kt` / `GitHubRepoSettingsScreen.kt` - repository settings UI.
-- `GitHubSecurityModule.kt` - security, alerts, rules and related settings.
-- `GitHubSettingsModule.kt` - module-level GitHub settings.
-- `GitHubTeamsModule.kt` - teams.
-- `GitHubWebhooksModule.kt` - webhooks.
-- `GitHubGlyphs.kt` - shared terminal glyph constants.
+## Add A Feature
 
-## Design Rules
+Use this path when adding a GitHub capability:
 
-The GitHub module must match the AI/GitHub terminal style.
+1. Decide whether the endpoint belongs in `GitHubManager` or
+   `GitHubRepoSettingsManager`.
+2. Add a small data class if existing models do not fit.
+3. Keep endpoint parsing close to the manager method.
+4. Add UI in the narrowest existing feature module.
+5. Reuse `GitHubSharedUiModule.kt` and `AiModulePrimitives.kt`.
+6. Keep loading, empty and error states terminal-style.
+7. Add agent tool metadata only when the capability should be model-callable.
+8. Update this README if the feature adds a module or new convention.
+
+Example manager-to-screen flow:
+
+```text
+GitHubRepoModule.kt
+  -> GitHubManager.fetchRepository(...)
+  -> render terminal rows/tabs
+  -> user opens explicit action
+  -> GitHubManager.writeOperation(...)
+  -> refresh state or show terminal error
+```
+
+## Code Style
+
+The GitHub module must stay visually consistent with the AI module.
 
 Required:
 
-- use `AiModuleTheme`, `AiModuleSurface`, `AiModuleText`, `AiModuleIcon`, `AiModuleIconButton` and shared GitHub terminal primitives;
-- use `JetBrainsMono` for terminal text, status labels, code-like labels and compact metadata;
-- use bordered, low-radius terminal controls;
-- keep buttons symmetric and compact;
-- prefer bottom sheets/dialogs that match the terminal style;
-- keep repeated repo/list items dense and scannable.
+- use `AiModuleTheme`, `AiModuleSurface`, `AiModuleText`, `AiModuleIcon`,
+  `AiModuleIconButton` and GitHub terminal primitives;
+- use `JetBrainsMono` for terminal text, status labels, code-like labels and
+  compact metadata;
+- use compact bordered controls with low radius;
+- keep top-bar buttons symmetric;
+- prefer terminal bottom sheets/dialogs for menus and detail actions;
+- keep repeated repo/list items dense and readable.
 
-Forbidden:
+Do not add Material UI back into GitHub screens:
 
-- no `androidx.compose.material3` imports in `GitHub*.kt`;
-- no Material `DropdownMenu`, `DropdownMenuItem`, `MaterialTheme`, `TextButton`, `OutlinedTextField`, `FloatingActionButton`, `CircularProgressIndicator` in GitHub module screens;
-- no card-heavy marketing layout;
-- no unrelated palette/theme changes inside feature work.
+```text
+androidx.compose.material3
+DropdownMenu
+DropdownMenuItem
+MaterialTheme
+TextButton
+OutlinedTextField
+FloatingActionButton
+CircularProgressIndicator
+```
 
-If a feature needs a new reusable control, add it to `GitHubSharedUiModule.kt` or `AiModulePrimitives.kt` instead of styling it inline in one screen.
+If a feature needs a missing primitive, add a reusable one instead of copying
+inline styling across screens.
 
-## Data Flow
+## Static Checks
 
-Typical read flow:
+Do not run Gradle for this project unless explicitly requested.
 
-1. UI screen receives `Context`, repo owner/name and optional branch/ref.
-2. Screen calls `GitHubManager` or `GitHubRepoSettingsManager` from a coroutine.
-3. API helper performs direct HTTP/GraphQL call.
-4. Data classes are returned to UI.
-5. UI renders terminal-style rows, tabs, dialogs or bottom sheets.
-
-Typical write flow:
-
-1. User opens an action from a terminal-style button/menu.
-2. UI collects required fields in a terminal-style dialog or sheet.
-3. UI calls the relevant manager method.
-4. UI shows success/error inline, toast/snackbar, or refreshes the list.
-
-Write operations should be explicit in UI. Avoid hidden mutation on simple row taps.
-
-## AI Agent Integration
-
-GitHub agent tools live in:
-
-- `app/src/main/java/com/glassfiles/data/ai/agent/AiTool.kt`
-- `app/src/main/java/com/glassfiles/data/ai/agent/GitHubToolExecutor.kt`
-- `app/src/main/java/com/glassfiles/data/ai/agent/AgentToolRegistry.kt`
-- `app/src/main/java/com/glassfiles/ui/screens/AiAgentScreen.kt`
-
-The agent should use GitHub tools for authenticated repository operations and local tools only for the chat/session workspace. In chat-only mode, repository assumptions must not leak into the prompt.
-
-When adding a GitHub capability that should be available to the agent:
-
-1. Add or reuse a `GitHubManager` method.
-2. Add an `AiTool` definition if the capability is model-callable.
-3. Add metadata in `AgentToolRegistry`.
-4. Route execution through `GitHubToolExecutor`.
-5. Ensure write/destructive operations go through approval policy.
-
-## Adding A New GitHub Feature
-
-Use this checklist:
-
-- identify whether the endpoint belongs in `GitHubManager` or `GitHubRepoSettingsManager`;
-- add a small data class if existing models do not fit;
-- keep endpoint parsing close to the manager method;
-- add UI in the narrowest existing module;
-- reuse `GitHubSharedUiModule.kt` primitives;
-- keep loading/error/empty states terminal-style;
-- do not add Material3;
-- update this README if the new feature adds a new module or convention.
-
-## Verification Policy
-
-For this project, do not run Gradle unless explicitly requested.
-
-Static checks that are safe:
+Safe local checks:
 
 ```bash
 rg -n "androidx\\.compose\\.material3|\\bDropdownMenu\\b|\\bDropdownMenuItem\\b|\\bMaterialTheme\\b|\\bTextButton\\b|\\bOutlinedTextField\\b|\\bFloatingActionButton\\b|\\bCircularProgressIndicator\\b" app/src/main/java/com/glassfiles/ui/screens/GitHub*.kt
 git diff --check
 ```
 
-Known generated/local scratch files should not be committed unless explicitly requested.
+Expected result for the first command is no matches in `GitHub*.kt` screens.
+
+## Security
+
+GitHub tokens and repository write operations must be treated as sensitive.
+
+Rules:
+
+- never log tokens or secrets;
+- keep token storage behind `GitHubSecretCrypto`;
+- make write/destructive actions explicit in UI;
+- route AI Agent write actions through approval policy;
+- keep repository tools separate from local file tools;
+- avoid broad permissions for features that only need read access.
 
 ## Related Docs
 
