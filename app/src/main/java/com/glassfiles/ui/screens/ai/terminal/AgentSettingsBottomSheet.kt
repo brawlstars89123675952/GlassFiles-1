@@ -76,6 +76,9 @@ fun AgentSettingsBottomSheet(
     onClearMemory: () -> Unit,
     onSkillsEnabledChange: (Boolean) -> Unit,
     onSkillsAutoSuggestChange: (Boolean) -> Unit,
+    onSkillsAutoDetectChange: (Boolean) -> Unit,
+    onSkillsAutoDetectModelChange: (String) -> Unit,
+    onSkillsAutoDetectMaxChange: (Int) -> Unit,
     onSkillsAllowUntrustedDangerousChange: (Boolean) -> Unit,
     onViewSkills: () -> Unit,
     onImportSkillPack: () -> Unit,
@@ -349,6 +352,35 @@ fun AgentSettingsBottomSheet(
                 label = "auto-suggest matching skill",
                 checked = state.skillsAutoSuggest,
                 onChange = onSkillsAutoSuggestChange,
+            )
+            AgentSheetCheckbox(
+                label = "auto-detection (when_to_use)",
+                checked = state.skillsAutoDetect,
+                onChange = onSkillsAutoDetectChange,
+            )
+            AgentTerminalPickerRow(
+                label = "SELECTOR MODEL",
+                value = state.skillsAutoDetectModel,
+                title = "Selector model",
+                options = AgentSettingsOptions(
+                    items = listOf("claude-haiku-4-5", "claude-3-5-haiku", "gpt-5.5-mini", "gpt-4.1-mini", "gpt-4o-mini", "gemini-2.5-flash"),
+                    selected = state.skillsAutoDetectModel,
+                    label = { it },
+                    enabled = state.skillsAutoDetect,
+                ),
+                onSelect = onSkillsAutoDetectModelChange,
+            )
+            AgentTerminalPickerRow(
+                label = "MAX AUTO-SKILLS",
+                value = state.skillsAutoDetectMax.toString(),
+                title = "Max auto-detected skills",
+                options = AgentSettingsOptions(
+                    items = listOf(1, 2, 3, 4, 5),
+                    selected = state.skillsAutoDetectMax,
+                    label = { it.toString() },
+                    enabled = state.skillsAutoDetect,
+                ),
+                onSelect = onSkillsAutoDetectMaxChange,
             )
             AgentSheetCheckbox(
                 label = "allow untrusted dangerous tools",
@@ -707,6 +739,9 @@ data class AgentSettingsState(
     val workingMemoryReminders: Boolean,
     val skillsEnabled: Boolean,
     val skillsAutoSuggest: Boolean,
+    val skillsAutoDetect: Boolean,
+    val skillsAutoDetectModel: String,
+    val skillsAutoDetectMax: Int,
     val skillsAllowUntrustedDangerous: Boolean,
     val selectedSkillLabel: String,
     val installedSkillsCount: Int,

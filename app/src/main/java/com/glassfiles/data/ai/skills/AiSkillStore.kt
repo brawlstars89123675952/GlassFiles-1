@@ -179,6 +179,7 @@ object AiSkillStore {
             version = manifest.optString("version").ifBlank { error("manifest version is required") },
             author = manifest.optString("author").takeIf { it.isNotBlank() },
             description = manifest.optString("description").takeIf { it.isNotBlank() },
+            whenToUse = manifest.optString("when_to_use").takeIf { it.isNotBlank() },
             source = manifest.optString("source").takeIf { it.isNotBlank() },
             risk = effectivePackRisk,
             permissions = manifest.optStringArray("permissions"),
@@ -204,7 +205,9 @@ object AiSkillStore {
             .toList()
         require(skills.isNotEmpty()) { "At least one .skill.md file is required" }
         skills.forEach { skill ->
-            require(skill.triggers.isNotEmpty()) { "${skill.id}: triggers are required" }
+            require(skill.triggers.isNotEmpty() || !skill.whenToUse.isNullOrBlank() || !pack.whenToUse.isNullOrBlank()) {
+                "${skill.id}: triggers or when_to_use are required"
+            }
             require(skill.instructions.isNotBlank()) { "${skill.id}: instructions are required" }
             validateKnownTools(skill.tools)
             val missing = skill.tools.filterNot { it in pack.tools }
@@ -228,6 +231,7 @@ object AiSkillStore {
             version = "1.0.0",
             author = null,
             description = "Imported Agent Skills pack",
+            whenToUse = null,
             source = null,
             risk = AiSkillRisk.LOW,
             permissions = emptyList(),
@@ -262,6 +266,7 @@ object AiSkillStore {
         val pack = provisionalPack.copy(
             name = if (parsedSkills.size == 1) first.name else packId,
             description = if (parsedSkills.size == 1) first.description else "Imported Agent Skills pack (${parsedSkills.size} skills)",
+            whenToUse = if (parsedSkills.size == 1) first.whenToUse else null,
             risk = effectivePackRisk,
             tools = packTools,
         )
@@ -320,6 +325,7 @@ object AiSkillStore {
                         version = manifest.optString("version", ""),
                         author = manifest.optString("author").takeIf { it.isNotBlank() },
                         description = manifest.optString("description").takeIf { it.isNotBlank() },
+                        whenToUse = manifest.optString("when_to_use").takeIf { it.isNotBlank() },
                         source = manifest.optString("source").takeIf { it.isNotBlank() },
                         risk = escalateRisk(AiSkillRisk.parse(manifest.optString("risk", "low")), tools),
                         permissions = manifest.optStringArray("permissions"),
@@ -435,6 +441,7 @@ object AiSkillStore {
                 appendLine("- id: ${skill.packId}/${skill.id}")
                 appendLine("  name: ${skill.name}")
                 skill.description?.takeIf { it.isNotBlank() }?.let { appendLine("  description: ${it.take(280)}") }
+                skill.whenToUse?.takeIf { it.isNotBlank() }?.let { appendLine("  when_to_use: ${it.take(280)}") }
                 if (skill.triggers.isNotEmpty()) appendLine("  triggers: ${skill.triggers.take(8).joinToString(", ")}")
                 appendLine("  risk: ${skill.risk.name.lowercase(Locale.US)}")
                 appendLine("  tools: ${skill.tools.take(14).joinToString(", ")}")
@@ -507,6 +514,7 @@ object AiSkillStore {
             packId = pack.id,
             name = rawName ?: id,
             description = description,
+            whenToUse = scalar["when_to_use"]?.takeIf { it.isNotBlank() },
             category = scalar["category"]?.takeIf { it.isNotBlank() } ?: "general",
             risk = escalateRisk(AiSkillRisk.parse(scalar["risk"]), normalizedTools),
             triggers = lists["triggers"].orEmpty(),
@@ -574,6 +582,7 @@ object AiSkillStore {
             packId = pack.id,
             name = scalar["name"]?.takeIf { it.isNotBlank() } ?: id,
             description = description,
+            whenToUse = scalar["when_to_use"]?.takeIf { it.isNotBlank() } ?: description,
             category = "rules",
             risk = AiSkillRisk.LOW,
             triggers = listOf(id, id.replace('-', ' '), file.nameWithoutExtension.replace('-', ' ')).distinct(),
@@ -598,6 +607,7 @@ object AiSkillStore {
                 .put("name", pack.name)
                 .put("version", pack.version)
                 .put("description", pack.description)
+                .put("when_to_use", pack.whenToUse)
                 .put("risk", pack.risk.name.lowercase(Locale.US))
                 .put("permissions", JSONArray(pack.permissions))
                 .put("tools", JSONArray(pack.tools))
@@ -615,6 +625,7 @@ object AiSkillStore {
         appendLine("id: ${skill.id}")
         appendLine("name: ${skill.name}")
         skill.description?.takeIf { it.isNotBlank() }?.let { appendLine("description: ${it.replace('\n', ' ')}") }
+        skill.whenToUse?.takeIf { it.isNotBlank() }?.let { appendLine("when_to_use: ${it.replace('\n', ' ')}") }
         appendLine("category: ${skill.category}")
         appendLine("risk: ${skill.risk.name.lowercase(Locale.US)}")
         appendYamlList("triggers", skill.triggers)

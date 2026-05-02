@@ -108,9 +108,9 @@ import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import com.glassfiles.data.ai.providers.AiProviders
 import com.glassfiles.data.ai.skills.AiSkill
+import com.glassfiles.data.ai.skills.AiSkillAutoDetector
 import com.glassfiles.data.ai.skills.AiSkillImportPreview
 import com.glassfiles.data.ai.skills.AiSkillPrefs
-import com.glassfiles.data.ai.skills.AiSkillRouter
 import com.glassfiles.data.ai.skills.AiSkillStore
 import com.glassfiles.data.ai.skills.AppAgentContext
 import com.glassfiles.data.github.GHRepo
@@ -914,15 +914,16 @@ fun AiAgentScreen(
                 val selectedSkill = AiSkillPrefs.getSelectedSkillId(context)
                     ?.let { AiSkillStore.readSkill(context, it) }
                     ?.takeIf { it.enabled && AiSkillPrefs.getEnableSkills(context) }
-                val skillMatch = if (selectedSkill == null) {
-                    AiSkillRouter().match(
-                        context = context,
-                        userMessage = text,
-                        appContext = AppAgentContext(repoFullName = null, chatOnly = true),
-                    )
-                } else null
-                val activeSkill = selectedSkill ?: skillMatch?.skill
-                val skillAllowedTools = activeSkill?.let { AiSkillStore.allowedToolsForSkill(context, it) }
+                val activeSkills = AiSkillAutoDetector().resolveActiveSkills(
+                    context = context,
+                    userQuery = text,
+                    appContext = AppAgentContext(repoFullName = null, chatOnly = true),
+                    selectedSkill = selectedSkill,
+                )
+                val skillAllowedTools = activeSkills
+                    .takeIf { it.isNotEmpty() }
+                    ?.flatMap { AiSkillStore.allowedToolsForSkill(context, it) }
+                    ?.toSet()
                 val taskToolNames = AgentTools.TASK_TOOLS.map { it.name }.toSet()
                 val messages = mutableListOf<AiMessage>().apply {
                     addAll(chatOnlyMemoryPrompt(chatScope))
@@ -931,8 +932,10 @@ fun AiAgentScreen(
                     AiSkillStore.catalogPrompt(context).takeIf { it.isNotBlank() }?.let {
                         add(AiMessage("system", it))
                     }
-                    if (activeSkill != null && skillAllowedTools != null) {
-                        add(AiMessage("system", AiSkillStore.promptFor(activeSkill, skillAllowedTools)))
+                    if (skillAllowedTools != null) {
+                        activeSkills.forEach { skill ->
+                            add(AiMessage("system", AiSkillStore.promptFor(skill, AiSkillStore.allowedToolsForSkill(context, skill))))
+                        }
                     }
                     addAll(transcript.dropLast(1).toAiMessages())
                 }
@@ -1168,15 +1171,16 @@ fun AiAgentScreen(
             val selectedSkill = AiSkillPrefs.getSelectedSkillId(context)
                 ?.let { AiSkillStore.readSkill(context, it) }
                 ?.takeIf { it.enabled && AiSkillPrefs.getEnableSkills(context) }
-            val skillMatch = if (selectedSkill == null) {
-                AiSkillRouter().match(
-                    context = context,
-                    userMessage = displayText,
-                    appContext = AppAgentContext(repoFullName = repo.fullName, chatOnly = false),
-                )
-            } else null
-            val activeSkill = selectedSkill ?: skillMatch?.skill
-            val skillAllowedTools = activeSkill?.let { AiSkillStore.allowedToolsForSkill(context, it) }
+            val activeSkills = AiSkillAutoDetector().resolveActiveSkills(
+                context = context,
+                userQuery = displayText,
+                appContext = AppAgentContext(repoFullName = repo.fullName, chatOnly = false),
+                selectedSkill = selectedSkill,
+            )
+            val skillAllowedTools = activeSkills
+                .takeIf { it.isNotEmpty() }
+                ?.flatMap { AiSkillStore.allowedToolsForSkill(context, it) }
+                ?.toSet()
             val taskToolNames = AgentTools.TASK_TOOLS.map { it.name }.toSet()
             val effectiveTools = if (skillAllowedTools != null) {
                 tools.filter { it.name in skillAllowedTools || it.name in taskToolNames }
@@ -1232,8 +1236,10 @@ fun AiAgentScreen(
                 AiSkillStore.catalogPrompt(context).takeIf { it.isNotBlank() }?.let {
                     add(AiMessage(role = "system", content = it))
                 }
-                if (activeSkill != null && skillAllowedTools != null) {
-                    add(AiMessage(role = "system", content = AiSkillStore.promptFor(activeSkill, skillAllowedTools)))
+                if (skillAllowedTools != null) {
+                    activeSkills.forEach { skill ->
+                        add(AiMessage(role = "system", content = AiSkillStore.promptFor(skill, AiSkillStore.allowedToolsForSkill(context, skill))))
+                    }
                 }
                 if (workspaceRecord != null) {
                     add(
@@ -2098,6 +2104,9 @@ fun AiAgentScreen(
                 workingMemoryReminders = com.glassfiles.data.ai.AiWorkingMemoryPrefs.getReminders(context),
                 skillsEnabled = AiSkillPrefs.getEnableSkills(context),
                 skillsAutoSuggest = AiSkillPrefs.getAutoSuggest(context),
+                skillsAutoDetect = AiSkillPrefs.getAutoDetectWhenToUse(context),
+                skillsAutoDetectModel = AiSkillPrefs.getAutoDetectModel(context),
+                skillsAutoDetectMax = AiSkillPrefs.getAutoDetectMax(context),
                 skillsAllowUntrustedDangerous = AiSkillPrefs.getAllowUntrustedDangerousTools(context),
                 selectedSkillLabel = selectedSkillForSettings?.let { "${it.packId}/${it.id}" } ?: "auto",
                 installedSkillsCount = installedSkillsCount,
@@ -2285,6 +2294,18 @@ fun AiAgentScreen(
                 },
                 onSkillsAutoSuggestChange = {
                     AiSkillPrefs.setAutoSuggest(context, it)
+                    skillsVersion += 1
+                },
+                onSkillsAutoDetectChange = {
+                    AiSkillPrefs.setAutoDetectWhenToUse(context, it)
+                    skillsVersion += 1
+                },
+                onSkillsAutoDetectModelChange = {
+                    AiSkillPrefs.setAutoDetectModel(context, it)
+                    skillsVersion += 1
+                },
+                onSkillsAutoDetectMaxChange = {
+                    AiSkillPrefs.setAutoDetectMax(context, it)
                     skillsVersion += 1
                 },
                 onSkillsAllowUntrustedDangerousChange = {

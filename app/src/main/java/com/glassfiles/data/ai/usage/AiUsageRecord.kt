@@ -81,4 +81,7 @@ enum class AiUsageMode {
 
     /** AI Agent run against a GitHub repo. */
     GITHUB_AGENT,
+
+    /** Lightweight side query that selects relevant skills by `when_to_use`. */
+    SKILL_AUTO_DETECTION,
 }
