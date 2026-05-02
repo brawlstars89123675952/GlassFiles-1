@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
+import java.util.zip.ZipFile
 
 data class AiPreparedAttachment(
     val name: String,
@@ -79,6 +80,9 @@ object AiAttachmentProcessor {
     }
 
     private suspend fun prepareArchive(file: File, name: String, mime: String, ext: String): AiPreparedAttachment {
+        if (ext in setOf("zip", "jar", "aar") || mime.contains("zip", true)) {
+            prepareZipArchive(file, name, mime, ext)?.let { return it }
+        }
         val outDir = ArchiveHelper.decompress(file)
         if (outDir == null) {
             val prompt = "Attached archive: $name (${formatBytes(file.length())}). Extraction is not available for .$ext in this build."
@@ -131,6 +135,51 @@ object AiAttachmentProcessor {
             summary = "$name · archive · ${shown.size}${if (more > 0) "+" else ""} file(s)",
         )
     }
+
+    private fun prepareZipArchive(file: File, name: String, mime: String, ext: String): AiPreparedAttachment? =
+        runCatching {
+            ZipFile(file).use { zip ->
+                val entries = zip.entries().asSequence()
+                    .filter { !it.isDirectory }
+                    .take(MAX_ARCHIVE_FILES + 1)
+                    .toList()
+                val shown = entries.take(MAX_ARCHIVE_FILES)
+                val more = (entries.size - shown.size).coerceAtLeast(0)
+                val listing = shown.joinToString("\n") { "- ${it.name} (${formatBytes(it.size.coerceAtLeast(0L))})" }
+                val sections = shown.map { entry ->
+                    val childExt = extensionFor(entry.name)
+                    val size = entry.size.coerceAtLeast(0L)
+                    if (childExt in textExtensions && size <= 700_000) {
+                        val body = zip.getInputStream(entry).use { input ->
+                            runCatching { input.readBytes().decodeToString() }
+                                .getOrElse { "[read error: ${it.message ?: it.javaClass.simpleName}]" }
+                                .take(MAX_ARCHIVE_FILE_CHARS)
+                        }
+                        "### ${entry.name}\n```$childExt\n$body\n```"
+                    } else {
+                        "### ${entry.name}\n[binary or unsupported: ${formatBytes(size)}]"
+                    }
+                }
+                val prompt = buildString {
+                    appendLine("Attached archive: $name (${formatBytes(file.length())})")
+                    appendLine("Extracted files:")
+                    if (listing.isNotBlank()) appendLine(listing) else appendLine("- (empty archive)")
+                    if (more > 0) appendLine("- ... $more more file(s)")
+                    appendLine()
+                    append(sections.joinToString("\n\n"))
+                }.take(MAX_TEXT_CHARS)
+                AiPreparedAttachment(
+                    name = name,
+                    mimeType = mime,
+                    extension = ext,
+                    tempPath = file.absolutePath,
+                    isArchive = true,
+                    promptContent = prompt,
+                    previewContent = null,
+                    summary = "$name · archive · ${shown.size}${if (more > 0) "+" else ""} file(s)",
+                )
+            }
+        }.getOrNull()
 
     private fun copyToTemp(context: Context, uri: Uri, name: String): File {
         val root = File(context.cacheDir, "ai_attachments").apply { mkdirs() }

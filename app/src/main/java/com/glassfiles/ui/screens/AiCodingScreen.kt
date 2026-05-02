@@ -1233,14 +1233,6 @@ private fun FileAttachmentPreview(attachment: AiPreparedAttachment, onRemove: ()
                 Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = colors.textMuted)
             }
         }
-        if (!attachment.isArchive && !attachment.previewContent.isNullOrBlank()) {
-            AgentTerminalCodeBlock(
-                text = attachment.previewContent,
-                lang = attachment.extension,
-                filePath = attachment.name,
-                context = LocalContext.current,
-            )
-        }
     }
 }
 

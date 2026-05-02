@@ -347,7 +347,12 @@ abstract class OpenAiCompatProvider(
             }
             msg.imageBase64 != null -> {
                 val parts = JSONArray()
-                parts.put(JSONObject().put("type", "text").put("text", msg.content.ifBlank { "(image)" }))
+                val full = if (msg.fileContent != null) {
+                    if (msg.content.isNotBlank()) "${msg.content}\n\n--- File content ---\n${msg.fileContent}" else msg.fileContent
+                } else {
+                    msg.content.ifBlank { "(image)" }
+                }
+                parts.put(JSONObject().put("type", "text").put("text", full))
                 parts.put(
                     JSONObject().put("type", "image_url").put(
                         "image_url",
@@ -355,6 +360,14 @@ abstract class OpenAiCompatProvider(
                     ),
                 )
                 o.put("content", parts)
+            }
+            msg.fileContent != null -> {
+                val full = if (msg.content.isNotBlank()) {
+                    "${msg.content}\n\n--- File content ---\n${msg.fileContent}"
+                } else {
+                    msg.fileContent
+                }
+                o.put("content", full)
             }
             else -> o.put("content", msg.content)
         }

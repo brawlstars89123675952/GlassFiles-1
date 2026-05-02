@@ -210,6 +210,7 @@ fun AiAgentScreen(
     var input by remember { mutableStateOf(TextFieldValue(initialPrompt.orEmpty())) }
     var pendingImage by remember { mutableStateOf<String?>(null) }
     var pendingFile by remember { mutableStateOf<AiPreparedAttachment?>(null) }
+    var previewGeneratedFile by remember { mutableStateOf<AiChatSessionStore.GeneratedFile?>(null) }
     var chatOnlyMode by remember { mutableStateOf(false) }
     // Approval prefs are owned by AiAgentApprovalPrefs (DataStore-backed). The agent
     // loop reads them via [snapshotApprovalSettings] at run start so YOLO / write
@@ -442,6 +443,7 @@ fun AiAgentScreen(
             is AgentEntry.Assistant -> if (entry.text.isBlank()) null else AiChatSessionStore.Message(
                 role = "assistant",
                 content = entry.text,
+                generatedFiles = entry.generatedFiles,
             )
             is AgentEntry.ToolCall, is AgentEntry.ToolResult, is AgentEntry.Pending -> null
         }
@@ -511,6 +513,19 @@ fun AiAgentScreen(
         showHistory = false
     }
 
+    fun enterChatOnlyMode() {
+        if (!chatOnlyMode && transcript.isNotEmpty()) {
+            startNewSession()
+        }
+        chatOnlyMode = true
+        selectedRepo = null
+        selectedBranch = null
+        pendingRestoreSessionId = null
+        pendingWorkspaceId = null
+        pendingWorkspaceDiff = null
+        workspaceReviewError = null
+    }
+
     val attachmentPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
     ) { uri: Uri? ->
@@ -562,7 +577,7 @@ fun AiAgentScreen(
         runJob = scope.launch {
             try {
                 val messages = buildList {
-                    add(AiMessage("system", SystemPrompts.DEFAULT))
+                    add(AiMessage("system", CHAT_ONLY_SYSTEM_PROMPT))
                     addAll(transcript.dropLast(1).toAiMessages())
                 }
                 val full = AiProviders.get(model.providerId).chat(
@@ -584,7 +599,14 @@ fun AiAgentScreen(
                 if (last >= 0) {
                     val current = transcript[last]
                     if (current is AgentEntry.Assistant && current.text.isBlank()) {
-                        transcript[last] = current.copy(text = full)
+                        transcript[last] = current.copy(
+                            text = full,
+                            generatedFiles = extractAgentGeneratedFiles(full),
+                        )
+                    } else if (current is AgentEntry.Assistant) {
+                        transcript[last] = current.copy(
+                            generatedFiles = extractAgentGeneratedFiles(current.text.ifBlank { full }),
+                        )
                     }
                 }
                 com.glassfiles.data.ai.usage.AiUsageAccounting.appendEstimated(
@@ -1214,6 +1236,7 @@ fun AiAgentScreen(
                             activeRepoFullName = selectedRepo?.fullName,
                             activeBranch = selectedBranch,
                             activeDefaultBranch = selectedRepo?.defaultBranch,
+                            onGeneratedFileClick = { previewGeneratedFile = it },
                         )
                     }
                 }
@@ -1640,10 +1663,11 @@ fun AiAgentScreen(
                 models = modelOptions,
                 onRepoSelected = { picked ->
                     if (picked.key == CHAT_ONLY_REPO_KEY) {
-                        chatOnlyMode = true
-                        selectedRepo = null
-                        selectedBranch = null
+                        enterChatOnlyMode()
                     } else {
+                        if (chatOnlyMode && transcript.isNotEmpty()) {
+                            startNewSession()
+                        }
                         chatOnlyMode = false
                         selectedRepo = repos.firstOrNull { it.fullName == picked.key }
                     }
@@ -1815,6 +1839,12 @@ fun AiAgentScreen(
                     )
                 },
                 onDismiss = { showWorkingMemory = false },
+            )
+        }
+        previewGeneratedFile?.let { file ->
+            AgentGeneratedFilePreviewSheet(
+                file = file,
+                onDismiss = { previewGeneratedFile = null },
             )
         }
     }
@@ -2191,14 +2221,6 @@ private fun AgentFileAttachmentPreview(attachment: AiPreparedAttachment, onRemov
                 Icon(Icons.Rounded.Close, null, Modifier.size(18.dp), tint = colors.textSecondary)
             }
         }
-        if (!attachment.isArchive && !attachment.previewContent.isNullOrBlank()) {
-            com.glassfiles.ui.screens.ai.terminal.AgentTerminalCodeBlock(
-                text = attachment.previewContent,
-                lang = attachment.extension,
-                filePath = attachment.name,
-                context = LocalContext.current,
-            )
-        }
     }
 }
 
@@ -2224,6 +2246,119 @@ private fun AgentFileContentSummary(fileContent: String) {
             maxLines = 2,
             modifier = Modifier.weight(1f),
         )
+    }
+}
+
+@Composable
+private fun AgentGeneratedFilesRow(
+    files: List<AiChatSessionStore.GeneratedFile>,
+    onClick: (AiChatSessionStore.GeneratedFile) -> Unit,
+) {
+    val colors = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        files.forEach { file ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.surfaceElevated)
+                    .border(1.dp, colors.accent, RoundedCornerShape(8.dp))
+                    .clickable { onClick(file) }
+                    .padding(horizontal = 8.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.AttachFile, null, Modifier.size(14.dp), tint = colors.accent)
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        file.name,
+                        fontSize = 11.sp,
+                        color = colors.accent,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                    )
+                    Text(
+                        "${file.content.length} chars",
+                        fontSize = 10.sp,
+                        color = colors.textMuted,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentGeneratedFilePreviewSheet(
+    file: AiChatSessionStore.GeneratedFile,
+    onDismiss: () -> Unit,
+) {
+    val colors = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors
+    val context = LocalContext.current
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.58f))
+                .padding(top = 48.dp),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+                    .background(colors.background)
+                    .border(
+                        1.dp,
+                        colors.accent,
+                        RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
+                    )
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .navigationBarsPadding()
+                    .padding(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    Modifier
+                        .width(38.dp)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(colors.border)
+                        .align(Alignment.CenterHorizontally),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "FILE PREVIEW",
+                            color = colors.accent,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                        )
+                        Text(
+                            file.name,
+                            color = colors.textSecondary,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                        )
+                    }
+                    AgentTextButton("[ done ]", colors.textSecondary, true, onDismiss)
+                }
+                com.glassfiles.ui.screens.ai.terminal.AgentTerminalCodeBlock(
+                    text = file.content,
+                    lang = file.language,
+                    filePath = file.name,
+                    context = context,
+                )
+            }
+        }
     }
 }
 
@@ -2544,6 +2679,7 @@ private fun TranscriptEntry(
     activeRepoFullName: String?,
     activeBranch: String?,
     activeDefaultBranch: String?,
+    onGeneratedFileClick: (AiChatSessionStore.GeneratedFile) -> Unit,
 ) {
     val context = LocalContext.current
     when (entry) {
@@ -2569,11 +2705,21 @@ private fun TranscriptEntry(
             }
         }
         is AgentEntry.Assistant -> {
-            if (entry.text.isNotBlank()) {
+            if (entry.text.isNotBlank() || entry.generatedFiles.isNotEmpty()) {
                 com.glassfiles.ui.screens.ai.terminal.AgentMessageRow(
                     role = com.glassfiles.ui.screens.ai.terminal.AgentRole.ASSISTANT,
                 ) {
-                    TerminalMessageBody(text = entry.text, context = context)
+                    val displayText = stripAgentGeneratedFileBlocks(entry.text)
+                    if (displayText.isNotBlank()) {
+                        TerminalMessageBody(text = displayText, context = context)
+                    }
+                    if (entry.generatedFiles.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        AgentGeneratedFilesRow(
+                            files = entry.generatedFiles,
+                            onClick = onGeneratedFileClick,
+                        )
+                    }
                 }
             }
         }
@@ -3335,6 +3481,17 @@ private suspend fun runAgentLoop(
             reported = turn.usage,
         )
 
+        if (streamingIndex in transcript.indices) {
+            val current = transcript[streamingIndex]
+            if (current is AgentEntry.Assistant) {
+                val fullText = current.text.ifBlank { turn.assistantText }
+                val generatedFiles = extractAgentGeneratedFiles(fullText)
+                if (generatedFiles.isNotEmpty()) {
+                    transcript[streamingIndex] = current.copy(generatedFiles = generatedFiles)
+                }
+            }
+        }
+
         // If the model produced no text at all, drop the placeholder so
         // we don't leave an empty assistant card sitting between tool
         // call cards.
@@ -3778,12 +3935,23 @@ private fun List<AiChatSessionStore.Message>.toAgentEntries(): List<AgentEntry> 
     mapNotNull { message ->
         when (message.role) {
             "user" -> AgentEntry.User(message.content, message.imageBase64, message.fileContent)
-            "assistant" -> AgentEntry.Assistant(message.content)
+            "assistant" -> AgentEntry.Assistant(message.content, generatedFiles = message.generatedFiles)
             else -> null
         }
     }
 
 private const val CHAT_ONLY_REPO_KEY = "__chat_only__"
+private val CHAT_ONLY_SYSTEM_PROMPT: String = """
+${SystemPrompts.DEFAULT}
+
+Chat-only mode is active. Do not assume access to any repository, branch, repo files, GitHub tools, or project memory unless the user pasted or attached that content in this chat.
+
+When you need to send a file to the user, include it as a fenced block with an explicit file marker:
+```file:relative/path.ext
+file contents here
+```
+The app will turn that block into a clickable chat attachment.
+""".trimIndent()
 
 private data class PendingAgentSend(
     val text: String,
@@ -3810,13 +3978,98 @@ private sealed class AgentEntry {
     ) : AgentEntry()
     /** [id] keeps the LazyList key stable across streaming text updates;
      * each replacement keeps the same id via `copy(text = ...)`. */
-    data class Assistant(val text: String, val id: String = newAssistantId()) : AgentEntry()
+    data class Assistant(
+        val text: String,
+        val id: String = newAssistantId(),
+        val generatedFiles: List<AiChatSessionStore.GeneratedFile> = emptyList(),
+    ) : AgentEntry()
     data class ToolCall(val call: AiToolCall) : AgentEntry()
     data class ToolResult(val result: AiToolResult) : AgentEntry()
     data class Pending(val pending: PendingApproval) : AgentEntry()
 }
 
 private fun newAssistantId(): String = "a_${System.nanoTime()}"
+
+private fun extractAgentGeneratedFiles(text: String): List<AiChatSessionStore.GeneratedFile> {
+    if (!text.contains("```")) return emptyList()
+    val result = mutableListOf<AiChatSessionStore.GeneratedFile>()
+    val fence = Regex("```([^\\n`]*)\\n([\\s\\S]*?)```")
+    fence.findAll(text).forEach { match ->
+        val info = match.groupValues[1].trim()
+        var body = match.groupValues[2].trimEnd()
+        val firstLine = body.lineSequence().firstOrNull().orEmpty()
+        val markerFromInfo = fileNameFromFenceInfo(info)
+        val markerFromBody = fileNameFromMarkerLine(firstLine)
+        val name = markerFromInfo ?: markerFromBody ?: return@forEachIndexed
+        if (markerFromBody != null) {
+            body = body.lines().drop(1).joinToString("\n").trimEnd()
+        }
+        if (body.isBlank()) return@forEachIndexed
+        val language = languageForGeneratedFile(name, info)
+        result += AiChatSessionStore.GeneratedFile(
+            name = name.take(160),
+            language = language,
+            content = body,
+        )
+        if (result.size >= 12) return@forEachIndexed
+    }
+    return result
+}
+
+private fun stripAgentGeneratedFileBlocks(text: String): String {
+    if (!text.contains("```")) return text
+    val fence = Regex("```([^\\n`]*)\\n([\\s\\S]*?)```")
+    return fence.replace(text) { match ->
+        val info = match.groupValues[1].trim()
+        val body = match.groupValues[2].trimEnd()
+        val firstLine = body.lineSequence().firstOrNull().orEmpty()
+        val isGeneratedFile = fileNameFromFenceInfo(info) != null || fileNameFromMarkerLine(firstLine) != null
+        if (isGeneratedFile) "" else match.value
+    }.replace(Regex("\n{3,}"), "\n\n").trim()
+}
+
+private fun fileNameFromFenceInfo(info: String): String? {
+    if (info.isBlank()) return null
+    val filePrefix = Regex("""(?i)^(?:file|path|filename)\s*:\s*(\S+)""")
+        .find(info)
+        ?.groupValues
+        ?.getOrNull(1)
+    if (!filePrefix.isNullOrBlank()) return cleanGeneratedFileName(filePrefix)
+    val pathProp = Regex("""(?i)(?:path|file|filename)=["']?([^"'\s]+)""")
+        .find(info)
+        ?.groupValues
+        ?.getOrNull(1)
+    if (!pathProp.isNullOrBlank()) return cleanGeneratedFileName(pathProp)
+    return info
+        .split(Regex("\\s+"))
+        .firstOrNull { it.contains('.') || it.contains('/') }
+        ?.let(::cleanGeneratedFileName)
+}
+
+private fun fileNameFromMarkerLine(line: String): String? {
+    val match = Regex("""^\s*(?://|#|/\*+|<!--|--|;)?\s*(?:file|path|filename)\s*:\s*([^*>\s]+)""", RegexOption.IGNORE_CASE)
+        .find(line)
+        ?: return null
+    return cleanGeneratedFileName(match.groupValues[1])
+}
+
+private fun cleanGeneratedFileName(raw: String): String? {
+    val cleaned = raw
+        .trim()
+        .trim('"', '\'', '`')
+        .replace('\\', '/')
+        .removePrefix("./")
+    if (cleaned.isBlank() || cleaned.endsWith("/")) return null
+    if (cleaned.contains("..")) return null
+    return cleaned
+}
+
+private fun languageForGeneratedFile(name: String, info: String): String {
+    val ext = name.substringAfterLast('.', "").lowercase(Locale.US)
+    if (ext.isNotBlank()) return ext
+    val lang = info.substringBefore(' ').substringBefore(':').trim()
+    return lang.takeIf { it.isNotBlank() && it != "file" && it != "path" && it != "filename" }.orEmpty()
+}
 
 private data class PendingApproval(
     val call: AiToolCall,

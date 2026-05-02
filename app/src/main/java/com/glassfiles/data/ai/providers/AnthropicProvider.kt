@@ -364,7 +364,12 @@ object AnthropicProvider : AiProvider {
                                 .put("data", msg.imageBase64),
                         ),
                 )
-                if (msg.content.isNotBlank()) blocks.put(JSONObject().put("type", "text").put("text", msg.content))
+                val full = if (msg.fileContent != null) {
+                    if (msg.content.isNotBlank()) "${msg.content}\n\n--- File content ---\n${msg.fileContent}" else msg.fileContent
+                } else {
+                    msg.content
+                }
+                if (full.isNotBlank()) blocks.put(JSONObject().put("type", "text").put("text", full))
             }
             else -> {
                 val full = if (msg.fileContent != null) {

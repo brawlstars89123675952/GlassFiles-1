@@ -31,7 +31,14 @@ object AiChatSessionStore {
         val content: String,
         val imageBase64: String? = null,
         val fileContent: String? = null,
+        val generatedFiles: List<GeneratedFile> = emptyList(),
         val isError: Boolean = false,
+    )
+
+    data class GeneratedFile(
+        val name: String,
+        val language: String,
+        val content: String,
     )
 
     data class Session(
@@ -118,6 +125,7 @@ object AiChatSessionStore {
                         content = m.optString("content", ""),
                         imageBase64 = m.optString("imageBase64", "").takeIf { it.isNotBlank() },
                         fileContent = m.optString("fileContent", "").takeIf { it.isNotBlank() },
+                        generatedFiles = parseGeneratedFiles(m.optJSONArray("generatedFiles")),
                         isError = m.optBoolean("isError", false),
                     ),
                 )
@@ -148,6 +156,21 @@ object AiChatSessionStore {
                     .put("isError", m.isError)
                 if (m.imageBase64 != null) mObj.put("imageBase64", m.imageBase64)
                 if (m.fileContent != null) mObj.put("fileContent", m.fileContent)
+                if (m.generatedFiles.isNotEmpty()) {
+                    mObj.put(
+                        "generatedFiles",
+                        JSONArray().apply {
+                            m.generatedFiles.forEach { file ->
+                                put(
+                                    JSONObject()
+                                        .put("name", file.name)
+                                        .put("language", file.language)
+                                        .put("content", file.content),
+                                )
+                            }
+                        },
+                    )
+                }
                 msgsArr.put(mObj)
             }
             arr.put(
@@ -168,4 +191,21 @@ object AiChatSessionStore {
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private fun parseGeneratedFiles(arr: JSONArray?): List<GeneratedFile> {
+        if (arr == null) return emptyList()
+        return buildList {
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").takeIf { it.isNotBlank() } ?: continue
+                add(
+                    GeneratedFile(
+                        name = name,
+                        language = obj.optString("language", ""),
+                        content = obj.optString("content", ""),
+                    ),
+                )
+            }
+        }
+    }
 }

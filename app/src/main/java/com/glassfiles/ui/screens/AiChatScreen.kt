@@ -1138,13 +1138,6 @@ private fun ChatView(
                     }
                 }
             }
-            attachedFile?.takeIf { !it.isArchive && !it.previewContent.isNullOrBlank() }?.let { file ->
-                AiModuleCodeBlock(
-                    text = file.previewContent.orEmpty(),
-                    lang = file.extension,
-                    context = context,
-                )
-            }
         }
 
         // Input
