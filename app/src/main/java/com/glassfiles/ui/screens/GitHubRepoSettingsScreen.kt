@@ -44,22 +44,14 @@ import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleGlyph
 import com.glassfiles.ui.components.AiModuleGlyphAction
+import com.glassfiles.ui.components.AiModuleIcon as Icon
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModulePillButton
+import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.components.AiModuleTextAction
 import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.ui.theme.JetBrainsMono
@@ -248,7 +240,7 @@ fun GitHubRepoSettingsScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(30.dp), strokeWidth = 2.5.dp)
+                AiModuleSpinner(label = "loading settings")
             }
         } else {
             when (selectedTab) {

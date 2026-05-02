@@ -32,18 +32,14 @@ import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ViewColumn
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleGlyph
 import com.glassfiles.ui.components.AiModuleGlyphAction
+import com.glassfiles.ui.components.AiModuleIcon as Icon
+import com.glassfiles.ui.components.AiModuleIconButton as IconButton
 import com.glassfiles.ui.components.AiModuleSearchField
+import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.components.AiModuleTextAction
 import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.ui.theme.JetBrainsMono
@@ -80,7 +76,6 @@ import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.data.github.canWrite
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModuleHairline
-import com.glassfiles.ui.components.AiModuleSpinner
 import kotlinx.coroutines.launch
 
 private enum class ProjectsKind { CLASSIC, V2 }
@@ -133,7 +128,7 @@ internal fun ProjectsTab(repo: GHRepo) {
 
     if (loading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+            AiModuleSpinner(label = "loading projects")
         }
         return
     }
@@ -348,7 +343,7 @@ private fun ProjectV2DetailScreen(project: GHProjectV2, onBack: () -> Unit) {
         val current = detail
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                AiModuleSpinner(label = "loading project")
             }
         } else if (current == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -362,10 +357,7 @@ private fun ProjectV2DetailScreen(project: GHProjectV2, onBack: () -> Unit) {
             ) {
                 item { ProjectV2Summary(current) }
                 item {
-                    Button(onClick = { showAddDraft = true }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
-                        Text("Add draft item")
-                    }
+                    GitHubTerminalButton("add draft item", onClick = { showAddDraft = true }, color = AiModuleTheme.colors.accent, modifier = Modifier.fillMaxWidth())
                 }
                 item {
                     ProjectV2FieldsCard(
@@ -1068,7 +1060,7 @@ private fun ClassicProjectDetail(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                AiModuleSpinner(label = "loading project")
             }
         } else {
             LazyColumn(
@@ -1078,10 +1070,7 @@ private fun ClassicProjectDetail(
             ) {
                 item { ProjectDetailSummary(currentProject, columns, cardsByColumn.values.sumOf { it.size }) }
                 item {
-                    Button(onClick = { showColumnDialog = true }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
-                        Text("Add column")
-                    }
+                    GitHubTerminalButton("add column", onClick = { showColumnDialog = true }, color = AiModuleTheme.colors.accent, modifier = Modifier.fillMaxWidth())
                 }
                 items(columns) { column ->
                     ProjectColumnCard(
