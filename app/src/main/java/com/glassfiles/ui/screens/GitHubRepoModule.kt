@@ -1131,16 +1131,16 @@ internal fun CommitsTab(commits: List<GHCommit>, hasMore: Boolean, onLoadMore: (
         if (c.avatarUrl.isNotBlank()) AsyncImage(c.avatarUrl, c.author, Modifier.size(34.dp).clip(CircleShape))
         else Box(Modifier.size(34.dp).clip(CircleShape).background(palette.accent.copy(0.12f)), contentAlignment = Alignment.Center) { AiModuleText(c.sha.take(2).uppercase(), fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = palette.accent, letterSpacing = 0.6.sp) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            AiModuleText(c.message.lines().firstOrNull().orEmpty(), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
+            AiModuleText(c.message.lines().firstOrNull().orEmpty(), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = palette.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 AiModuleText(c.author.ifBlank { "unknown" }, fontSize = 11.sp, color = palette.accent, fontWeight = FontWeight.Medium)
-                AiModuleText(c.sha.take(7), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = TextTertiary, letterSpacing = 0.5.sp)
-                AiModuleText(c.date.take(10), fontSize = 11.sp, color = TextTertiary)
+                AiModuleText(c.sha.take(7), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = palette.textMuted, letterSpacing = 0.5.sp)
+                AiModuleText(c.date.take(10), fontSize = 11.sp, color = palette.textMuted)
             }
         }
-        AiModuleIcon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = TextTertiary)
+        AiModuleGlyph(GhGlyphs.ARROW_RIGHT, Modifier.size(16.dp), tint = palette.textMuted, fontSize = 13.sp)
     }
-}; if (hasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { GitHubTerminalButton("load more", onClick = onLoadMore, color = Blue) } } } }
+}; if (hasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { GitHubTerminalButton("load more", onClick = onLoadMore, color = AiModuleTheme.colors.accent) } } } }
 
 @Composable
 internal fun IssuesTab(issues: List<GHIssue>, hasMore: Boolean, onLoadMore: () -> Unit, listState: LazyListState, onClick: (GHIssue) -> Unit) { LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 16.dp)) { items(issues) { issue ->
@@ -1161,10 +1161,10 @@ internal fun IssuesTab(issues: List<GHIssue>, hasMore: Boolean, onLoadMore: () -
                     if (issue.comments > 0) AiModuleText("${formatGitHubNumber(issue.comments)} comments", fontSize = 11.sp, color = palette.textSecondary)
                 }
             }
-            AiModuleIcon(Icons.Rounded.ChevronRight, null, Modifier.size(16.dp), tint = palette.textSecondary)
+            AiModuleGlyph(GhGlyphs.ARROW_RIGHT, Modifier.size(16.dp), tint = palette.textSecondary, fontSize = 13.sp)
         }
     }
-}; if (hasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { GitHubTerminalButton("load more", onClick = onLoadMore, color = Blue) } } } }
+}; if (hasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { GitHubTerminalButton("load more", onClick = onLoadMore, color = AiModuleTheme.colors.accent) } } } }
 
 @Composable
 internal fun PullsTab(
@@ -1189,7 +1189,7 @@ internal fun PullsTab(
                 Column(Modifier.weight(1f).padding(12.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
                         Box(Modifier.size(28.dp).clip(CircleShape).background(prColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                            AiModuleIcon(Icons.Rounded.CallMerge, null, Modifier.size(16.dp), tint = prColor)
+                            AiModuleGlyph(GhGlyphs.MERGE, Modifier.size(18.dp), tint = prColor, fontSize = 12.sp)
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             AiModuleText(pr.title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = palette.textPrimary, lineHeight = 18.sp, maxLines = 2)

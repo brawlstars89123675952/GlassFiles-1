@@ -1190,3 +1190,17 @@
 ### Проверка
 - Серверная/Android сборка не запускалась по прямой просьбе пользователя.
 - Выполнена только статическая проверка `git diff --check`.
+
+## 2026-05-02
+
+### GitHub repo tabs: terminal glyph cleanup
+- Скоуп: `app/src/main/java/com/glassfiles/ui/screens/GitHubRepoModule.kt`.
+- Во вкладках `commits`, `issues`, `pulls` убраны оставшиеся Material vector indicators из list rows:
+  - `ChevronRight` заменён на `GhGlyphs.ARROW_RIGHT` через `AiModuleGlyph`;
+  - `CallMerge` в PR-row заменён на текстовый `GhGlyphs.MERGE`.
+- В `commits` list row старые theme globals (`TextPrimary`, `TextTertiary`, `Blue`) заменены на текущую палитру `AiModuleTheme.colors`.
+- `load more` в `commits/issues` теперь использует `AiModuleTheme.colors.accent`, чтобы вкладки не зависели от старого GitHub color token.
+
+### Проверка
+- Gradle/CI не запускались по build policy.
+- Выполнена только статическая проверка `git diff --check`.
