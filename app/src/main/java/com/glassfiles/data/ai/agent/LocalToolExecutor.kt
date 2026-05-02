@@ -1212,12 +1212,22 @@ class LocalToolExecutor(
     private fun terminalRun(context: Context, command: String, args: JSONArray?, timeoutMs: Int): String {
         val rawCommand = command.trim()
         if (rawCommand.isBlank()) throw IllegalArgumentException("terminal_run: command must not be blank")
-        val cmd = if (args == null || args.length() == 0) {
-            listOf("/system/bin/sh", "-c", rawCommand)
+        val argList = buildList {
+            if (args != null) {
+                for (i in 0 until args.length()) add(args.getString(i))
+            }
+        }
+        val commandLine = if (argList.isEmpty()) {
+            rawCommand
+        } else {
+            rawCommand + argList.joinToString(separator = " ", prefix = " ") { shellQuote(it) }
+        }
+        val cmd = if (argList.isEmpty() || rawCommand.needsShell()) {
+            listOf("/system/bin/sh", "-c", commandLine)
         } else {
             buildList {
                 add(rawCommand)
-                for (i in 0 until args.length()) add(args.getString(i))
+                addAll(argList)
             }
         }
         val timeout = timeoutMs.coerceIn(1_000, 30_000).toLong()
@@ -1238,7 +1248,7 @@ class LocalToolExecutor(
             val stdout = stdoutFile.bufferedReader().use { readLimited(it, 8_000) }
             val stderr = stderrFile.bufferedReader().use { readLimited(it, 4_000) }
             return buildString {
-                appendLine("$ $rawCommand")
+                appendLine("$ $commandLine")
                 appendLine("cwd: ${workDir.absolutePath}")
                 appendLine("exit: ${process.exitValue()}")
                 if (stdout.isNotBlank()) {
@@ -1573,6 +1583,12 @@ class LocalToolExecutor(
         }
         return out.toString()
     }
+
+    private fun String.needsShell(): Boolean =
+        any { it.isWhitespace() || it in setOf(';', '&', '|', '<', '>', '*', '?', '$', '(', ')', '`', '"', '\'') }
+
+    private fun shellQuote(value: String): String =
+        "'" + value.replace("'", "'\"'\"'") + "'"
 
     private fun charsetFromContentType(contentType: String?): Charset {
         val charset = contentType

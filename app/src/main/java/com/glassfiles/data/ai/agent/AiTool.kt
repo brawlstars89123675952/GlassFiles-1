@@ -77,6 +77,76 @@ object AgentTools {
         readOnly = false,
     )
 
+    val TODO_WRITE = AiTool(
+        name = "todo_write",
+        description = "Replace the current task checklist with concise todo items. Use at the start of multi-step work and whenever the plan changes.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("items", obj {
+                    put("type", "array")
+                    put("description", "Checklist items in execution order.")
+                    put("items", obj {
+                        put("type", "object")
+                        put("properties", obj {
+                            put("id", obj {
+                                put("type", "string")
+                                put("description", "Stable short id, e.g. inspect, patch, verify.")
+                            })
+                            put("title", obj {
+                                put("type", "string")
+                                put("description", "Short user-visible task title.")
+                            })
+                            put("status", obj {
+                                put("type", "string")
+                                put("description", "pending, in_progress, completed, or canceled.")
+                            })
+                        })
+                        put("required", arr("title"))
+                    })
+                })
+            })
+            put("required", arr("items"))
+        },
+        readOnly = true,
+    )
+
+    val TODO_UPDATE = AiTool(
+        name = "todo_update",
+        description = "Update one or more items in the current task checklist. Use this as work progresses.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("id", obj {
+                    put("type", "string")
+                    put("description", "Todo id to update.")
+                })
+                put("title", obj {
+                    put("type", "string")
+                    put("description", "Optional replacement title or title for a new item.")
+                })
+                put("status", obj {
+                    put("type", "string")
+                    put("description", "pending, in_progress, completed, or canceled.")
+                })
+                put("items", obj {
+                    put("type", "array")
+                    put("description", "Optional batch of updates; each object accepts id, title, and status.")
+                    put("items", obj {
+                        put("type", "object")
+                        put("properties", obj {
+                            put("id", obj { put("type", "string") })
+                            put("title", obj { put("type", "string") })
+                            put("status", obj { put("type", "string") })
+                        })
+                    })
+                })
+            })
+            put("required", arr())
+        },
+        readOnly = true,
+    )
+
     /** Lists files / directories at a path inside the active repo + branch. */
     val LIST_DIR = AiTool(
         name = "list_dir",
@@ -981,6 +1051,7 @@ object AgentTools {
 
     /** All tools, in canonical order. */
     val ALL: List<AiTool> = listOf(
+        TODO_WRITE, TODO_UPDATE,
         LIST_DIR, READ_FILE, READ_FILE_RANGE, SEARCH_REPO,
         WEB_SEARCH, WEB_FETCH,
         LIST_BRANCHES, COMPARE_REFS,
@@ -993,7 +1064,8 @@ object AgentTools {
     ) + LOCAL_TOOLS + ARCHIVE_TOOLS + PUBLIC_REMOTE_TOOLS + SKILL_TOOLS
 
     val CHAT_ARTIFACTS: List<AiTool> = listOf(ARTIFACT_WRITE, ARTIFACT_UPDATE)
-    val CHAT_TOOLS: List<AiTool> = CHAT_ARTIFACTS + listOf(WEB_SEARCH, WEB_FETCH) + LOCAL_TOOLS + ARCHIVE_TOOLS + PUBLIC_REMOTE_TOOLS + SKILL_TOOLS
+    val TASK_TOOLS: List<AiTool> = listOf(TODO_WRITE, TODO_UPDATE)
+    val CHAT_TOOLS: List<AiTool> = TASK_TOOLS + CHAT_ARTIFACTS + listOf(WEB_SEARCH, WEB_FETCH) + LOCAL_TOOLS + ARCHIVE_TOOLS + PUBLIC_REMOTE_TOOLS + SKILL_TOOLS
 
     fun byName(name: String): AiTool? =
         (ALL + CHAT_ARTIFACTS).firstOrNull { it.name == name }

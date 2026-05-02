@@ -5,6 +5,9 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import android.util.Log
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -43,6 +46,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
@@ -120,6 +124,7 @@ internal fun RepoDetailScreen(
     var currentPath by rememberSaveable(repo.fullName) { mutableStateOf("") }; var commits by remember { mutableStateOf<List<GHCommit>>(emptyList()) }
     var issues by remember { mutableStateOf<List<GHIssue>>(emptyList()) }; var pulls by remember { mutableStateOf<List<GHPullRequest>>(emptyList()) }
     var releases by remember { mutableStateOf<List<GHRelease>>(emptyList()) }; var readme by remember { mutableStateOf<String?>(null) }
+    var readmeHtml by remember { mutableStateOf<String?>(null) }
     var readmeBlocks by remember { mutableStateOf<List<ReadmeRenderBlock>?>(null) }
     var readmeError by remember { mutableStateOf<String?>(null) }
     var readmeReloadNonce by remember { mutableIntStateOf(0) }
@@ -254,6 +259,7 @@ internal fun RepoDetailScreen(
         RepoTab.README -> {
             readmeError = null
             readme = null
+            readmeHtml = null
             readmeBlocks = null
             languages = emptyMap()
             contributors = emptyList()
@@ -263,12 +269,20 @@ internal fun RepoDetailScreen(
                 withTimeout(README_TOTAL_TIMEOUT_MS) readmeLoad@{
                     Log.d(README_RENDER_TAG, "fetch start ${repo.owner}/${repo.name}")
                     val fetched = withTimeout(README_FETCH_TIMEOUT_MS) {
-                        fetchReadmeForRender(context, repo.owner, repo.name)
+                        fetchReadmeForRender(context, repo.owner, repo.name, selectedBranch)
                     }
                     val markdownBytes = fetched.markdown.toByteArray().size
-                    Log.d(README_RENDER_TAG, "fetch complete, size=$markdownBytes bytes ${repo.owner}/${repo.name}")
-                    if (fetched.markdown.isBlank()) {
+                    val htmlBytes = fetched.renderedHtml.toByteArray().size
+                    Log.d(README_RENDER_TAG, "fetch complete, markdown=$markdownBytes bytes html=$htmlBytes bytes ${repo.owner}/${repo.name}")
+                    if (fetched.markdown.isBlank() && fetched.renderedHtml.isBlank()) {
                         readme = ""
+                        readmeHtml = ""
+                        readmeBlocks = emptyList()
+                        return@readmeLoad
+                    }
+                    readme = fetched.markdown
+                    readmeHtml = fetched.renderedHtml
+                    if (fetched.renderedHtml.isNotBlank()) {
                         readmeBlocks = emptyList()
                         return@readmeLoad
                     }
@@ -282,13 +296,13 @@ internal fun RepoDetailScreen(
                     Log.d(README_RENDER_TAG, "parse start ${repo.owner}/${repo.name}")
                     val parsed = withContext(Dispatchers.Default) { parseReadmeBlocks(fetched.markdown, repo, fetched.path) }
                     Log.d(README_RENDER_TAG, "parse complete, blocks=${parsed.size} ${repo.owner}/${repo.name}")
-                    readme = fetched.markdown
                     readmeBlocks = parsed
                 }
             }
             val loadMs = System.currentTimeMillis() - loadStart
             loadResult.onFailure { throwable ->
                 readme = null
+                readmeHtml = null
                 readmeBlocks = emptyList()
                 readmeError = "README load timed out or failed"
                 languages = emptyMap()
@@ -296,7 +310,7 @@ internal fun RepoDetailScreen(
                 Log.e(README_RENDER_TAG, "README guarded load failed ${repo.owner}/${repo.name} ${loadMs}ms", throwable)
             }.onSuccess {
                 Log.d(README_RENDER_TAG, "README guarded load complete ${repo.owner}/${repo.name} ${loadMs}ms")
-                if (!readme.isNullOrBlank() && readmeError == null) {
+                if ((!readme.isNullOrBlank() || !readmeHtml.isNullOrBlank()) && readmeError == null) {
                     scope.launch {
                         languages = withTimeoutOrNull(3_000L) {
                             withContext(Dispatchers.IO) { GitHubManager.getLanguages(context, repo.owner, repo.name) }
@@ -854,7 +868,7 @@ internal fun RepoDetailScreen(
             }
             RepoTab.HISTORY -> ActionsHistoryTab(workflowRuns, repo) { selectedRunId = it.id }
             RepoTab.PROJECTS -> ProjectsTab(repo)
-            RepoTab.README -> ReadmeTab(readme, readmeBlocks, readmeError, languages, contributors, releases, repo) { readmeReloadNonce++ }
+            RepoTab.README -> ReadmeTab(readme, readmeHtml, readmeBlocks, readmeError, languages, contributors, releases, repo) { readmeReloadNonce++ }
             RepoTab.CODE_SEARCH -> CodeSearchTab(repo)
         }
     }
@@ -1760,42 +1774,69 @@ internal fun ReleasesTab(releases: List<GHRelease>, repo: GHRepo) { val context 
     } } }
 }
 
-private data class ReadmeFetchResult(val markdown: String, val path: String)
+private data class ReadmeFetchResult(val markdown: String, val renderedHtml: String, val path: String)
 
-private suspend fun fetchReadmeForRender(context: Context, owner: String, repo: String): ReadmeFetchResult = withContext(Dispatchers.IO) {
+private suspend fun fetchReadmeForRender(context: Context, owner: String, repo: String, ref: String?): ReadmeFetchResult = withContext(Dispatchers.IO) {
     val encodedOwner = owner.encodeGithubPathPart()
     val encodedRepo = repo.encodeGithubPathPart()
-    val url = "https://api.github.com/repos/$encodedOwner/$encodedRepo/readme"
+    val refQuery = ref?.takeIf { it.isNotBlank() }?.let { "?ref=${it.encodeGithubPathPart()}" }.orEmpty()
+    val url = "https://api.github.com/repos/$encodedOwner/$encodedRepo/readme$refQuery"
     val token = GitHubManager.getToken(context)
-    val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-        requestMethod = "GET"
-        setRequestProperty("Accept", "application/vnd.github+json")
-        setRequestProperty("User-Agent", "GlassFiles")
-        setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
-        if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
-        connectTimeout = README_FETCH_TIMEOUT_MS.toInt()
-        readTimeout = README_FETCH_TIMEOUT_MS.toInt()
-    }
-    try {
-        val code = connection.responseCode
-        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+
+    fun openReadmeConnection(accept: String): HttpURLConnection =
+        (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            setRequestProperty("Accept", accept)
+            setRequestProperty("User-Agent", "GlassFiles")
+            setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
+            if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
+            connectTimeout = README_FETCH_TIMEOUT_MS.toInt()
+            readTimeout = README_FETCH_TIMEOUT_MS.toInt()
+        }
+
+    val rawConnection = openReadmeConnection("application/vnd.github+json")
+    val markdownResult = try {
+        val code = rawConnection.responseCode
+        val stream = if (code in 200..299) rawConnection.inputStream else rawConnection.errorStream
         val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
         if (code !in 200..299) {
-            Log.w(README_RENDER_TAG, "fetch HTTP $code $owner/$repo body=${body.take(160)}")
-            return@withContext ReadmeFetchResult("", "")
+            Log.w(README_RENDER_TAG, "raw fetch HTTP $code $owner/$repo body=${body.take(160)}")
+            "" to ""
+        } else {
+            val json = JSONObject(body)
+            val content = json.optString("content", "")
+            val path = json.optString("path", "")
+            val markdown = if (content.isBlank()) {
+                ""
+            } else {
+                String(android.util.Base64.decode(content.replace("\n", ""), android.util.Base64.DEFAULT))
+            }
+            markdown to path
         }
-        val json = JSONObject(body)
-        val content = json.optString("content", "")
-        val path = json.optString("path", "")
-        val markdown = if (content.isBlank()) {
+    } finally {
+        rawConnection.disconnect()
+    }
+
+    val htmlConnection = openReadmeConnection("application/vnd.github.html+json")
+    val renderedHtml = try {
+        val code = htmlConnection.responseCode
+        val stream = if (code in 200..299) htmlConnection.inputStream else htmlConnection.errorStream
+        val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        if (code !in 200..299) {
+            Log.w(README_RENDER_TAG, "html fetch HTTP $code $owner/$repo body=${body.take(160)}")
             ""
         } else {
-            String(android.util.Base64.decode(content.replace("\n", ""), android.util.Base64.DEFAULT))
+            body
         }
-        ReadmeFetchResult(markdown, path)
     } finally {
-        connection.disconnect()
+        htmlConnection.disconnect()
     }
+
+    ReadmeFetchResult(
+        markdown = markdownResult.first,
+        renderedHtml = renderedHtml,
+        path = markdownResult.second,
+    )
 }
 
 private fun String.encodeGithubPathPart(): String =
@@ -1804,6 +1845,7 @@ private fun String.encodeGithubPathPart(): String =
 @Composable
 private fun ReadmeTab(
     readme: String?,
+    renderedHtml: String?,
     blocks: List<ReadmeRenderBlock>?,
     error: String?,
     languages: Map<String, Long>,
@@ -1819,6 +1861,17 @@ private fun ReadmeTab(
     var renderCompleteLogged by remember(readme, blocks?.size ?: -1) { mutableStateOf(false) }
     val safeBlocks = blocks.orEmpty()
     val shownBlocks = safeBlocks.take(visibleCount)
+
+    if (!renderedHtml.isNullOrBlank() && error == null && !rawView) {
+        Box(Modifier.fillMaxSize().background(colors.background)) {
+            ReadmeHtmlDocument(
+                html = renderedHtml,
+                repo = repo,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        return
+    }
 
     if (!readme.isNullOrBlank() && error == null && !rawView) {
         LaunchedEffect(readme, safeBlocks.size) {
@@ -1881,6 +1934,195 @@ private fun ReadmeTab(
         }
     }
 }
+
+@Composable
+private fun ReadmeHtmlDocument(
+    html: String,
+    repo: GHRepo,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val pageHtml = remember(html) { buildGitHubReadmeHtmlPage(html) }
+    val baseUrl = remember(repo.owner, repo.name) { "https://github.com/${repo.owner}/${repo.name}/" }
+    val loadTag = remember(baseUrl, pageHtml) { "${baseUrl.hashCode()}:${pageHtml.hashCode()}" }
+    AndroidView(
+        modifier = modifier.background(Color(0xFF000000)),
+        factory = { ctx ->
+            WebView(ctx).apply {
+                setBackgroundColor(android.graphics.Color.BLACK)
+                settings.javaScriptEnabled = false
+                settings.domStorageEnabled = false
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                settings.builtInZoomControls = false
+                settings.displayZoomControls = false
+                settings.loadsImagesAutomatically = true
+                settings.textZoom = 100
+                overScrollMode = WebView.OVER_SCROLL_NEVER
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
+                webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                        val uri = request?.url ?: return false
+                        val scheme = uri.scheme.orEmpty()
+                        if (scheme != "http" && scheme != "https") return false
+                        val repoAnchor = uri.host == "github.com" &&
+                            uri.path == "/${repo.owner}/${repo.name}/" &&
+                            !uri.fragment.isNullOrBlank()
+                        if (repoAnchor) return false
+                        return runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                            true
+                        }.getOrDefault(false)
+                    }
+                }
+            }
+        },
+        update = { webView ->
+            if (webView.tag != loadTag) {
+                webView.tag = loadTag
+                webView.loadDataWithBaseURL(baseUrl, pageHtml, "text/html", "UTF-8", null)
+            }
+        },
+    )
+}
+
+private fun buildGitHubReadmeHtmlPage(readmeHtml: String): String = """
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #000000;
+    --text: #f0f6fc;
+    --muted: #8b949e;
+    --border: #30363d;
+    --surface: #0d1117;
+    --inline: #161b22;
+    --link: #7ee787;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+    overflow-wrap: anywhere;
+  }
+  #readme { background: var(--bg); }
+  .markdown-body {
+    max-width: 100%;
+    padding: 86px 48px 32px 48px;
+    color: var(--text);
+    background: var(--bg);
+  }
+  .markdown-heading {
+    position: relative;
+    margin-top: 30px;
+    margin-bottom: 16px;
+  }
+  .markdown-heading:first-child { margin-top: 0; }
+  .markdown-heading .anchor {
+    position: absolute;
+    left: -31px;
+    top: 0.34em;
+    width: 20px;
+    height: 20px;
+    opacity: .5;
+  }
+  .markdown-heading .anchor svg { fill: var(--muted); width: 20px; height: 20px; }
+  h1, h2, h3, h4, h5, h6 {
+    margin: 0;
+    color: var(--text);
+    font-weight: 700;
+    line-height: 1.16;
+    letter-spacing: 0;
+  }
+  h1 {
+    font-size: 44px;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--border);
+  }
+  h2 {
+    font-size: 36px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 28px; padding-bottom: 10px; border-bottom: 1px solid rgba(48, 54, 61, .75); }
+  h4 { font-size: 22px; }
+  h5 { font-size: 18px; }
+  h6 { font-size: 16px; color: var(--muted); }
+  p, ul, ol, blockquote, pre, table { margin-top: 0; margin-bottom: 18px; }
+  a { color: var(--link); text-decoration: underline; text-underline-offset: 2px; font-weight: 650; }
+  strong { font-weight: 700; }
+  ul, ol { padding-left: 29px; }
+  li { margin: 10px 0; padding-left: 4px; }
+  li::marker { color: var(--text); }
+  code {
+    padding: .18em .42em;
+    border-radius: 6px;
+    background: var(--inline);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, SFMono, Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: .86em;
+  }
+  pre {
+    overflow-x: auto;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+  pre code { padding: 0; background: transparent; white-space: pre; }
+  blockquote {
+    padding: 0 1em;
+    color: var(--muted);
+    border-left: .25em solid var(--border);
+  }
+  hr { height: 1px; border: 0; background: var(--border); margin: 28px 0; }
+  img, video { max-width: 100%; height: auto; }
+  p img { margin: 5px 3px 7px 0; vertical-align: middle; }
+  table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    border-spacing: 0;
+    border-collapse: collapse;
+  }
+  th, td {
+    padding: 8px 11px;
+    border: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th { font-weight: 700; background: var(--surface); }
+  tr:nth-child(2n) { background: rgba(22, 27, 34, .7); }
+  markdown-accessiblity-table { display: block; max-width: 100%; overflow-x: auto; }
+  kbd {
+    display: inline-block;
+    padding: 3px 5px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--inline);
+    color: var(--text);
+    font: 12px ui-monospace, SFMono-Regular, SFMono, Consolas, monospace;
+  }
+  @media (max-width: 430px) {
+    .markdown-body { padding: 72px 48px 28px 48px; }
+    h1 { font-size: 42px; }
+    h2 { font-size: 34px; }
+    h3 { font-size: 27px; }
+  }
+</style>
+</head>
+<body>
+$readmeHtml
+</body>
+</html>
+""".trimIndent()
 
 @Composable
 private fun ReadmeRepositoryFooter(

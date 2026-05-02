@@ -125,6 +125,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -243,6 +244,7 @@ fun AiAgentScreen(
     }
 
     val transcript = remember { mutableStateListOf<AgentEntry>() }
+    val todoItems = remember { mutableStateListOf<AgentTodoItem>() }
     var input by remember { mutableStateOf(TextFieldValue(initialPrompt.orEmpty())) }
     var pendingImage by remember { mutableStateOf<String?>(null) }
     var pendingFile by remember { mutableStateOf<AiPreparedAttachment?>(null) }
@@ -256,6 +258,7 @@ fun AiAgentScreen(
     var autoApproveReads by remember {
         mutableStateOf(com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveReads(context))
     }
+    var approvalPrefsVersion by remember { mutableStateOf(0) }
     var workspaceMode by remember {
         mutableStateOf(com.glassfiles.data.ai.AiAgentApprovalPrefs.getWorkspaceMode(context))
     }
@@ -340,6 +343,7 @@ fun AiAgentScreen(
         sessions.firstOrNull { it.id == activeSessionId }?.let { session ->
             sessionCreatedAt = session.createdAt
             transcript.clear()
+            todoItems.clear()
             transcript.addAll(session.messages.toAgentEntries())
             chatOnlyMode = session.repoFullName == CHAT_ONLY_REPO_KEY
             // Pre-seed the desired branch so the branch-loading effect
@@ -469,6 +473,7 @@ fun AiAgentScreen(
     }
 
     fun activeAgentScopeFullName(): String {
+        if (chatOnlyMode) return chatOnlyScopeFullName()
         selectedRepo?.fullName?.takeIf { it.isNotBlank() }?.let { return it }
         AiChatSessionStore
             .get(context, AGENT_SESSION_MODE, activeSessionId)
@@ -560,6 +565,7 @@ fun AiAgentScreen(
         activeSessionId = session.id
         sessionCreatedAt = session.createdAt
         transcript.clear()
+        todoItems.clear()
         transcript.addAll(session.messages.toAgentEntries())
         approvals.clear()
         // Reset selection so the restore effect picks up this session's
@@ -587,6 +593,7 @@ fun AiAgentScreen(
         activeSessionId = nextSessionId
         sessionCreatedAt = System.currentTimeMillis()
         transcript.clear()
+        todoItems.clear()
         approvals.clear()
         // Don't drop repo / branch / model — keep the user's working
         // context so they can fire off another task in the same repo
@@ -601,6 +608,7 @@ fun AiAgentScreen(
         chatOnlyMode = true
         selectedRepo = null
         selectedBranch = null
+        if (transcript.isEmpty()) todoItems.clear()
         pendingRestoreSessionId = null
         pendingWorkspaceId = null
         pendingWorkspaceDiff = null
@@ -674,6 +682,215 @@ fun AiAgentScreen(
         approvals.clear()
     }
 
+    fun resetPendingInput() {
+        input = TextFieldValue("")
+        pendingImage = null
+        pendingFile = null
+    }
+
+    fun appendLocalCommandResult(commandText: String, response: String) {
+        transcript += AgentEntry.User(text = commandText)
+        transcript += AgentEntry.Assistant(text = response)
+        resetPendingInput()
+        persistSession()
+    }
+
+    fun openWorkingMemorySheet() {
+        memorySheetRepoFullName = activeAgentScopeFullName()
+        showSettings = false
+        showWorkingMemory = true
+    }
+
+    fun openMemoryFilesSheet() {
+        memorySheetRepoFullName = activeAgentScopeFullName()
+        showSettings = false
+        showMemoryFiles = true
+    }
+
+    fun openSystemPromptEditor() {
+        systemPromptScopeFullName = activeAgentScopeFullName()
+        showSettings = false
+        showSystemPrompt = true
+    }
+
+    fun buildSlashHelp(): String = """
+        [slash commands]
+        /help            show this list
+        /clear           clear current chat session
+        /cost            show local token/cost estimate
+        /memory          open working memory
+        /memory files    open memory files
+        /skills          open installed skills
+        /permissions     show or set permission mode
+        /plan [on|off]   toggle plan-first mode for this scope
+        /system          open system prompt
+        /compact         compact visible transcript locally
+        /resume          open chat history
+        /diff            open pending workspace diff
+    """.trimIndent()
+
+    fun buildCostSummary(): String {
+        val rate = selectedModel?.let { com.glassfiles.data.ai.ModelPricing.rateFor(it) }
+        val stats = computeSessionStats(transcript, rate)
+        val cost = stats.costUsd?.let { value ->
+            when {
+                value < 0.01 -> "<\$0.01"
+                value < 1.0 -> String.format(Locale.US, "\$%.3f", value)
+                else -> String.format(Locale.US, "\$%.2f", value)
+            }
+        } ?: "\$0.00"
+        val toolCalls = transcript.count { it is AgentEntry.ToolCall }
+        return buildString {
+            appendLine("[cost estimate]")
+            appendLine("scope: ${agentScopeLabel(activeAgentScopeFullName())}")
+            appendLine("model: ${selectedModel?.displayName ?: "not selected"}")
+            appendLine("input chars: ${stats.inputChars}")
+            appendLine("output chars: ${stats.outputChars}")
+            appendLine("total chars: ${stats.totalChars}")
+            appendLine("tokens: ~${stats.tokens}")
+            appendLine("cost: ~$cost")
+            appendLine("tool calls: $toolCalls")
+        }.trimEnd()
+    }
+
+    fun buildCompactSummary(source: List<AgentEntry>): String {
+        val userMessages = source.filterIsInstance<AgentEntry.User>()
+            .map { it.text.trim() }
+            .filter { it.isNotBlank() }
+            .takeLast(6)
+        val generatedFiles = source.filterIsInstance<AgentEntry.Assistant>()
+            .flatMap { it.generatedFiles }
+            .takeLast(8)
+        val toolCalls = source.filterIsInstance<AgentEntry.ToolCall>()
+        val todos = todoItems.toList()
+        return buildString {
+            appendLine("[compact summary]")
+            appendLine("entries: ${source.size}")
+            appendLine("tool calls: ${toolCalls.size}")
+            if (todos.isNotEmpty()) {
+                appendLine()
+                appendLine("todos:")
+                todos.forEach { item -> appendLine("- ${todoStatusMarker(item.status)} ${item.title}") }
+            }
+            if (generatedFiles.isNotEmpty()) {
+                appendLine()
+                appendLine("generated files:")
+                generatedFiles.forEach { file -> appendLine("- ${file.name} (${file.content.length} chars)") }
+            }
+            if (userMessages.isNotEmpty()) {
+                appendLine()
+                appendLine("recent user requests:")
+                userMessages.forEach { message ->
+                    appendLine("- ${message.lineSequence().firstOrNull().orEmpty().take(160)}")
+                }
+            }
+        }.trimEnd()
+    }
+
+    fun compactTranscriptLocally(commandText: String) {
+        val source = transcript.toList()
+        if (source.size <= 10) {
+            appendLocalCommandResult(commandText, "[system] nothing to compact yet.")
+            return
+        }
+        val summary = buildCompactSummary(source)
+        val tail = source
+            .filter { it is AgentEntry.User || it is AgentEntry.Assistant || it is AgentEntry.Pending }
+            .takeLast(8)
+        transcript.clear()
+        transcript += AgentEntry.Assistant(text = summary)
+        transcript.addAll(tail)
+        resetPendingInput()
+        persistSession()
+    }
+
+    fun handleSlashCommand(rawText: String): Boolean {
+        if (!rawText.startsWith("/")) return false
+        val body = rawText.drop(1).trim()
+        val name = body.substringBefore(' ', missingDelimiterValue = body).lowercase(Locale.US)
+        val args = body.substringAfter(' ', missingDelimiterValue = "").trim().lowercase(Locale.US)
+        when (name) {
+            "help", "?" -> appendLocalCommandResult(rawText, buildSlashHelp())
+            "clear" -> {
+                startNewSession()
+                Toast.makeText(context, "Chat cleared", Toast.LENGTH_SHORT).show()
+            }
+            "cost" -> appendLocalCommandResult(rawText, buildCostSummary())
+            "memory" -> {
+                resetPendingInput()
+                if (args == "files" || args == "file") openMemoryFilesSheet() else openWorkingMemorySheet()
+            }
+            "skills" -> {
+                resetPendingInput()
+                showSettings = false
+                showSkills = true
+            }
+            "permissions", "permission", "perms" -> {
+                val mode = when (args.replace("_", "-")) {
+                    "ask", "manual" -> com.glassfiles.data.ai.AiAgentPermissionMode.ASK
+                    "read", "reads", "auto-read", "auto-reads" -> com.glassfiles.data.ai.AiAgentPermissionMode.AUTO_READS
+                    "edit", "edits", "accept", "accept-edit", "accept-edits" ->
+                        com.glassfiles.data.ai.AiAgentPermissionMode.ACCEPT_EDITS
+                    "yolo", "bypass" -> com.glassfiles.data.ai.AiAgentPermissionMode.YOLO
+                    "" -> null
+                    else -> {
+                        appendLocalCommandResult(
+                            rawText,
+                            "[system] unknown permission mode: $args\nknown: ask, reads, accept-edits, yolo",
+                        )
+                        return true
+                    }
+                }
+                if (mode != null) {
+                    com.glassfiles.data.ai.AiAgentApprovalPrefs.applyPermissionMode(context, mode)
+                    autoApproveReads = com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveReads(context)
+                    approvalPrefsVersion += 1
+                }
+                val current = com.glassfiles.data.ai.AiAgentApprovalPrefs.getPermissionMode(context)
+                appendLocalCommandResult(
+                    rawText,
+                    "[system] permission mode: ${current.label}\n${current.description}",
+                )
+            }
+            "plan" -> {
+                val scopeFullName = activeAgentScopeFullName()
+                val enabled = args !in setOf("off", "false", "0", "disable", "disabled")
+                com.glassfiles.data.ai.AiAgentPrefs.setPlanThenExecute(context, scopeFullName, enabled)
+                appendLocalCommandResult(
+                    rawText,
+                    "[system] plan-first mode ${if (enabled) "enabled" else "disabled"} for ${agentScopeLabel(scopeFullName)}.",
+                )
+            }
+            "system", "prompt" -> {
+                resetPendingInput()
+                openSystemPromptEditor()
+            }
+            "compact" -> {
+                if (running) {
+                    appendLocalCommandResult(rawText, "[system] wait for the current agent run to finish before compacting.")
+                } else {
+                    compactTranscriptLocally(rawText)
+                }
+            }
+            "resume", "history" -> {
+                resetPendingInput()
+                showSettings = false
+                refreshSessions()
+                showHistory = true
+            }
+            "diff" -> {
+                resetPendingInput()
+                if (pendingWorkspaceDiff != null) {
+                    showWorkspaceReview = true
+                } else {
+                    appendLocalCommandResult(rawText, "[system] no pending workspace diff.")
+                }
+            }
+            else -> appendLocalCommandResult(rawText, "[system] unknown slash command: /$name\n\n${buildSlashHelp()}")
+        }
+        return true
+    }
+
     fun runChatOnlyInternal(text: String, image: String?, file: AiPreparedAttachment?, model: AiModel, key: String) {
         error = null
         fallbackNotice = null
@@ -705,9 +922,11 @@ fun AiAgentScreen(
                 } else null
                 val activeSkill = selectedSkill ?: skillMatch?.skill
                 val skillAllowedTools = activeSkill?.let { AiSkillStore.allowedToolsForSkill(context, it) }
+                val taskToolNames = AgentTools.TASK_TOOLS.map { it.name }.toSet()
                 val messages = mutableListOf<AiMessage>().apply {
                     addAll(chatOnlyMemoryPrompt(chatScope))
                     add(AiMessage("system", CHAT_ONLY_SYSTEM_PROMPT))
+                    add(AiMessage("system", AGENT_TODO_SYSTEM_PROMPT))
                     AiSkillStore.catalogPrompt(context).takeIf { it.isNotBlank() }?.let {
                         add(AiMessage("system", it))
                     }
@@ -717,7 +936,7 @@ fun AiAgentScreen(
                     addAll(transcript.dropLast(1).toAiMessages())
                 }
                 val chatTools = if (skillAllowedTools != null) {
-                    AgentTools.CHAT_TOOLS.filter { it.name in skillAllowedTools }
+                    AgentTools.CHAT_TOOLS.filter { it.name in skillAllowedTools || it.name in taskToolNames }
                 } else {
                     AgentTools.CHAT_TOOLS
                 }
@@ -769,7 +988,9 @@ fun AiAgentScreen(
                     for (call in turn.toolCalls) {
                         transcript += AgentEntry.ToolCall(call)
                         val existingFiles = currentChatArtifacts(transcript)
-                        val execution = if (skillAllowedTools != null && call.name !in skillAllowedTools) {
+                        val execution = if (call.isTodoTool()) {
+                            ChatArtifactExecution(result = executeTodoTool(call, todoItems))
+                        } else if (skillAllowedTools != null && call.name !in skillAllowedTools) {
                             ChatArtifactExecution(
                                 result = AiToolResult(
                                     callId = call.id,
@@ -955,8 +1176,9 @@ fun AiAgentScreen(
             } else null
             val activeSkill = selectedSkill ?: skillMatch?.skill
             val skillAllowedTools = activeSkill?.let { AiSkillStore.allowedToolsForSkill(context, it) }
+            val taskToolNames = AgentTools.TASK_TOOLS.map { it.name }.toSet()
             val effectiveTools = if (skillAllowedTools != null) {
-                tools.filter { it.name in skillAllowedTools }
+                tools.filter { it.name in skillAllowedTools || it.name in taskToolNames }
             } else {
                 tools
             }
@@ -999,6 +1221,7 @@ fun AiAgentScreen(
                 com.glassfiles.data.ai.AiAgentMemoryStore.workingMemoryPrompt(context, repo.fullName)
             } else ""
             val systemMessages = buildList {
+                add(AiMessage(role = "system", content = AGENT_TODO_SYSTEM_PROMPT))
                 if (workingMemoryBlock.isNotBlank()) {
                     add(AiMessage(role = "system", content = workingMemoryBlock))
                 }
@@ -1065,6 +1288,7 @@ fun AiAgentScreen(
                     executor = executor,
                     localSessionId = activeSessionId,
                     transcript = transcript,
+                    todoItems = todoItems,
                     approvals = approvals,
                     approvalSettings = approvalSettings,
                     activeSkill = activeSkill,
@@ -1173,6 +1397,9 @@ fun AiAgentScreen(
      */
     fun submit(userText: String, imageBase64: String?, file: AiPreparedAttachment?) {
         val text = userText.trim()
+        if (text.startsWith("/") && imageBase64 == null && file == null) {
+            if (handleSlashCommand(text)) return
+        }
         val image = imageBase64?.takeIf { selectedModel?.let { m -> AiCapability.VISION in m.capabilities } == true }
         if (text.isEmpty() && image == null && file == null) return
         val model = selectedModel ?: return
@@ -1317,7 +1544,7 @@ fun AiAgentScreen(
             if (chatOnlyMode) "chat" else selectedRepo?.fullName,
             if (chatOnlyMode) null else selectedBranch?.takeIf { it.isNotBlank() }?.let { "@$it" },
         ).joinToString("").ifBlank { null }
-        val approvalIndicator = remember(autoApproveReads, workspaceMode, selectedRepo?.fullName) {
+        val approvalIndicator = remember(autoApproveReads, approvalPrefsVersion, workspaceMode, selectedRepo?.fullName) {
             val yolo = com.glassfiles.data.ai.AiAgentApprovalPrefs.getYoloMode(context)
             val edits = com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveEdits(context)
             val writes = com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveWrites(context)
@@ -1345,6 +1572,9 @@ fun AiAgentScreen(
                 context, repoFull,
             )
         }
+        val todoProgress = if (todoItems.isNotEmpty()) {
+            "todo ${todoProgressLabel(todoItems)}"
+        } else null
         com.glassfiles.ui.screens.ai.terminal.AgentTopBar(
             title = Strings.aiAgent,
             subtitle = subtitle,
@@ -1352,6 +1582,7 @@ fun AiAgentScreen(
             tokens = tokenLabel,
             autoApproveIndicator = approvalIndicator.first,
             autoApproveTone = approvalIndicator.second,
+            todoProgress = todoProgress,
             workingFiles = workingFiles.takeIf { it > 0 },
             embedded = embedded,
             running = running,
@@ -1437,6 +1668,11 @@ fun AiAgentScreen(
                         )
                     }
                 }
+                if (todoItems.isNotEmpty()) {
+                    item("agent-todo-checklist") {
+                        AgentTodoChecklistBlock(todoItems)
+                    }
+                }
                 if (toolActionCount > 0) {
                     item("tool-progress") {
                         ToolProgressHeader(
@@ -1453,9 +1689,9 @@ fun AiAgentScreen(
                     item(key = displayEntry.stableKey()) {
                         TranscriptDisplayEntry(
                             entry = displayEntry,
-                            activeRepoFullName = selectedRepo?.fullName,
-                            activeBranch = selectedBranch,
-                            activeDefaultBranch = selectedRepo?.defaultBranch,
+                            activeRepoFullName = if (chatOnlyMode) null else selectedRepo?.fullName,
+                            activeBranch = if (chatOnlyMode) null else selectedBranch,
+                            activeDefaultBranch = if (chatOnlyMode) null else selectedRepo?.defaultBranch,
                             expandToolCallsByDefault = expandToolCallsByDefault,
                             expandedToolRows = expandedToolRows,
                             collapsedToolRows = collapsedToolRows,
@@ -1813,7 +2049,8 @@ fun AiAgentScreen(
                 com.glassfiles.data.ai.cost.AiCostMode.Balanced -> Strings.aiCostModeBalancedHint
                 com.glassfiles.data.ai.cost.AiCostMode.MaxQuality -> Strings.aiCostModeMaxHint
             }
-            val protectedPaths = remember(showSettings) {
+            val approvalPrefsRefresh = approvalPrefsVersion
+            val protectedPaths = remember(showSettings, approvalPrefsRefresh) {
                 com.glassfiles.data.ai.AiAgentApprovalPrefs.getProtectedPaths(context)
             }
             val protectedPathsText = remember(protectedPaths) { protectedPaths.joinToString("\n") }
@@ -1828,6 +2065,7 @@ fun AiAgentScreen(
                 modelLabel = selectedModel?.let { "${it.providerId.displayName} · ${it.displayName}" } ?: "—",
                 mode = mode,
                 modeHint = modeHint,
+                permissionMode = com.glassfiles.data.ai.AiAgentApprovalPrefs.getPermissionMode(context),
                 autoApproveReads = autoApproveReads,
                 autoApproveEdits = com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveEdits(context),
                 autoApproveWrites = com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveWrites(context),
@@ -1946,34 +2184,48 @@ fun AiAgentScreen(
                     costMode = newMode
                     com.glassfiles.data.ai.cost.AiCostModeStore.setMode(context, newMode)
                 },
+                onPermissionModeChange = { mode ->
+                    com.glassfiles.data.ai.AiAgentApprovalPrefs.applyPermissionMode(context, mode)
+                    autoApproveReads = com.glassfiles.data.ai.AiAgentApprovalPrefs.getAutoApproveReads(context)
+                    approvalPrefsVersion += 1
+                },
                 onAutoApproveReadsChange = { value ->
                     autoApproveReads = value
                     com.glassfiles.data.ai.AiAgentApprovalPrefs
                         .setAutoApproveReads(context, value)
+                    approvalPrefsVersion += 1
                 },
                 onAutoApproveEditsChange = {
                     com.glassfiles.data.ai.AiAgentApprovalPrefs.setAutoApproveEdits(context, it)
+                    approvalPrefsVersion += 1
                 },
                 onAutoApproveWritesChange = {
                     com.glassfiles.data.ai.AiAgentApprovalPrefs.setAutoApproveWrites(context, it)
+                    approvalPrefsVersion += 1
                 },
                 onAutoApproveCommitsChange = {
                     com.glassfiles.data.ai.AiAgentApprovalPrefs.setAutoApproveCommits(context, it)
+                    approvalPrefsVersion += 1
                 },
                 onAutoApproveDestructiveChange = {
                     com.glassfiles.data.ai.AiAgentApprovalPrefs.setAutoApproveDestructive(context, it)
+                    approvalPrefsVersion += 1
                 },
                 onYoloModeChange = {
                     com.glassfiles.data.ai.AiAgentApprovalPrefs.setYoloMode(context, it)
+                    approvalPrefsVersion += 1
                 },
                 onSessionTrustChange = {
                     com.glassfiles.data.ai.AiAgentApprovalPrefs.setSessionTrust(context, it)
+                    approvalPrefsVersion += 1
                 },
                 onWriteLimitChange = {
                     com.glassfiles.data.ai.AiAgentApprovalPrefs.setWriteLimit(context, it)
+                    approvalPrefsVersion += 1
                 },
                 onProtectedPathsChange = {
                     com.glassfiles.data.ai.AiAgentApprovalPrefs.setProtectedPaths(context, it)
+                    approvalPrefsVersion += 1
                 },
                 onBackgroundExecutionChange = {
                     com.glassfiles.data.ai.AiAgentApprovalPrefs.setBackgroundExecution(context, it)
@@ -3420,6 +3672,56 @@ private fun ToolProgressHeader(
 }
 
 @Composable
+private fun AgentTodoChecklistBlock(items: List<AgentTodoItem>) {
+    val colors = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(colors.surfaceElevated)
+            .border(1.dp, colors.border, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "[todo ${todoProgressLabel(items)}]",
+                color = colors.accent,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                modifier = Modifier.weight(1f),
+            )
+            val active = items.firstOrNull { it.status == AgentTodoStatus.IN_PROGRESS }
+            if (active != null) {
+                Text(
+                    active.title.shortenMiddle(28),
+                    color = colors.textMuted,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                )
+            }
+        }
+        items.forEach { item ->
+            val color = when (item.status) {
+                AgentTodoStatus.COMPLETED -> colors.textMuted
+                AgentTodoStatus.IN_PROGRESS -> colors.warning
+                AgentTodoStatus.CANCELED -> colors.error
+                AgentTodoStatus.PENDING -> colors.textPrimary
+            }
+            Text(
+                "${todoStatusMarker(item.status)} ${item.title}",
+                color = color,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                maxLines = 2,
+            )
+        }
+    }
+}
+
+@Composable
 private fun ToolActionRow(
     call: AiToolCall,
     result: AiToolResult?,
@@ -3811,6 +4113,7 @@ private fun compactToolVerb(name: String): String = when (AgentToolRegistry.uiKi
     AiToolUiKind.GITHUB -> "github"
     AiToolUiKind.SKILL -> "skill"
     AiToolUiKind.ARTIFACT -> "file"
+    AiToolUiKind.TASK -> "todo"
     AiToolUiKind.SYSTEM -> "context"
     AiToolUiKind.OTHER -> when {
         name.contains("move", ignoreCase = true) || name.contains("rename", ignoreCase = true) || name.contains("copy", ignoreCase = true) -> "move"
@@ -4372,6 +4675,7 @@ private suspend fun runAgentLoop(
     executor: GitHubToolExecutor,
     localSessionId: String? = null,
     transcript: androidx.compose.runtime.snapshots.SnapshotStateList<AgentEntry>,
+    todoItems: androidx.compose.runtime.snapshots.SnapshotStateList<AgentTodoItem>,
     approvals: androidx.compose.runtime.snapshots.SnapshotStateList<PendingApproval>,
     /**
      * Snapshot of all approval-related prefs at the start of the task. The loop
@@ -4580,6 +4884,17 @@ private suspend fun runAgentLoop(
             val tool = AgentTools.byName(call.name)
             estimate?.bumpToolCall()
             if (!AgentToolRegistry.isReadOnly(call.name)) estimate?.bumpWriteProposal()
+            if (call.isTodoTool()) {
+                val result = executeTodoTool(call, todoItems)
+                transcript += AgentEntry.ToolResult(result)
+                results += AiMessage(
+                    role = "tool",
+                    content = result.output,
+                    toolCallId = result.callId,
+                    toolName = result.name,
+                )
+                continue
+            }
             if (allowedSkillTools != null && call.name !in allowedSkillTools) {
                 val result = AiToolResult(
                     callId = call.id,
@@ -5037,6 +5352,12 @@ private fun List<AiChatSessionStore.Message>.toAgentEntries(): List<AgentEntry> 
 
 private const val CHAT_ONLY_REPO_KEY = "__chat_only__"
 private const val CHAT_MEMORY_SCOPE_PREFIX = "chat/"
+private val AGENT_TODO_SYSTEM_PROMPT: String = """
+For multi-step work, maintain a short task checklist with todo_write and todo_update.
+Use todo_write once you understand the task; keep exactly one item in_progress when actively working; mark items completed as soon as they are done.
+Keep todo titles concise and user-visible. Do not use todos for single-answer questions.
+""".trimIndent()
+
 private val CHAT_ONLY_SYSTEM_PROMPT: String = """
 ${SystemPrompts.DEFAULT}
 
@@ -5060,6 +5381,152 @@ private data class PendingAgentSend(
     val image: String?,
     val file: AiPreparedAttachment?,
 )
+
+private enum class AgentTodoStatus {
+    PENDING,
+    IN_PROGRESS,
+    COMPLETED,
+    CANCELED,
+}
+
+private data class AgentTodoItem(
+    val id: String,
+    val title: String,
+    val status: AgentTodoStatus = AgentTodoStatus.PENDING,
+)
+
+private fun AiToolCall.isTodoTool(): Boolean =
+    name == AgentTools.TODO_WRITE.name || name == AgentTools.TODO_UPDATE.name
+
+private fun executeTodoTool(
+    call: AiToolCall,
+    todoItems: MutableList<AgentTodoItem>,
+): AiToolResult {
+    val args = runCatching { JSONObject(call.argsJson) }.getOrElse { JSONObject() }
+    return runCatching {
+        when (call.name) {
+            AgentTools.TODO_WRITE.name -> {
+                val arr = args.optJSONArray("items") ?: JSONArray()
+                if (arr.length() == 0) error("todo_write: items must not be empty")
+                val parsed = buildList {
+                    for (i in 0 until arr.length().coerceAtMost(24)) {
+                        val item = arr.optJSONObject(i) ?: continue
+                        val title = item.optString("title").trim()
+                        if (title.isBlank()) continue
+                        add(
+                            AgentTodoItem(
+                                id = cleanTodoId(item.optString("id").ifBlank { title }, i),
+                                title = title.take(120),
+                                status = parseTodoStatus(item.optString("status")),
+                            ),
+                        )
+                    }
+                }.normalizedTodoProgress()
+                if (parsed.isEmpty()) error("todo_write: no valid todo items")
+                todoItems.clear()
+                todoItems.addAll(parsed)
+                "todo: ${todoProgressLabel(todoItems)}\n" + todoItems.joinToString("\n") { it.toToolLine() }
+            }
+            AgentTools.TODO_UPDATE.name -> {
+                val updates = args.optJSONArray("items")?.let { arr ->
+                    buildList {
+                        for (i in 0 until arr.length().coerceAtMost(24)) {
+                            arr.optJSONObject(i)?.let { add(it) }
+                        }
+                    }
+                } ?: listOf(args)
+                if (updates.isEmpty()) error("todo_update: no updates provided")
+                updates.forEachIndexed { index, update ->
+                    val rawId = update.optString("id").trim()
+                    val title = update.optString("title").trim()
+                    val status = parseTodoStatus(update.optString("status"))
+                    if (rawId.isBlank() && title.isBlank()) error("todo_update: id or title is required")
+                    val id = rawId.ifBlank { cleanTodoId(title, index) }
+                    val existingIndex = todoItems.indexOfFirst { it.id == id }
+                        .takeIf { it >= 0 }
+                        ?: todoItems.indexOfFirst { title.isNotBlank() && it.title.equals(title, ignoreCase = true) }
+                            .takeIf { it >= 0 }
+                    if (existingIndex != null) {
+                        val current = todoItems[existingIndex]
+                        todoItems[existingIndex] = current.copy(
+                            title = title.ifBlank { current.title }.take(120),
+                            status = status,
+                        )
+                    } else {
+                        todoItems += AgentTodoItem(
+                            id = cleanTodoId(id.ifBlank { title }, todoItems.size),
+                            title = title.ifBlank { id }.take(120),
+                            status = status,
+                        )
+                    }
+                }
+                val normalized = todoItems.toList().normalizedTodoProgress()
+                todoItems.clear()
+                todoItems.addAll(normalized)
+                "todo: ${todoProgressLabel(todoItems)}\n" + todoItems.joinToString("\n") { it.toToolLine() }
+            }
+            else -> error("unknown todo tool: ${call.name}")
+        }
+    }.fold(
+        onSuccess = {
+            AiToolResult(callId = call.id, name = call.name, output = it)
+        },
+        onFailure = {
+            AiToolResult(
+                callId = call.id,
+                name = call.name,
+                output = it.message ?: it.javaClass.simpleName,
+                isError = true,
+            )
+        },
+    )
+}
+
+private fun parseTodoStatus(raw: String): AgentTodoStatus =
+    when (raw.trim().lowercase(Locale.US).replace("-", "_")) {
+        "in_progress", "active", "doing", "current" -> AgentTodoStatus.IN_PROGRESS
+        "completed", "complete", "done", "success" -> AgentTodoStatus.COMPLETED
+        "canceled", "cancelled", "skipped", "blocked" -> AgentTodoStatus.CANCELED
+        else -> AgentTodoStatus.PENDING
+    }
+
+private fun cleanTodoId(raw: String, fallbackIndex: Int): String {
+    val clean = raw.lowercase(Locale.US)
+        .replace(Regex("[^a-z0-9._-]+"), "-")
+        .trim('-')
+        .take(40)
+    return clean.ifBlank { "todo-${fallbackIndex + 1}" }
+}
+
+private fun List<AgentTodoItem>.normalizedTodoProgress(): List<AgentTodoItem> {
+    var hasActive = false
+    return map { item ->
+        if (item.status == AgentTodoStatus.IN_PROGRESS) {
+            if (hasActive) item.copy(status = AgentTodoStatus.PENDING) else {
+                hasActive = true
+                item
+            }
+        } else {
+            item
+        }
+    }
+}
+
+private fun todoProgressLabel(items: List<AgentTodoItem>): String {
+    val total = items.count { it.status != AgentTodoStatus.CANCELED }
+    val done = items.count { it.status == AgentTodoStatus.COMPLETED }
+    return if (total > 0) "$done/$total" else "0/0"
+}
+
+private fun AgentTodoItem.toToolLine(): String =
+    "${todoStatusMarker(status)} $id — $title"
+
+private fun todoStatusMarker(status: AgentTodoStatus): String = when (status) {
+    AgentTodoStatus.PENDING -> "[ ]"
+    AgentTodoStatus.IN_PROGRESS -> "[>]"
+    AgentTodoStatus.COMPLETED -> "[x]"
+    AgentTodoStatus.CANCELED -> "[-]"
+}
 
 private data class ChatArtifactExecution(
     val result: AiToolResult,
@@ -5234,6 +5701,15 @@ private fun attachGeneratedFileToAssistant(
     file: AiChatSessionStore.GeneratedFile,
     replacedPaths: List<String>,
 ) {
+    if (replacedPaths.isNotEmpty()) {
+        transcript.indices.forEach { index ->
+            val entry = transcript[index] as? AgentEntry.Assistant ?: return@forEach
+            val visibleFiles = removeGeneratedFilesForArchive(entry.generatedFiles, replacedPaths, file.name)
+            if (visibleFiles.size != entry.generatedFiles.size) {
+                transcript[index] = entry.copy(generatedFiles = visibleFiles)
+            }
+        }
+    }
     val current = transcript.getOrNull(assistantIndex) as? AgentEntry.Assistant
     if (current != null) {
         val visibleFiles = removeGeneratedFilesForArchive(current.generatedFiles, replacedPaths, file.name)
@@ -5241,15 +5717,6 @@ private fun attachGeneratedFileToAssistant(
             generatedFiles = mergeGeneratedFiles(visibleFiles, listOf(file)),
         )
     } else {
-        if (replacedPaths.isNotEmpty()) {
-            transcript.indices.forEach { index ->
-                val entry = transcript[index] as? AgentEntry.Assistant ?: return@forEach
-                val visibleFiles = removeGeneratedFilesForArchive(entry.generatedFiles, replacedPaths, file.name)
-                if (visibleFiles.size != entry.generatedFiles.size) {
-                    transcript[index] = entry.copy(generatedFiles = visibleFiles)
-                }
-            }
-        }
         transcript += AgentEntry.Assistant(text = "", generatedFiles = listOf(file))
     }
 }

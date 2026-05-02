@@ -83,6 +83,8 @@ object AiSkillStore {
         "skill_read",
         "artifact_write",
         "artifact_update",
+        "todo_write",
+        "todo_update",
     )
     private val dangerousTools: Set<String>
         get() = AgentToolRegistry.all

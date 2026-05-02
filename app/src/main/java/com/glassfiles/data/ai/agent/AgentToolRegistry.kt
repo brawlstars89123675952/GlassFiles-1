@@ -9,6 +9,7 @@ enum class AiToolDomain {
     PUBLIC_GITHUB,
     SKILL,
     ARTIFACT,
+    TASK,
     SYSTEM,
 }
 
@@ -27,6 +28,7 @@ enum class AiToolUiKind {
     GITHUB,
     SKILL,
     ARTIFACT,
+    TASK,
     SYSTEM,
     OTHER,
 }
@@ -99,6 +101,8 @@ object AgentToolRegistry {
 
             meta(AgentTools.ARTIFACT_WRITE, AiToolDomain.ARTIFACT, AiToolUiKind.ARTIFACT, AiAgentApprovalCategory.WRITE, AiToolRisk.LOW, true, "create chat file attachments", changesFiles = true),
             meta(AgentTools.ARTIFACT_UPDATE, AiToolDomain.ARTIFACT, AiToolUiKind.ARTIFACT, AiAgentApprovalCategory.EDIT, AiToolRisk.LOW, true, "update chat file attachments", changesFiles = true),
+            meta(AgentTools.TODO_WRITE, AiToolDomain.TASK, AiToolUiKind.TASK, AiAgentApprovalCategory.READ, AiToolRisk.READ_ONLY, true, "write task checklists"),
+            meta(AgentTools.TODO_UPDATE, AiToolDomain.TASK, AiToolUiKind.TASK, AiAgentApprovalCategory.READ, AiToolRisk.READ_ONLY, true, "update task checklists"),
 
             meta(AgentTools.FILE_PICKER_CURRENT_CONTEXT, AiToolDomain.SYSTEM, AiToolUiKind.SYSTEM, AiAgentApprovalCategory.READ, AiToolRisk.READ_ONLY, true, "describe current file context"),
 

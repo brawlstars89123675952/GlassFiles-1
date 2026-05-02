@@ -38,6 +38,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import com.glassfiles.data.ai.AiAgentPermissionMode
 import com.glassfiles.ui.components.AiPickerSheet
 import com.glassfiles.ui.theme.JetBrainsMono
 
@@ -51,6 +52,7 @@ fun AgentSettingsBottomSheet(
     onBranchSelected: (String) -> Unit,
     onModelSelected: (ModelDisplay) -> Unit,
     onModeChange: (AgentMode) -> Unit,
+    onPermissionModeChange: (AiAgentPermissionMode) -> Unit,
     onAutoApproveReadsChange: (Boolean) -> Unit,
     onAutoApproveEditsChange: (Boolean) -> Unit,
     onAutoApproveWritesChange: (Boolean) -> Unit,
@@ -184,6 +186,38 @@ fun AgentSettingsBottomSheet(
                 }
                 Text(
                     text = state.modeHint,
+                    color = colors.textMuted,
+                    fontFamily = JetBrainsMono,
+                    fontSize = AgentTerminal.type.label,
+                    lineHeight = 1.4.em,
+                )
+            }
+            AgentSheetDivider()
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                AgentSheetLabel("PERMISSIONS")
+                AiAgentPermissionMode.values()
+                    .filter { it != AiAgentPermissionMode.CUSTOM }
+                    .chunked(2)
+                    .forEach { rowModes ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowModes.forEach { mode ->
+                                val selected = mode == state.permissionMode
+                                Text(
+                                    text = if (selected) "[\u25A3 ${mode.label}]" else "[ ${mode.label} ]",
+                                    color = if (selected) colors.accent else colors.textSecondary,
+                                    fontFamily = JetBrainsMono,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = AgentTerminal.type.message,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable { onPermissionModeChange(mode) }
+                                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                                )
+                            }
+                        }
+                    }
+                Text(
+                    text = state.permissionMode.description,
                     color = colors.textMuted,
                     fontFamily = JetBrainsMono,
                     fontSize = AgentTerminal.type.label,
@@ -639,6 +673,7 @@ data class AgentSettingsState(
     val modelLabel: String,
     val mode: AgentMode,
     val modeHint: String,
+    val permissionMode: AiAgentPermissionMode,
     val autoApproveReads: Boolean,
     val autoApproveEdits: Boolean,
     val autoApproveWrites: Boolean,

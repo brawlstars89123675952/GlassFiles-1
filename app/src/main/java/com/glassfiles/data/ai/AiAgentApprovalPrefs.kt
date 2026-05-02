@@ -6,6 +6,17 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 
+enum class AiAgentPermissionMode(
+    val label: String,
+    val description: String,
+) {
+    ASK("ask", "Ask before every tool action."),
+    AUTO_READS("auto reads", "Read-only tools run automatically; edits still ask."),
+    ACCEPT_EDITS("accept edits", "Reads, edits and file writes run automatically; commits still ask."),
+    YOLO("yolo", "Most actions run automatically; destructive actions still require approval."),
+    CUSTOM("custom", "Manual approval toggles are active."),
+}
+
 object AiAgentApprovalPrefs {
     const val WRITE_LIMIT_UNLIMITED = 0
     const val DEFAULT_WRITE_LIMIT = 50
@@ -76,6 +87,72 @@ object AiAgentApprovalPrefs {
 
     fun setAutoApproveDestructive(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_AUTO_DESTRUCTIVE, enabled).apply()
+    }
+
+    fun getPermissionMode(context: Context): AiAgentPermissionMode {
+        val yolo = getYoloMode(context)
+        val reads = getAutoApproveReads(context)
+        val edits = getAutoApproveEdits(context)
+        val writes = getAutoApproveWrites(context)
+        val commits = getAutoApproveCommits(context)
+        val destructive = getAutoApproveDestructive(context)
+        val trust = getSessionTrust(context)
+        return when {
+            yolo && reads && edits && writes && commits && !destructive -> AiAgentPermissionMode.YOLO
+            !yolo && reads && edits && writes && !commits && !destructive && !trust -> AiAgentPermissionMode.ACCEPT_EDITS
+            !yolo && reads && !edits && !writes && !commits && !destructive && !trust -> AiAgentPermissionMode.AUTO_READS
+            !yolo && !reads && !edits && !writes && !commits && !destructive && !trust -> AiAgentPermissionMode.ASK
+            else -> AiAgentPermissionMode.CUSTOM
+        }
+    }
+
+    fun applyPermissionMode(context: Context, mode: AiAgentPermissionMode) {
+        if (mode == AiAgentPermissionMode.CUSTOM) return
+        val editor = prefs(context).edit()
+        when (mode) {
+            AiAgentPermissionMode.ASK -> {
+                editor
+                    .putBoolean(KEY_AUTO_READS, false)
+                    .putBoolean(KEY_AUTO_EDITS, false)
+                    .putBoolean(KEY_AUTO_WRITES, false)
+                    .putBoolean(KEY_AUTO_COMMITS, false)
+                    .putBoolean(KEY_AUTO_DESTRUCTIVE, false)
+                    .putBoolean(KEY_YOLO_MODE, false)
+                    .putBoolean(KEY_SESSION_TRUST, false)
+            }
+            AiAgentPermissionMode.AUTO_READS -> {
+                editor
+                    .putBoolean(KEY_AUTO_READS, true)
+                    .putBoolean(KEY_AUTO_EDITS, false)
+                    .putBoolean(KEY_AUTO_WRITES, false)
+                    .putBoolean(KEY_AUTO_COMMITS, false)
+                    .putBoolean(KEY_AUTO_DESTRUCTIVE, false)
+                    .putBoolean(KEY_YOLO_MODE, false)
+                    .putBoolean(KEY_SESSION_TRUST, false)
+            }
+            AiAgentPermissionMode.ACCEPT_EDITS -> {
+                editor
+                    .putBoolean(KEY_AUTO_READS, true)
+                    .putBoolean(KEY_AUTO_EDITS, true)
+                    .putBoolean(KEY_AUTO_WRITES, true)
+                    .putBoolean(KEY_AUTO_COMMITS, false)
+                    .putBoolean(KEY_AUTO_DESTRUCTIVE, false)
+                    .putBoolean(KEY_YOLO_MODE, false)
+                    .putBoolean(KEY_SESSION_TRUST, false)
+            }
+            AiAgentPermissionMode.YOLO -> {
+                editor
+                    .putBoolean(KEY_AUTO_READS, true)
+                    .putBoolean(KEY_AUTO_EDITS, true)
+                    .putBoolean(KEY_AUTO_WRITES, true)
+                    .putBoolean(KEY_AUTO_COMMITS, true)
+                    .putBoolean(KEY_AUTO_DESTRUCTIVE, false)
+                    .putBoolean(KEY_YOLO_MODE, true)
+                    .putBoolean(KEY_SESSION_TRUST, false)
+            }
+            AiAgentPermissionMode.CUSTOM -> Unit
+        }
+        editor.apply()
     }
 
     fun getYoloMode(context: Context): Boolean =
