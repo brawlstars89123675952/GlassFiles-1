@@ -1018,6 +1018,12 @@ fun AiAgentScreen(
                         } else {
                             executeChatOnlyTool(context, call, existingFiles, localExecutor, activeSessionId)
                         }
+                        val storedToolResult = storeLargeToolResultIfNeeded(
+                            context = context,
+                            sessionId = activeSessionId,
+                            call = call,
+                            result = execution.result,
+                        )
                         execution.generatedFile?.let { fileOut ->
                             val current = transcript.getOrNull(assistantIndex) as? AgentEntry.Assistant
                             if (current != null) {
@@ -1031,13 +1037,16 @@ fun AiAgentScreen(
                                 )
                             }
                         }
-                        transcript += AgentEntry.ToolResult(execution.result)
+                        storedToolResult.generatedFile?.let { fileOut ->
+                            attachGeneratedFileToAssistant(transcript, assistantIndex, fileOut, emptyList())
+                        }
+                        transcript += AgentEntry.ToolResult(storedToolResult.result)
                         discoveredToolNames += toolNamesDiscoveredBy(call, execution.result)
                         messages += AiMessage(
                             role = "tool",
-                            content = execution.result.output,
-                            toolCallId = execution.result.callId,
-                            toolName = execution.result.name,
+                            content = storedToolResult.result.output,
+                            toolCallId = storedToolResult.result.callId,
+                            toolName = storedToolResult.result.name,
                         )
                     }
                     if (turnIndex < 7) {
@@ -2969,6 +2978,9 @@ private fun AgentGeneratedFilePreviewSheet(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val isArchive = isGeneratedArchiveFile(file)
+    val previewText = remember(file.name, file.content, file.sourcePath) {
+        generatedFileText(context, file)
+    }
     var saving by remember(file.name, file.content, file.sourcePath) { mutableStateOf(false) }
     var saveStatus by remember(file.name, file.content, file.sourcePath) { mutableStateOf<String?>(null) }
     Dialog(
@@ -3078,7 +3090,7 @@ private fun AgentGeneratedFilePreviewSheet(
                     }
                 } else {
                     com.glassfiles.ui.screens.ai.terminal.AgentTerminalCodeBlock(
-                        text = file.content,
+                        text = previewText,
                         lang = file.language,
                         filePath = file.name,
                         context = context,
@@ -4291,8 +4303,18 @@ private fun isGeneratedArchiveFile(file: AiChatSessionStore.GeneratedFile): Bool
 private fun generatedFileSubtitle(file: AiChatSessionStore.GeneratedFile): String =
     if (isGeneratedArchiveFile(file)) {
         "archive · ${generatedFileSizeLabel(file)}"
+    } else if (!file.sourcePath.isNullOrBlank()) {
+        generatedFileSizeLabel(file)
     } else {
         "${file.content.length} chars"
+    }
+
+private fun generatedFileText(context: Context, file: AiChatSessionStore.GeneratedFile): String =
+    if (!file.sourcePath.isNullOrBlank()) {
+        runCatching { generatedFileBytes(context, file).toString(Charsets.UTF_8) }
+            .getOrElse { file.content }
+    } else {
+        file.content
     }
 
 private fun generatedFileSizeLabel(file: AiChatSessionStore.GeneratedFile): String {
@@ -4992,6 +5014,16 @@ private suspend fun runAgentLoop(
                 executor.execute(context, call)
             }
             discoveredToolNames += toolNamesDiscoveredBy(call, result)
+            val storedToolResult = if (localSessionId != null) {
+                storeLargeToolResultIfNeeded(
+                    context = context,
+                    sessionId = localSessionId,
+                    call = call,
+                    result = result,
+                )
+            } else {
+                StoredToolResult(result = result)
+            }
             val localGeneratedFile = if (approved && !result.isError && localSessionId != null) {
                 generatedFileForLocalTool(context, localSessionId, call)
             } else {
@@ -5004,6 +5036,9 @@ private suspend fun runAgentLoop(
                     emptyList()
                 }
                 attachGeneratedFileToAssistant(transcript, streamingIndex, fileOut, replacedPaths)
+            }
+            storedToolResult.generatedFile?.let { fileOut ->
+                attachGeneratedFileToAssistant(transcript, streamingIndex, fileOut, emptyList())
             }
             // Bump the per-task write counter on any approved non-readOnly
             // tool call. Read-only calls (list_dir / read_file / search_repo /
@@ -5020,23 +5055,23 @@ private suspend fun runAgentLoop(
             // so a single mis-tooled call cannot blow the budget on
             // its own — the next iteration's [contextExhausted] check
             // catches the cumulative case.
-            val (capped, _) = estimate?.fitToBudget(result.output)
-                ?: (result.output to false)
+            val (capped, _) = estimate?.fitToBudget(storedToolResult.result.output)
+                ?: (storedToolResult.result.output to false)
             estimate?.addInput(capped.length)
             transcript += AgentEntry.ToolResult(
-                if (capped === result.output) result
+                if (capped === storedToolResult.result.output) storedToolResult.result
                 else AiToolResult(
-                    callId = result.callId,
-                    name = result.name,
+                    callId = storedToolResult.result.callId,
+                    name = storedToolResult.result.name,
                     output = capped,
-                    isError = result.isError,
+                    isError = storedToolResult.result.isError,
                 ),
             )
             results += AiMessage(
                 role = "tool",
                 content = capped,
-                toolCallId = result.callId,
-                toolName = result.name,
+                toolCallId = storedToolResult.result.callId,
+                toolName = storedToolResult.result.name,
             )
             if (hitWriteLimit) {
                 transcript += AgentEntry.Assistant(
@@ -5674,6 +5709,53 @@ private data class ChatArtifactExecution(
     val generatedFile: AiChatSessionStore.GeneratedFile? = null,
     val replacedGeneratedPaths: List<String> = emptyList(),
 )
+
+private data class StoredToolResult(
+    val result: AiToolResult,
+    val generatedFile: AiChatSessionStore.GeneratedFile? = null,
+)
+
+private const val LARGE_TOOL_RESULT_INLINE_CHARS = 6_000
+private const val LARGE_TOOL_RESULT_PREVIEW_CHARS = 2_400
+
+private fun storeLargeToolResultIfNeeded(
+    context: Context,
+    sessionId: String,
+    call: AiToolCall,
+    result: AiToolResult,
+): StoredToolResult {
+    if (result.output.length <= LARGE_TOOL_RESULT_INLINE_CHARS) return StoredToolResult(result)
+    val workspace = LocalToolExecutor.ensureSessionWorkspace(context, sessionId)
+    val fileName = "${System.currentTimeMillis()}_${safeDownloadFileName(call.name)}_${result.callId.hashCode().toString(16)}.txt"
+    val relativePath = "tool_results/$fileName"
+    val out = File(workspace, relativePath).canonicalFile
+    val rootPath = workspace.canonicalPath
+    require(out.path.startsWith(rootPath + File.separator)) { "Tool result path escaped workspace" }
+    out.parentFile?.mkdirs()
+    out.writeText(result.output)
+    val preview = result.output.take(LARGE_TOOL_RESULT_PREVIEW_CHARS)
+    val generatedFile = AiChatSessionStore.GeneratedFile(
+        name = relativePath,
+        language = "txt",
+        content = preview,
+        sourcePath = out.absolutePath,
+    )
+    val inline = buildString {
+        appendLine("Full tool result stored as chat attachment: $relativePath (${result.output.length} chars).")
+        appendLine("Open the attachment to view or download the complete output.")
+        appendLine()
+        append(preview.trimEnd())
+        if (result.output.length > preview.length) {
+            appendLine()
+            appendLine()
+            append("[truncated in chat: ${result.output.length - preview.length} chars stored in attachment]")
+        }
+    }
+    return StoredToolResult(
+        result = result.copy(output = inline),
+        generatedFile = generatedFile,
+    )
+}
 
 private suspend fun executeChatOnlyTool(
     context: Context,

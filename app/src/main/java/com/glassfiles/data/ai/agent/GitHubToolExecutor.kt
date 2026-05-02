@@ -829,7 +829,7 @@ class GitHubToolExecutor(
         return if (idx <= 0) "" else path.substring(0, idx)
     }
 
-    private fun capped(s: String, max: Int = 6_000): String =
+    private fun capped(s: String, max: Int = 80_000): String =
         if (s.length <= max) s else s.take(max) + "\n\n[truncated, ${s.length - max} chars omitted]"
 
     private data class WebResponse(

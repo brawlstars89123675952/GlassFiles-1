@@ -1822,7 +1822,7 @@ class LocalToolExecutor(
         return count
     }
 
-    private fun capped(text: String, max: Int = 8_000): String =
+    private fun capped(text: String, max: Int = 80_000): String =
         if (text.length <= max) text else text.take(max) + "\n\n[truncated: ${text.length - max} chars omitted]"
 
     private fun formatBytes(bytes: Long): String =
