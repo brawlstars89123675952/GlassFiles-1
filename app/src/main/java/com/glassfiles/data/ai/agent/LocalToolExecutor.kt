@@ -8,6 +8,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Environment
 import android.util.Base64
+import android.util.Log
 import android.webkit.MimeTypeMap
 import com.glassfiles.data.ArchiveHelper
 import com.glassfiles.data.TrashManager
@@ -58,6 +59,43 @@ class LocalToolExecutor(
     private val currentAttachment: AiPreparedAttachment? = null,
     private val allowExternalPaths: Boolean = false,
 ) {
+    companion object {
+        private const val TAG = "LocalToolExecutor"
+
+        fun ensureSessionWorkspace(context: Context, sessionId: String): File {
+            val primary = sessionWorkspaceRoot(context, sessionId)
+            if (primary.ensureDirectory()) return primary
+
+            Log.e(TAG, "Unable to create AI agent workspace: ${primary.absolutePath}")
+            val fallback = fallbackSessionWorkspaceRoot(context, sessionId)
+            if (fallback.ensureDirectory()) {
+                Log.e(TAG, "Using fallback AI agent workspace: ${fallback.absolutePath}")
+                return fallback
+            }
+
+            Log.e(TAG, "Unable to create fallback AI agent workspace: ${fallback.absolutePath}")
+            throw IllegalStateException("terminal_run: unable to create working directory")
+        }
+
+        private fun sessionWorkspaceRoot(context: Context, sessionId: String): File {
+            return File(context.filesDir, "ai_agent_local/${safeSessionId(sessionId)}").canonicalFile
+        }
+
+        private fun fallbackSessionWorkspaceRoot(context: Context, sessionId: String): File {
+            return File(context.cacheDir, "ai_agent_local/${safeSessionId(sessionId)}").canonicalFile
+        }
+
+        private fun safeSessionId(sessionId: String): String {
+            return sessionId.replace(Regex("[^A-Za-z0-9_.-]"), "_").ifBlank { "default" }
+        }
+
+        private fun File.ensureDirectory(): Boolean {
+            return runCatching {
+                if (exists()) isDirectory else mkdirs()
+            }.getOrDefault(false)
+        }
+    }
+
     suspend fun execute(context: Context, call: AiToolCall): AiToolResult {
         val args = runCatching { JSONObject(call.argsJson) }.getOrElse { JSONObject() }
         return try {
@@ -1005,17 +1043,18 @@ class LocalToolExecutor(
     }
 
     private fun terminalRun(context: Context, command: String, args: JSONArray?, timeoutMs: Int): String {
-        val cmd = buildList {
-            if (args == null || args.length() == 0) {
-                addAll(command.trim().split(Regex("\\s+")).filter { it.isNotBlank() })
-            } else {
-                add(command)
+        val rawCommand = command.trim()
+        if (rawCommand.isBlank()) throw IllegalArgumentException("terminal_run: command must not be blank")
+        val cmd = if (args == null || args.length() == 0) {
+            listOf("/system/bin/sh", "-c", rawCommand)
+        } else {
+            buildList {
+                add(rawCommand)
                 for (i in 0 until args.length()) add(args.getString(i))
             }
         }
-        if (cmd.firstOrNull().isNullOrBlank()) throw IllegalArgumentException("terminal_run: command must not be blank")
         val timeout = timeoutMs.coerceIn(1_000, 30_000).toLong()
-        val workDir = workspaceRoot(context).apply { mkdirs() }
+        val workDir = ensureWorkspaceRoot(context)
         val stdoutFile = File.createTempFile("terminal_stdout_", ".log", workDir)
         val stderrFile = File.createTempFile("terminal_stderr_", ".log", workDir)
         val process = ProcessBuilder(cmd)
@@ -1032,7 +1071,8 @@ class LocalToolExecutor(
             val stdout = stdoutFile.bufferedReader().use { readLimited(it, 8_000) }
             val stderr = stderrFile.bufferedReader().use { readLimited(it, 4_000) }
             return buildString {
-                appendLine("$ ${cmd.joinToString(" ")}")
+                appendLine("$ $rawCommand")
+                appendLine("cwd: ${workDir.absolutePath}")
                 appendLine("exit: ${process.exitValue()}")
                 if (stdout.isNotBlank()) {
                     appendLine()
@@ -1487,6 +1527,7 @@ class LocalToolExecutor(
     private fun allowedRoots(context: Context): List<File> {
         val roots = mutableListOf(
             workspaceRoot(context),
+            fallbackWorkspaceRoot(context),
             context.cacheDir,
         )
         if (allowExternalPaths) {
@@ -1498,8 +1539,15 @@ class LocalToolExecutor(
     }
 
     private fun workspaceRoot(context: Context): File {
-        val safeSession = sessionId.replace(Regex("[^A-Za-z0-9_.-]"), "_").ifBlank { "default" }
-        return File(context.filesDir, "ai_agent_local/$safeSession").canonicalFile
+        return sessionWorkspaceRoot(context, sessionId)
+    }
+
+    private fun fallbackWorkspaceRoot(context: Context): File {
+        return fallbackSessionWorkspaceRoot(context, sessionId)
+    }
+
+    private fun ensureWorkspaceRoot(context: Context): File {
+        return ensureSessionWorkspace(context, sessionId)
     }
 
     private fun header(tool: String, context: Context, file: File): String =

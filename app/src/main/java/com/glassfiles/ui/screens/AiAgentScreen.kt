@@ -571,7 +571,10 @@ fun AiAgentScreen(
         input = TextFieldValue("")
         pendingImage = null
         pendingFile = null
-        activeSessionId = newAgentSessionId()
+        val nextSessionId = newAgentSessionId()
+        runCatching { LocalToolExecutor.ensureSessionWorkspace(context, nextSessionId) }
+            .onFailure { error = "Unable to create agent sandbox: ${it.message ?: it.javaClass.simpleName}" }
+        activeSessionId = nextSessionId
         sessionCreatedAt = System.currentTimeMillis()
         transcript.clear()
         approvals.clear()
