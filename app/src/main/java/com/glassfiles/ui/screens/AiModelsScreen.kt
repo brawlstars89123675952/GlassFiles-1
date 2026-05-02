@@ -48,9 +48,9 @@ import com.glassfiles.data.ai.models.AiProviderId
 import com.glassfiles.ui.components.AiModuleChip
 import com.glassfiles.ui.components.AiModuleHairline
 import com.glassfiles.ui.components.AiModulePageBar
-import com.glassfiles.ui.components.Icon
-import com.glassfiles.ui.components.IconButton
-import com.glassfiles.ui.components.Text
+import com.glassfiles.ui.components.AiModuleIcon
+import com.glassfiles.ui.components.AiModuleIconButton
+import com.glassfiles.ui.components.AiModuleText
 import com.glassfiles.ui.theme.AiModuleSurface
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
@@ -115,11 +115,11 @@ fun AiModelsScreen(onBack: () -> Unit) {
                 subtitle = "$selected · catalog",
                 trailing = {
                     val colors = AiModuleTheme.colors
-                    IconButton(
+                    AiModuleIconButton(
                         onClick = { load(selected, force = true) },
                         modifier = Modifier.size(36.dp),
                     ) {
-                        Icon(
+                        AiModuleIcon(
                             Icons.Rounded.Refresh,
                             null,
                             Modifier.size(18.dp),
@@ -195,7 +195,7 @@ private fun ProviderTab(
                 .border(1.dp, if (configured) colors.accent else colors.border, CircleShape),
         )
         Spacer(Modifier.width(8.dp))
-        Text(
+        AiModuleText(
             provider.displayName,
             fontSize = 12.sp,
             fontFamily = JetBrainsMono,
@@ -220,7 +220,7 @@ private fun ModelsBody(
             Modifier.fillMaxSize().padding(32.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
+            AiModuleText(
                 "loading...",
                 color = colors.textSecondary,
                 fontFamily = JetBrainsMono,
@@ -232,7 +232,7 @@ private fun ModelsBody(
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
+                AiModuleText(
                     "! $error",
                     fontSize = 13.sp,
                     color = colors.error,
@@ -241,7 +241,7 @@ private fun ModelsBody(
                 )
                 Spacer(Modifier.size(6.dp))
                 if (!isConfigured) {
-                    Text(
+                    AiModuleText(
                         "${Strings.aiNoKey} — ${provider.displayName}",
                         fontSize = 12.sp,
                         color = colors.textMuted,
@@ -254,7 +254,7 @@ private fun ModelsBody(
             Modifier.fillMaxSize().padding(32.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
+            AiModuleText(
                 Strings.aiNoModels,
                 fontSize = 13.sp,
                 color = colors.textMuted,
@@ -283,13 +283,13 @@ private fun ModelRow(model: AiModel) {
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
+            AiModuleText(
                 "▸ ",
                 color = colors.accentDim,
                 fontFamily = JetBrainsMono,
                 fontSize = 13.sp,
             )
-            Text(
+            AiModuleText(
                 model.displayName,
                 fontSize = 14.sp,
                 fontFamily = JetBrainsMono,
@@ -299,7 +299,7 @@ private fun ModelRow(model: AiModel) {
                 modifier = Modifier.weight(1f),
             )
             if (model.contextWindow != null) {
-                Text(
+                AiModuleText(
                     "${(model.contextWindow / 1000)}K",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
@@ -308,7 +308,7 @@ private fun ModelRow(model: AiModel) {
                 )
             }
         }
-        Text(
+        AiModuleText(
             model.id,
             fontSize = 11.sp,
             color = colors.textMuted,

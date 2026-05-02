@@ -560,6 +560,7 @@ private fun CodingChatView(
                 messages = msgs,
                 createdAt = sessionCreatedAt,
                 updatedAt = System.currentTimeMillis(),
+            )
         )
     }
 

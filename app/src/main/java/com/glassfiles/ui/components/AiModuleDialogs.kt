@@ -65,7 +65,7 @@ fun AiModuleAlertDialog(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
             if (!title.isNullOrBlank()) {
-                Text(
+                AiModuleText(
                     text = "> $title",
                     color = palette.textPrimary,
                     fontFamily = JetBrainsMono,
@@ -128,7 +128,7 @@ fun AiModuleTextField(
     val palette = AiModuleTheme.colors
     Column(modifier.fillMaxWidth()) {
         if (!label.isNullOrBlank()) {
-            Text(
+            AiModuleText(
                 text = label,
                 color = palette.textSecondary,
                 fontFamily = JetBrainsMono,
@@ -153,7 +153,7 @@ fun AiModuleTextField(
             }
             Box(Modifier.weight(1f)) {
                 if (value.isEmpty() && !placeholder.isNullOrBlank()) {
-                    Text(
+                    AiModuleText(
                         text = placeholder,
                         color = palette.textMuted,
                         fontFamily = JetBrainsMono,
@@ -244,7 +244,7 @@ fun AiModuleTextAction(
             .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
+        AiModuleText(
             text = label,
             color = effective,
             fontFamily = JetBrainsMono,

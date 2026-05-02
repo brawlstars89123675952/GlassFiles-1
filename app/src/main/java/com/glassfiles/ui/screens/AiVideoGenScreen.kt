@@ -69,9 +69,9 @@ import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import com.glassfiles.data.ai.providers.AiProviders
 import com.glassfiles.ui.components.AiPickerChip
-import com.glassfiles.ui.components.Icon
-import com.glassfiles.ui.components.IconButton
-import com.glassfiles.ui.components.Text
+import com.glassfiles.ui.components.AiModuleIcon
+import com.glassfiles.ui.components.AiModuleIconButton
+import com.glassfiles.ui.components.AiModuleText
 import com.glassfiles.ui.theme.AiModuleSurface
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
@@ -276,18 +276,18 @@ private fun AiVideoGenScreenInner(onBack: () -> Unit) {
             Modifier.fillMaxWidth().padding(top = 44.dp, start = 4.dp, end = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = colors.textPrimary)
+            AiModuleIconButton(onClick = onBack) {
+                AiModuleIcon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = colors.textPrimary)
             }
-            Text(
+            AiModuleText(
                 Strings.aiVideoGen,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.textPrimary,
             )
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { showHistory = true }) {
-                Icon(
+            AiModuleIconButton(onClick = { showHistory = true }) {
+                AiModuleIcon(
                     Icons.Rounded.History,
                     null,
                     Modifier.size(20.dp),
@@ -301,7 +301,7 @@ private fun AiVideoGenScreenInner(onBack: () -> Unit) {
                 Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 24.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
+                AiModuleText(
                     Strings.aiVideoNoModels,
                     fontSize = 13.sp,
                     color = colors.textSecondary,
@@ -361,7 +361,7 @@ private fun AiVideoGenScreenInner(onBack: () -> Unit) {
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
+            AiModuleText(
                 Strings.aiVideoPrompt.uppercase(),
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
@@ -376,7 +376,7 @@ private fun AiVideoGenScreenInner(onBack: () -> Unit) {
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.accent),
                 decorationBox = { inner ->
                     if (prompt.text.isEmpty()) {
-                        Text(
+                        AiModuleText(
                             Strings.aiVideoPromptHint,
                             fontSize = 14.sp,
                             color = colors.textSecondary,
@@ -391,14 +391,14 @@ private fun AiVideoGenScreenInner(onBack: () -> Unit) {
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (genError != null) {
-                    Text(
+                    AiModuleText(
                         genError!!,
                         fontSize = 12.sp,
                         color = colors.error,
                         modifier = Modifier.weight(1f).padding(end = 8.dp),
                     )
                 } else if (generating && status.isNotBlank()) {
-                    Text(
+                    AiModuleText(
                         "${Strings.aiVideoStatus.uppercase()}: $status",
                         fontSize = 11.sp,
                         fontFamily = JetBrainsMono,
@@ -425,7 +425,7 @@ private fun AiVideoGenScreenInner(onBack: () -> Unit) {
                 Modifier.fillMaxSize().padding(32.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
+                AiModuleText(
                     Strings.aiVideoEmpty,
                     fontSize = 13.sp,
                     color = colors.textSecondary,
@@ -443,9 +443,9 @@ private fun AiVideoGenScreenInner(onBack: () -> Unit) {
                             Modifier.fillMaxWidth().padding(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("...", color = colors.accent, fontFamily = JetBrainsMono, fontSize = 13.sp)
+                            AiModuleText("...", color = colors.accent, fontFamily = JetBrainsMono, fontSize = 13.sp)
                             Spacer(Modifier.size(8.dp))
-                            Text(
+                            AiModuleText(
                                 Strings.aiVideoGenerating,
                                 fontSize = 13.sp,
                                 color = colors.textSecondary,
@@ -530,31 +530,31 @@ private fun VideoHistorySheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(
+                    AiModuleText(
                         Strings.aiHistoryVideoTitle,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = colors.textPrimary,
                     )
-                    Text(
+                    AiModuleText(
                         "${items.size} ${Strings.aiHistoryCount}",
                         fontSize = 11.sp,
                         color = colors.textSecondary,
                     )
                 }
                 if (items.isNotEmpty()) {
-                    IconButton(onClick = onClearAll) {
-                        Icon(Icons.Rounded.DeleteSweep, null, Modifier.size(20.dp), tint = colors.textSecondary)
+                    AiModuleIconButton(onClick = onClearAll) {
+                        AiModuleIcon(Icons.Rounded.DeleteSweep, null, Modifier.size(20.dp), tint = colors.textSecondary)
                     }
                 }
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = colors.textSecondary)
+                AiModuleIconButton(onClick = onDismiss) {
+                    AiModuleIcon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = colors.textSecondary)
                 }
             }
             Spacer(Modifier.height(8.dp))
             if (items.isEmpty()) {
                 Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
-                    Text(Strings.aiHistoryEmpty, fontSize = 13.sp, color = colors.textSecondary)
+                    AiModuleText(Strings.aiHistoryEmpty, fontSize = 13.sp, color = colors.textSecondary)
                 }
             } else {
                 LazyColumn(
@@ -616,7 +616,7 @@ private fun VideoHistoryRow(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            Icon(
+            AiModuleIcon(
                 Icons.Rounded.PlayArrow,
                 null,
                 Modifier.size(20.dp),
@@ -624,20 +624,20 @@ private fun VideoHistoryRow(
             )
         }
         Column(Modifier.weight(1f)) {
-            Text(
+            AiModuleText(
                 item.prompt.takeIf { it.isNotBlank() } ?: item.model.displayName,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = colors.textPrimary,
                 maxLines = 2,
             )
-            Text(
+            AiModuleText(
                 item.model.displayName,
                 fontSize = 11.sp,
                 color = colors.textSecondary,
                 maxLines = 1,
             )
-            Text(
+            AiModuleText(
                 sdf.format(java.util.Date(item.historyId)),
                 fontSize = 10.sp,
                 color = colors.textSecondary,
@@ -645,8 +645,8 @@ private fun VideoHistoryRow(
                 maxLines = 1,
             )
         }
-        IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-            Icon(Icons.Rounded.Close, null, Modifier.size(16.dp), tint = colors.textSecondary)
+        AiModuleIconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+            AiModuleIcon(Icons.Rounded.Close, null, Modifier.size(16.dp), tint = colors.textSecondary)
         }
     }
 }
@@ -714,7 +714,7 @@ private fun VideoResultCard(
                     .background(colors.surface.copy(alpha = 0.7f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
+                AiModuleIcon(
                     Icons.Rounded.PlayArrow,
                     null,
                     tint = colors.textPrimary,
@@ -722,7 +722,7 @@ private fun VideoResultCard(
                 )
             }
         }
-        Text(
+        AiModuleText(
             item.model.id,
             fontSize = 11.sp,
             fontFamily = JetBrainsMono,
@@ -779,7 +779,7 @@ private fun VideoResultCard(
             )
         }
         if (item.prompt.isNotBlank()) {
-            Text(
+            AiModuleText(
                 item.prompt,
                 fontSize = 11.sp,
                 color = colors.textSecondary,
@@ -788,7 +788,7 @@ private fun VideoResultCard(
             )
         }
         if (saveError != null) {
-            Text(
+            AiModuleText(
                 saveError!!,
                 fontSize = 11.sp,
                 color = colors.error,
@@ -811,7 +811,7 @@ private fun GenerateVideoButton(enabled: Boolean, onClick: () -> Unit) {
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        AiModuleText(
             Strings.aiVideoGenerate,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
@@ -831,7 +831,7 @@ private fun CancelChip(onClick: () -> Unit) {
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        AiModuleText(
             Strings.aiVideoCancel,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
@@ -858,9 +858,9 @@ private fun VideoActionChip(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, Modifier.size(14.dp), tint = fg)
+        AiModuleIcon(icon, null, Modifier.size(14.dp), tint = fg)
         Spacer(Modifier.size(6.dp))
-        Text(label, fontSize = 12.sp, color = fg)
+        AiModuleText(label, fontSize = 12.sp, color = fg)
     }
 }
 

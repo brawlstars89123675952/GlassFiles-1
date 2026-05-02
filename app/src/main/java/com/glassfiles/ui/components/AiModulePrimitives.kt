@@ -49,7 +49,7 @@ import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
 
 @Composable
-fun Text(
+fun AiModuleText(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
@@ -80,7 +80,7 @@ fun Text(
 }
 
 @Composable
-fun Text(
+fun AiModuleText(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
@@ -111,7 +111,7 @@ fun Text(
 }
 
 @Composable
-fun Icon(
+fun AiModuleIcon(
     imageVector: ImageVector,
     contentDescription: String?,
     modifier: Modifier = Modifier,
@@ -126,7 +126,7 @@ fun Icon(
 }
 
 @Composable
-fun IconButton(
+fun AiModuleIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -169,7 +169,7 @@ fun AiModulePageBar(
             // Title takes whatever space is left after the trailing actions
             // and ellipsizes — fixes the long-name overflow that pushed
             // icons off-screen for repos like "GKI_KernelSU_SUSFS-main".
-            Text(
+            AiModuleText(
                 text = title,
                 color = colors.textPrimary,
                 fontFamily = JetBrainsMono,
@@ -187,7 +187,7 @@ fun AiModulePageBar(
         }
         if (!subtitle.isNullOrBlank()) {
             Row(Modifier.fillMaxWidth().padding(start = 44.dp, top = 1.dp)) {
-                Text(
+                AiModuleText(
                     text = subtitle,
                     color = colors.textMuted,
                     fontFamily = JetBrainsMono,
@@ -205,7 +205,7 @@ fun AiModulePageBar(
 
 /**
  * Square 36dp clickable cell rendering a single JetBrainsMono glyph.
- * Use this in place of `IconButton { Icon(Icons.Rounded.X, …) }` so the
+ * Use this in place of `IconButton { AiModuleIcon(Icons.Rounded.X, …) }` so the
  * AiModule chrome stays purely typographic and never bleeds in
  * icon-button visuals.
  */
@@ -227,7 +227,7 @@ fun AiModuleGlyphAction(
             .let { if (enabled) it.clickable(onClick = onClick) else it },
         contentAlignment = Alignment.Center,
     ) {
-        Text(
+        AiModuleText(
             text = glyph,
             color = effective,
             fontFamily = JetBrainsMono,
@@ -249,7 +249,7 @@ fun AiModuleGlyph(
     tint: Color = AiModuleTheme.colors.textSecondary,
     fontSize: androidx.compose.ui.unit.TextUnit = 14.sp,
 ) {
-    Text(
+    AiModuleText(
         text = glyph,
         color = tint,
         fontFamily = JetBrainsMono,
@@ -266,7 +266,7 @@ fun AiModuleSectionLabel(
     modifier: Modifier = Modifier,
 ) {
     val colors = AiModuleTheme.colors
-    Text(
+    AiModuleText(
         text = text.uppercase(),
         color = colors.textSecondary,
         fontFamily = JetBrainsMono,
@@ -332,10 +332,10 @@ fun AiModulePillButton(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (leadingIcon != null) {
-            Icon(leadingIcon, null, Modifier.size(14.dp), tint = tint)
+            AiModuleIcon(leadingIcon, null, Modifier.size(14.dp), tint = tint)
             Spacer(Modifier.width(6.dp))
         }
-        Text(
+        AiModuleText(
             text = "[ $label ]",
             color = tint,
             fontFamily = JetBrainsMono,
@@ -361,7 +361,7 @@ fun AiModuleCheckRow(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        AiModuleText(
             text = if (checked) "[✓]" else "[ ]",
             color = if (checked) colors.accent else colors.textSecondary,
             fontFamily = JetBrainsMono,
@@ -369,7 +369,7 @@ fun AiModuleCheckRow(
         )
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(
+            AiModuleText(
                 text = label,
                 color = colors.textPrimary,
                 fontFamily = JetBrainsMono,
@@ -377,7 +377,7 @@ fun AiModuleCheckRow(
                 lineHeight = 1.3.em,
             )
             if (!description.isNullOrBlank()) {
-                Text(
+                AiModuleText(
                     text = description,
                     color = colors.textMuted,
                     fontFamily = JetBrainsMono,
@@ -434,7 +434,7 @@ fun AiModuleListRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (prefix != null) {
-            Text(
+            AiModuleText(
                 text = prefix,
                 color = prefixColor ?: colors.accent,
                 fontFamily = JetBrainsMono,
@@ -444,7 +444,7 @@ fun AiModuleListRow(
             Spacer(Modifier.width(8.dp))
         }
         if (leadingIcon != null) {
-            Icon(
+            AiModuleIcon(
                 leadingIcon,
                 null,
                 Modifier.size(16.dp),
@@ -453,7 +453,7 @@ fun AiModuleListRow(
             Spacer(Modifier.width(10.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(
+            AiModuleText(
                 text = title,
                 color = titleColor ?: colors.textPrimary,
                 fontFamily = JetBrainsMono,
@@ -461,7 +461,7 @@ fun AiModuleListRow(
                 lineHeight = 1.3.em,
             )
             if (!subtitle.isNullOrBlank()) {
-                Text(
+                AiModuleText(
                     text = subtitle,
                     color = colors.textMuted,
                     fontFamily = JetBrainsMono,
@@ -493,7 +493,7 @@ fun AiModuleChip(
             .border(1.dp, tint, RoundedCornerShape(4.dp))
             .padding(horizontal = 6.dp, vertical = 1.dp),
     ) {
-        Text(
+        AiModuleText(
             text = label,
             color = if (filled) colors.background else tint,
             fontFamily = JetBrainsMono,
@@ -520,7 +520,7 @@ fun AiModuleKeyValueRow(
             .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        AiModuleText(
             text = key,
             color = colors.textSecondary,
             fontFamily = JetBrainsMono,
@@ -528,7 +528,7 @@ fun AiModuleKeyValueRow(
             lineHeight = 1.3.em,
             modifier = Modifier.weight(0.4f),
         )
-        Text(
+        AiModuleText(
             text = value,
             color = valueColor ?: colors.textPrimary,
             fontFamily = JetBrainsMono,
@@ -592,7 +592,7 @@ fun AiModuleSpinner(
     }
     val colors = AiModuleTheme.colors
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text(
+        AiModuleText(
             text = AiModuleSpinnerFrames[index],
             color = colors.accent,
             fontFamily = JetBrainsMono,
@@ -600,7 +600,7 @@ fun AiModuleSpinner(
         )
         if (!label.isNullOrBlank()) {
             Spacer(Modifier.width(6.dp))
-            Text(
+            AiModuleText(
                 text = label,
                 color = colors.textMuted,
                 fontFamily = JetBrainsMono,
@@ -638,7 +638,7 @@ private fun AiModuleButtonImpl(
             .padding(horizontal = 14.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
+        AiModuleText(
             text = label,
             color = fg,
             fontFamily = JetBrainsMono,

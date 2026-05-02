@@ -30,7 +30,7 @@ fun AiModuleBlinkingCursor(modifier: Modifier = Modifier) {
         ),
         label = "ai-module-cursor-alpha",
     )
-    Text(
+    AiModuleText(
         text = "\u258B", // ▋
         color = AiModuleTheme.colors.accent,
         fontFamily = JetBrainsMono,

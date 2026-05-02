@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
 import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModulePillButton
-import com.glassfiles.ui.components.Text
+import com.glassfiles.ui.components.AiModuleText
 import com.glassfiles.ui.theme.AiModuleDarkColors
 import com.glassfiles.ui.theme.JetBrainsMono
 
@@ -91,7 +91,7 @@ fun ExpensiveActionWarningDialog(
         },
     ) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
+                AiModuleText(
                     when (warning.reason) {
                         ExpensiveActionReason.PrivateRepo -> Strings.aiCostWarningReasonPrivate
                         ExpensiveActionReason.MaxQualityMode -> Strings.aiCostWarningReasonMaxMode
@@ -115,7 +115,7 @@ fun ExpensiveActionWarningDialog(
                     Strings.aiCostWarningChars.replace("{n}", "~${(warning.approxContextChars / 1000)}k"),
                 )
                 Spacer(Modifier.size(2.dp))
-                Text(
+                AiModuleText(
                     Strings.aiCostWarningTransmitNote,
                     fontSize = 11.sp,
                     color = colors.textMuted,
@@ -127,14 +127,14 @@ fun ExpensiveActionWarningDialog(
                         Modifier.clickable { rememberChecked = !rememberChecked },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
+                        AiModuleText(
                             text = if (rememberChecked) "[✓]" else "[ ]",
                             color = if (rememberChecked) colors.accent else colors.textSecondary,
                             fontFamily = JetBrainsMono,
                             fontSize = 14.sp,
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(
+                        AiModuleText(
                             Strings.aiCostWarningRememberLabel,
                             fontSize = 12.sp,
                             color = colors.textPrimary,
@@ -150,14 +150,14 @@ fun ExpensiveActionWarningDialog(
 private fun LabeledRow(label: String, value: String) {
     val colors = AiModuleDarkColors
     Row(verticalAlignment = Alignment.Top) {
-        Text(
+        AiModuleText(
             label,
             fontSize = 12.sp,
             color = colors.textMuted,
             fontFamily = JetBrainsMono,
             modifier = Modifier.width(96.dp),
         )
-        Text(
+        AiModuleText(
             value,
             fontSize = 12.sp,
             color = colors.textPrimary,

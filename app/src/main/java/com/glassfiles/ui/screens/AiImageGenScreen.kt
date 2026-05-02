@@ -68,9 +68,9 @@ import com.glassfiles.data.ai.models.AiProviderId
 import com.glassfiles.data.ai.providers.AiProviders
 import com.glassfiles.ui.components.AiImageViewer
 import com.glassfiles.ui.components.AiPickerChip
-import com.glassfiles.ui.components.Icon
-import com.glassfiles.ui.components.IconButton
-import com.glassfiles.ui.components.Text
+import com.glassfiles.ui.components.AiModuleIcon
+import com.glassfiles.ui.components.AiModuleIconButton
+import com.glassfiles.ui.components.AiModuleText
 import com.glassfiles.ui.theme.AiModuleSurface
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
@@ -272,18 +272,18 @@ private fun AiImageGenScreenInner(onBack: () -> Unit) {
             Modifier.fillMaxWidth().padding(top = 44.dp, start = 4.dp, end = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = colors.textPrimary)
+            AiModuleIconButton(onClick = onBack) {
+                AiModuleIcon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(20.dp), tint = colors.textPrimary)
             }
-            Text(
+            AiModuleText(
                 Strings.aiImageGen,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.textPrimary,
             )
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { showHistory = true }) {
-                Icon(
+            AiModuleIconButton(onClick = { showHistory = true }) {
+                AiModuleIcon(
                     Icons.Rounded.History,
                     null,
                     Modifier.size(20.dp),
@@ -297,7 +297,7 @@ private fun AiImageGenScreenInner(onBack: () -> Unit) {
                 Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 24.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
+                AiModuleText(
                     Strings.aiImageNoModels,
                     fontSize = 13.sp,
                     color = colors.textSecondary,
@@ -358,7 +358,7 @@ private fun AiImageGenScreenInner(onBack: () -> Unit) {
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
+                AiModuleText(
                     Strings.aiImagePrompt.uppercase(),
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
@@ -373,7 +373,7 @@ private fun AiImageGenScreenInner(onBack: () -> Unit) {
                     cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.accent),
                     decorationBox = { inner ->
                         if (prompt.text.isEmpty()) {
-                            Text(
+                            AiModuleText(
                                 Strings.aiImagePromptHint,
                                 fontSize = 14.sp,
                                 color = colors.textSecondary,
@@ -388,7 +388,7 @@ private fun AiImageGenScreenInner(onBack: () -> Unit) {
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (genError != null) {
-                        Text(
+                        AiModuleText(
                             genError!!,
                             fontSize = 12.sp,
                             color = colors.error,
@@ -421,7 +421,7 @@ private fun AiImageGenScreenInner(onBack: () -> Unit) {
                 Modifier.fillMaxSize().padding(32.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
+                AiModuleText(
                     Strings.aiImageEmpty,
                     fontSize = 13.sp,
                     color = colors.textSecondary,
@@ -439,9 +439,9 @@ private fun AiImageGenScreenInner(onBack: () -> Unit) {
                             Modifier.fillMaxWidth().padding(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("...", color = colors.accent, fontFamily = JetBrainsMono, fontSize = 13.sp)
+                            AiModuleText("...", color = colors.accent, fontFamily = JetBrainsMono, fontSize = 13.sp)
                             Spacer(Modifier.size(8.dp))
-                            Text(
+                            AiModuleText(
                                 Strings.aiImageGenerating,
                                 fontSize = 13.sp,
                                 color = colors.textSecondary,
@@ -533,31 +533,31 @@ private fun ImageHistorySheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(
+                    AiModuleText(
                         Strings.aiHistoryImageTitle,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = colors.textPrimary,
                     )
-                    Text(
+                    AiModuleText(
                         "${items.size} ${Strings.aiHistoryCount}",
                         fontSize = 11.sp,
                         color = colors.textSecondary,
                     )
                 }
                 if (items.isNotEmpty()) {
-                    IconButton(onClick = onClearAll) {
-                        Icon(Icons.Rounded.DeleteSweep, null, Modifier.size(20.dp), tint = colors.textSecondary)
+                    AiModuleIconButton(onClick = onClearAll) {
+                        AiModuleIcon(Icons.Rounded.DeleteSweep, null, Modifier.size(20.dp), tint = colors.textSecondary)
                     }
                 }
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = colors.textSecondary)
+                AiModuleIconButton(onClick = onDismiss) {
+                    AiModuleIcon(Icons.Rounded.Close, null, Modifier.size(20.dp), tint = colors.textSecondary)
                 }
             }
             Spacer(Modifier.height(8.dp))
             if (items.isEmpty()) {
                 Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
-                    Text(Strings.aiHistoryEmpty, fontSize = 13.sp, color = colors.textSecondary)
+                    AiModuleText(Strings.aiHistoryEmpty, fontSize = 13.sp, color = colors.textSecondary)
                 }
             } else {
                 LazyColumn(
@@ -586,20 +586,20 @@ private fun ImageHistorySheet(
                                     .background(colors.surface),
                             )
                             Column(Modifier.weight(1f)) {
-                                Text(
+                                AiModuleText(
                                     item.prompt.takeIf { it.isNotBlank() } ?: item.model.displayName,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = colors.textPrimary,
                                     maxLines = 2,
                                 )
-                                Text(
+                                AiModuleText(
                                     item.model.displayName,
                                     fontSize = 11.sp,
                                     color = colors.textSecondary,
                                     maxLines = 1,
                                 )
-                                Text(
+                                AiModuleText(
                                     sdf.format(java.util.Date(item.historyId)),
                                     fontSize = 10.sp,
                                     color = colors.textSecondary,
@@ -607,11 +607,11 @@ private fun ImageHistorySheet(
                                     maxLines = 1,
                                 )
                             }
-                            IconButton(
+                            AiModuleIconButton(
                                 onClick = { onDelete(item.historyId) },
                                 modifier = Modifier.size(28.dp),
                             ) {
-                                Icon(Icons.Rounded.Close, null, Modifier.size(16.dp), tint = colors.textSecondary)
+                                AiModuleIcon(Icons.Rounded.Close, null, Modifier.size(16.dp), tint = colors.textSecondary)
                             }
                         }
                     }
@@ -640,14 +640,14 @@ private fun CollapsedPromptBar(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
+        AiModuleIcon(
             Icons.Rounded.Edit,
             null,
             Modifier.size(14.dp),
             tint = colors.textSecondary,
         )
         Spacer(Modifier.size(8.dp))
-        Text(
+        AiModuleText(
             text = prompt.ifBlank { Strings.aiImagePromptHint },
             fontSize = 13.sp,
             color = if (prompt.isBlank()) colors.textSecondary else colors.textPrimary,
@@ -677,10 +677,10 @@ private fun GenerateButton(enabled: Boolean, generating: Boolean, onClick: () ->
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (generating) {
-            Text("...", color = fg, fontFamily = JetBrainsMono, fontSize = 12.sp)
+            AiModuleText("...", color = fg, fontFamily = JetBrainsMono, fontSize = 12.sp)
             Spacer(Modifier.size(8.dp))
         }
-        Text(
+        AiModuleText(
             (if (generating) Strings.aiImageGenerating else Strings.aiImageGenerate),
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
@@ -733,9 +733,9 @@ private fun ImageResultCard(
             Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Rounded.Image, null, Modifier.size(14.dp), tint = colors.textSecondary)
+            AiModuleIcon(Icons.Rounded.Image, null, Modifier.size(14.dp), tint = colors.textSecondary)
             Spacer(Modifier.size(6.dp))
-            Text(
+            AiModuleText(
                 item.model.displayName,
                 fontSize = 11.sp,
                 fontFamily = JetBrainsMono,
@@ -743,7 +743,7 @@ private fun ImageResultCard(
                 modifier = Modifier.weight(1f),
             )
             if (savingError != null) {
-                Text(
+                AiModuleText(
                     savingError!!.take(40),
                     fontSize = 10.sp,
                     color = colors.error,
@@ -795,7 +795,7 @@ private fun ImageResultCard(
             )
         }
         if (item.prompt.isNotBlank()) {
-            Text(
+            AiModuleText(
                 item.prompt,
                 fontSize = 11.sp,
                 color = colors.textSecondary,
@@ -826,8 +826,8 @@ private fun ActionPill(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(icon, null, Modifier.size(14.dp), tint = fg)
-        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = fg)
+        AiModuleIcon(icon, null, Modifier.size(14.dp), tint = fg)
+        AiModuleText(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = fg)
     }
 }
 

@@ -39,8 +39,8 @@ import com.glassfiles.data.Strings
 import com.glassfiles.ui.components.AiModuleChip
 import com.glassfiles.ui.components.AiModuleHairline
 import com.glassfiles.ui.components.AiModuleScreenScaffold
-import com.glassfiles.ui.components.Icon
-import com.glassfiles.ui.components.Text
+import com.glassfiles.ui.components.AiModuleIcon
+import com.glassfiles.ui.components.AiModuleText
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
 
@@ -111,12 +111,12 @@ private fun AiHubRow(item: AiHubItem) {
             Modifier.size(34.dp).clip(CircleShape).background(colors.surfaceElevated),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(item.icon, null, Modifier.size(17.dp), tint = colors.accent)
+            AiModuleIcon(item.icon, null, Modifier.size(17.dp), tint = colors.accent)
         }
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
+                AiModuleText(
                     item.title,
                     fontSize = 14.sp,
                     fontFamily = JetBrainsMono,
@@ -128,7 +128,7 @@ private fun AiHubRow(item: AiHubItem) {
                     AiHubSoonPill()
                 }
             }
-            Text(
+            AiModuleText(
                 item.subtitle,
                 fontSize = 11.sp,
                 fontFamily = JetBrainsMono,
@@ -136,7 +136,7 @@ private fun AiHubRow(item: AiHubItem) {
             )
         }
         if (!item.soon) {
-            Icon(
+            AiModuleIcon(
                 Icons.Rounded.ChevronRight,
                 null,
                 Modifier.size(18.dp),

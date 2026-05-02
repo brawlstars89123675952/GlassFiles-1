@@ -38,7 +38,7 @@ import com.glassfiles.ui.components.AiModuleHairline
 import com.glassfiles.ui.components.AiModulePillButton
 import com.glassfiles.ui.components.AiModuleScreenScaffold
 import com.glassfiles.ui.components.AiModuleSectionLabel
-import com.glassfiles.ui.components.Text
+import com.glassfiles.ui.components.AiModuleText
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.Dispatchers
@@ -80,7 +80,7 @@ fun AiSettingsScreen(onBack: () -> Unit) {
             item {
                 Column {
                     SettingsSectionHeader(Strings.aiSettingsSyntaxTheme)
-                    Text(
+                    AiModuleText(
                         "// " + Strings.aiSettingsSyntaxThemeHint,
                         fontSize = 11.sp,
                         fontFamily = JetBrainsMono,
@@ -165,7 +165,7 @@ fun AiSettingsScreen(onBack: () -> Unit) {
             item {
                 Column(Modifier.padding(horizontal = 12.dp)) {
                     SettingsSectionHeader(Strings.aiSettingsClearCache, withPadding = false)
-                    Text(
+                    AiModuleText(
                         "// " + Strings.aiSettingsClearCacheHint,
                         fontSize = 11.sp,
                         fontFamily = JetBrainsMono,
@@ -216,7 +216,7 @@ private fun TerminalStepper(
         StepperCell("-", enabled = value > min) {
             onChange((value - 1).coerceIn(min, max))
         }
-        Text(
+        AiModuleText(
             "$value sp",
             modifier = Modifier.weight(1f),
             fontSize = 13.sp,
@@ -233,7 +233,7 @@ private fun TerminalStepper(
 @Composable
 private fun StepperCell(label: String, enabled: Boolean, onClick: () -> Unit) {
     val colors = AiModuleTheme.colors
-    Text(
+    AiModuleText(
         label,
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
@@ -257,7 +257,7 @@ private fun SettingsSectionHeader(text: String, withPadding: Boolean = true) {
             .padding(horizontal = if (withPadding) 12.dp else 0.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        AiModuleText(
             text = "> ",
             color = colors.accent,
             fontFamily = JetBrainsMono,
@@ -294,14 +294,14 @@ private fun SyntaxThemeCard(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(
+        AiModuleText(
             text = if (selected) "[✓]" else "[ ]",
             color = if (selected) colors.accent else theme.plain,
             fontFamily = JetBrainsMono,
             fontSize = 13.sp,
         )
         Column(Modifier.weight(1f)) {
-            Text(
+            AiModuleText(
                 theme.displayName,
                 color = theme.plain,
                 fontSize = 13.sp,
@@ -310,10 +310,10 @@ private fun SyntaxThemeCard(
             )
             Spacer(Modifier.height(2.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("fun", color = theme.keyword, fontSize = 11.sp, fontFamily = JetBrainsMono)
-                Text("\"hi\"", color = theme.string, fontSize = 11.sp, fontFamily = JetBrainsMono)
-                Text("42", color = theme.number, fontSize = 11.sp, fontFamily = JetBrainsMono)
-                Text("// note", color = theme.comment, fontSize = 11.sp, fontFamily = JetBrainsMono)
+                AiModuleText("fun", color = theme.keyword, fontSize = 11.sp, fontFamily = JetBrainsMono)
+                AiModuleText("\"hi\"", color = theme.string, fontSize = 11.sp, fontFamily = JetBrainsMono)
+                AiModuleText("42", color = theme.number, fontSize = 11.sp, fontFamily = JetBrainsMono)
+                AiModuleText("// note", color = theme.comment, fontSize = 11.sp, fontFamily = JetBrainsMono)
             }
         }
     }

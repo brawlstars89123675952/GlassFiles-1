@@ -30,7 +30,7 @@ import com.glassfiles.data.Strings
 import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModulePillButton
 import com.glassfiles.ui.components.AiModuleTextField
-import com.glassfiles.ui.components.Text
+import com.glassfiles.ui.components.AiModuleText
 import com.glassfiles.ui.theme.AiModuleDarkColors
 import com.glassfiles.ui.theme.JetBrainsMono
 
@@ -69,14 +69,14 @@ fun SystemPromptOverrideDialog(
         },
     ) {
             Column {
-                Text(
+                AiModuleText(
                     repoFullName,
                     fontSize = 11.sp,
                     color = colors.textMuted,
                     fontFamily = JetBrainsMono,
                 )
                 Spacer(Modifier.height(8.dp))
-                Text(
+                AiModuleText(
                     Strings.aiAgentSystemPromptHint,
                     fontSize = 12.sp,
                     color = colors.textSecondary,
@@ -103,7 +103,7 @@ fun SystemPromptOverrideDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(
+                        AiModuleText(
                             Strings.aiAgentPlanFirstLabel,
                             fontSize = 13.sp,
                             color = colors.textPrimary,
@@ -111,7 +111,7 @@ fun SystemPromptOverrideDialog(
                             fontWeight = FontWeight.Medium,
                         )
                         Spacer(Modifier.height(2.dp))
-                        Text(
+                        AiModuleText(
                             Strings.aiAgentPlanFirstHint,
                             fontSize = 11.sp,
                             color = colors.textMuted,
@@ -120,7 +120,7 @@ fun SystemPromptOverrideDialog(
                         )
                     }
                     Spacer(Modifier.width(12.dp))
-                    Text(
+                    AiModuleText(
                         text = if (planFirst) "[on]" else "[off]",
                         color = if (planFirst) colors.accent else colors.textSecondary,
                         fontFamily = JetBrainsMono,

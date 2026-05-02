@@ -113,14 +113,14 @@ import com.glassfiles.ui.components.AiModuleCard
 import com.glassfiles.ui.components.AiModuleChip
 import com.glassfiles.ui.components.AiModuleCodeBlock
 import com.glassfiles.ui.components.AiModuleHairline
-import com.glassfiles.ui.components.Icon
-import com.glassfiles.ui.components.IconButton
+import com.glassfiles.ui.components.AiModuleIcon
+import com.glassfiles.ui.components.AiModuleIconButton
 import com.glassfiles.ui.components.AiModuleListRow
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModulePillButton
 import com.glassfiles.ui.components.AiModuleScreenScaffold
 import com.glassfiles.ui.components.AiModuleSectionLabel
-import com.glassfiles.ui.components.Text
+import com.glassfiles.ui.components.AiModuleText
 import com.glassfiles.ui.theme.AiModuleSurface
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
@@ -232,7 +232,7 @@ private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(
+            AiModuleText(
                 "Add at least one provider key to continue.",
                 color = colors.textSecondary,
                 fontFamily = JetBrainsMono,
@@ -246,7 +246,7 @@ private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
                 placeholder = "AIza...",
                 singleLine = true,
             )
-            Text(
+            AiModuleText(
                 "aistudio.google.com/apikey",
                 color = colors.textMuted,
                 fontFamily = JetBrainsMono,
@@ -266,7 +266,7 @@ private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
                 placeholder = "sk-...",
                 singleLine = true,
             )
-            Text(
+            AiModuleText(
                 "bailian.console.alibabacloud.com",
                 color = colors.textMuted,
                 fontFamily = JetBrainsMono,
@@ -319,8 +319,8 @@ private fun ChatHistoryList(
                     accent = true,
                 )
                 if (sessions.isNotEmpty()) {
-                    IconButton(onClick = onDelAll, modifier = Modifier.size(36.dp)) {
-                        Icon(
+                    AiModuleIconButton(onClick = onDelAll, modifier = Modifier.size(36.dp)) {
+                        AiModuleIcon(
                             Icons.Rounded.DeleteSweep,
                             contentDescription = "clear all",
                             modifier = Modifier.size(18.dp),
@@ -343,7 +343,7 @@ private fun ChatHistoryList(
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Search, null, Modifier.size(14.dp), tint = colors.textMuted)
+                        AiModuleIcon(Icons.Rounded.Search, null, Modifier.size(14.dp), tint = colors.textMuted)
                         Spacer(Modifier.width(8.dp))
                         Box(Modifier.weight(1f)) {
                             BasicTextField(
@@ -358,7 +358,7 @@ private fun ChatHistoryList(
                                 singleLine = true,
                             )
                             if (searchQ.isEmpty()) {
-                                Text(
+                                AiModuleText(
                                     "search chats…",
                                     color = colors.textMuted,
                                     fontFamily = JetBrainsMono,
@@ -377,7 +377,7 @@ private fun ChatHistoryList(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text(
+                    AiModuleText(
                         text = if (searchQ.isNotBlank()) "no matches" else "> no sessions yet",
                         color = colors.textSecondary,
                         fontFamily = JetBrainsMono,
@@ -385,7 +385,7 @@ private fun ChatHistoryList(
                     )
                     if (searchQ.isBlank()) {
                         Spacer(Modifier.height(6.dp))
-                        Text(
+                        AiModuleText(
                             text = "tap [ new ] above to start.",
                             color = colors.textMuted,
                             fontFamily = JetBrainsMono,
@@ -409,8 +409,8 @@ private fun ChatHistoryList(
                                 (provider?.let { "  ·  ${it.label}" } ?: ""),
                             onClick = { onOpen(s) },
                             trailing = {
-                                IconButton(onClick = { onDel(s) }, modifier = Modifier.size(28.dp)) {
-                                    Icon(
+                                AiModuleIconButton(onClick = { onDel(s) }, modifier = Modifier.size(28.dp)) {
+                                    AiModuleIcon(
                                         Icons.Rounded.Close,
                                         contentDescription = "delete",
                                         modifier = Modifier.size(14.dp),
@@ -823,13 +823,13 @@ private fun ChatView(
                     ) {
                         val pc = if (provider.isQwen) colors.warning else colors.accent
                         Box(Modifier.size(6.dp).clip(RoundedCornerShape(50)).background(pc))
-                        Text(
+                        AiModuleText(
                             provider.label.removePrefix("Gemini ").removePrefix("Qwen "),
                             color = colors.textPrimary,
                             fontFamily = JetBrainsMono,
                             fontSize = 11.sp,
                         )
-                        Icon(
+                        AiModuleIcon(
                             Icons.Rounded.KeyboardArrowDown,
                             null,
                             Modifier.size(12.dp),
@@ -837,16 +837,16 @@ private fun ChatView(
                         )
                     }
                     AiChatUsageChip(usageEstimate)
-                    IconButton(onClick = { exportChat() }, modifier = Modifier.size(32.dp)) {
-                        Icon(
+                    AiModuleIconButton(onClick = { exportChat() }, modifier = Modifier.size(32.dp)) {
+                        AiModuleIcon(
                             Icons.Rounded.FileDownload,
                             null,
                             Modifier.size(16.dp),
                             tint = colors.textSecondary,
                         )
                     }
-                    IconButton(onClick = { showSettings = true }, modifier = Modifier.size(32.dp)) {
-                        Icon(
+                    AiModuleIconButton(onClick = { showSettings = true }, modifier = Modifier.size(32.dp)) {
+                        AiModuleIcon(
                             Icons.Rounded.Settings,
                             null,
                             Modifier.size(16.dp),
@@ -921,7 +921,7 @@ private fun ChatView(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
+                        AiModuleText(
                             "⠋ thinking...",
                             color = colors.textMuted,
                             fontFamily = JetBrainsMono,
@@ -968,27 +968,27 @@ private fun ChatView(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (attachedImage != null) {
-                    Icon(Icons.Rounded.AddPhotoAlternate, null, Modifier.size(14.dp), tint = colors.accent)
-                    Text(
+                    AiModuleIcon(Icons.Rounded.AddPhotoAlternate, null, Modifier.size(14.dp), tint = colors.accent)
+                    AiModuleText(
                         "image attached",
                         color = colors.textSecondary,
                         fontFamily = JetBrainsMono,
                         fontSize = 11.sp,
                         modifier = Modifier.weight(1f),
                     )
-                    IconButton(onClick = { attachedImage = null }, modifier = Modifier.size(20.dp)) {
-                        Icon(Icons.Rounded.Close, null, Modifier.size(12.dp), tint = colors.textMuted)
+                    AiModuleIconButton(onClick = { attachedImage = null }, modifier = Modifier.size(20.dp)) {
+                        AiModuleIcon(Icons.Rounded.Close, null, Modifier.size(12.dp), tint = colors.textMuted)
                     }
                 }
                 if (attachedFile != null) {
-                    Icon(
+                    AiModuleIcon(
                         if (attachedZip != null) Icons.Rounded.FolderZip else Icons.Rounded.Description,
                         null,
                         Modifier.size(14.dp),
                         tint = if (attachedZip != null) colors.warning else colors.accent,
                     )
                     Column(Modifier.weight(1f)) {
-                        Text(
+                        AiModuleText(
                             attachedFile!!.first,
                             color = colors.textSecondary,
                             fontFamily = JetBrainsMono,
@@ -997,7 +997,7 @@ private fun ChatView(
                             overflow = TextOverflow.Ellipsis,
                         )
                         if (attachedZip != null) {
-                            Text(
+                            AiModuleText(
                                 attachedFile!!.second,
                                 color = colors.textMuted,
                                 fontFamily = JetBrainsMono,
@@ -1005,11 +1005,11 @@ private fun ChatView(
                             )
                         }
                     }
-                    IconButton(
+                    AiModuleIconButton(
                         onClick = { attachedFile = null; attachedZip = null },
                         modifier = Modifier.size(20.dp),
                     ) {
-                        Icon(Icons.Rounded.Close, null, Modifier.size(12.dp), tint = colors.textMuted)
+                        AiModuleIcon(Icons.Rounded.Close, null, Modifier.size(12.dp), tint = colors.textMuted)
                     }
                 }
             }
@@ -1098,7 +1098,7 @@ private fun AiChatUsageChip(estimate: AiUsageEstimate) {
             append(AiUsageAccounting.formatUsd(it, estimated = estimate.estimated))
         }
     }
-    Text(
+    AiModuleText(
         text = text,
         color = colors.textMuted,
         fontFamily = JetBrainsMono,
@@ -1148,14 +1148,14 @@ private fun EmptyChatBanner(
             .padding(top = 24.dp, start = 4.dp, end = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(
+        AiModuleText(
             "> ai/${provider.name.lowercase()} ready",
             color = if (provider.isQwen) colors.warning else colors.accent,
             fontFamily = JetBrainsMono,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
         )
-        Text(
+        AiModuleText(
             provider.desc,
             color = colors.textMuted,
             fontFamily = JetBrainsMono,
@@ -1163,7 +1163,7 @@ private fun EmptyChatBanner(
             lineHeight = 1.4.em,
         )
         if (currentFolder != null) {
-            Text(
+            AiModuleText(
                 "context: ${currentFolder.substringAfterLast("/")}",
                 color = colors.textSecondary,
                 fontFamily = JetBrainsMono,
@@ -1217,7 +1217,7 @@ private fun TerminalChatMessage(
         verticalAlignment = Alignment.Top,
     ) {
         Box(Modifier.width(20.dp).padding(top = 2.dp), contentAlignment = Alignment.TopStart) {
-            Text(
+            AiModuleText(
                 glyph,
                 color = glyphColor,
                 fontFamily = JetBrainsMono,
@@ -1261,8 +1261,8 @@ private fun TerminalChatMessage(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Rounded.AttachFile, null, Modifier.size(10.dp), tint = colors.textMuted)
-                    Text(
+                    AiModuleIcon(Icons.Rounded.AttachFile, null, Modifier.size(10.dp), tint = colors.textMuted)
+                    AiModuleText(
                         "file attached",
                         color = colors.textMuted,
                         fontFamily = JetBrainsMono,
@@ -1311,7 +1311,7 @@ private fun TerminalChatMessage(
             } else if (!isUser) {
                 TerminalMarkdownText(content)
             } else {
-                Text(
+                AiModuleText(
                     text = content,
                     color = colors.textPrimary,
                     fontFamily = JetBrainsMono,
@@ -1355,7 +1355,7 @@ private fun MsgActionButton(label: String, onClick: () -> Unit, destructive: Boo
             .clickable { onClick() }
             .padding(horizontal = 6.dp, vertical = 3.dp),
     ) {
-        Text(
+        AiModuleText(
             text = "[ $label ]",
             color = tint,
             fontFamily = JetBrainsMono,
@@ -1375,7 +1375,7 @@ private fun TerminalMarkdownText(text: String) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         for (l in lines) {
             when {
-                l.startsWith("### ") -> Text(
+                l.startsWith("### ") -> AiModuleText(
                     l.removePrefix("### "),
                     color = colors.textPrimary,
                     fontFamily = JetBrainsMono,
@@ -1383,7 +1383,7 @@ private fun TerminalMarkdownText(text: String) {
                     fontWeight = FontWeight.Bold,
                     lineHeight = 1.35.em,
                 )
-                l.startsWith("## ") -> Text(
+                l.startsWith("## ") -> AiModuleText(
                     l.removePrefix("## "),
                     color = colors.textPrimary,
                     fontFamily = JetBrainsMono,
@@ -1391,7 +1391,7 @@ private fun TerminalMarkdownText(text: String) {
                     fontWeight = FontWeight.Bold,
                     lineHeight = 1.35.em,
                 )
-                l.startsWith("# ") -> Text(
+                l.startsWith("# ") -> AiModuleText(
                     l.removePrefix("# "),
                     color = colors.textPrimary,
                     fontFamily = JetBrainsMono,
@@ -1400,13 +1400,13 @@ private fun TerminalMarkdownText(text: String) {
                     lineHeight = 1.35.em,
                 )
                 l.startsWith("- ") || l.startsWith("* ") -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
+                    AiModuleText(
                         "•",
                         color = colors.accent,
                         fontFamily = JetBrainsMono,
                         fontSize = 14.sp,
                     )
-                    Text(
+                    AiModuleText(
                         text = inlineMd(l.drop(2), colors.textPrimary, colors.error, colors.surface),
                         fontFamily = JetBrainsMono,
                         fontSize = 14.sp,
@@ -1414,14 +1414,14 @@ private fun TerminalMarkdownText(text: String) {
                     )
                 }
                 l.matches(Regex("^\\d+\\.\\s.*")) -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
+                    AiModuleText(
                         l.substringBefore(".") + ".",
                         color = colors.accent,
                         fontFamily = JetBrainsMono,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                     )
-                    Text(
+                    AiModuleText(
                         text = inlineMd(l.substringAfter(". "), colors.textPrimary, colors.error, colors.surface),
                         fontFamily = JetBrainsMono,
                         fontSize = 14.sp,
@@ -1431,7 +1431,7 @@ private fun TerminalMarkdownText(text: String) {
                 l.startsWith("> ") -> Row {
                     Box(Modifier.width(2.dp).height(20.dp).background(colors.accentDim))
                     Spacer(Modifier.width(8.dp))
-                    Text(
+                    AiModuleText(
                         text = inlineMd(l.removePrefix("> "), colors.textSecondary, colors.error, colors.surface),
                         fontFamily = JetBrainsMono,
                         fontSize = 13.sp,
@@ -1440,7 +1440,7 @@ private fun TerminalMarkdownText(text: String) {
                     )
                 }
                 l.isBlank() -> Spacer(Modifier.height(4.dp))
-                else -> Text(
+                else -> AiModuleText(
                     text = inlineMd(l, colors.textPrimary, colors.error, colors.surface),
                     fontFamily = JetBrainsMono,
                     fontSize = 14.sp,
@@ -1516,14 +1516,14 @@ private fun TerminalChatInput(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            IconButton(onClick = onPickFile, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Rounded.AttachFile, null, Modifier.size(16.dp), tint = colors.textSecondary)
+            AiModuleIconButton(onClick = onPickFile, modifier = Modifier.size(36.dp)) {
+                AiModuleIcon(Icons.Rounded.AttachFile, null, Modifier.size(16.dp), tint = colors.textSecondary)
             }
-            IconButton(onClick = onPickCamera, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Rounded.CameraAlt, null, Modifier.size(16.dp), tint = colors.textSecondary)
+            AiModuleIconButton(onClick = onPickCamera, modifier = Modifier.size(36.dp)) {
+                AiModuleIcon(Icons.Rounded.CameraAlt, null, Modifier.size(16.dp), tint = colors.textSecondary)
             }
-            IconButton(onClick = onVoice, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Rounded.Mic, null, Modifier.size(16.dp), tint = colors.textSecondary)
+            AiModuleIconButton(onClick = onVoice, modifier = Modifier.size(36.dp)) {
+                AiModuleIcon(Icons.Rounded.Mic, null, Modifier.size(16.dp), tint = colors.textSecondary)
             }
             Box(
                 Modifier
@@ -1534,7 +1534,7 @@ private fun TerminalChatInput(
                     .padding(horizontal = 10.dp, vertical = 8.dp),
             ) {
                 Row(verticalAlignment = Alignment.Top) {
-                    Text(
+                    AiModuleText(
                         ">",
                         color = colors.accent,
                         fontFamily = JetBrainsMono,
@@ -1559,7 +1559,7 @@ private fun TerminalChatInput(
                                 .heightIn(min = 22.dp, max = 140.dp),
                         )
                         if (value.isEmpty()) {
-                            Text(
+                            AiModuleText(
                                 "message…",
                                 color = colors.textMuted,
                                 fontFamily = JetBrainsMono,
@@ -1570,16 +1570,16 @@ private fun TerminalChatInput(
                 }
             }
             if (isLoading) {
-                IconButton(onClick = onStop, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Stop, null, Modifier.size(18.dp), tint = colors.warning)
+                AiModuleIconButton(onClick = onStop, modifier = Modifier.size(36.dp)) {
+                    AiModuleIcon(Icons.Rounded.Stop, null, Modifier.size(18.dp), tint = colors.warning)
                 }
             } else {
-                IconButton(
+                AiModuleIconButton(
                     onClick = { if (canSend) onSend() },
                     enabled = canSend,
                     modifier = Modifier.size(36.dp),
                 ) {
-                    Icon(
+                    AiModuleIcon(
                         Icons.AutoMirrored.Rounded.Send,
                         null,
                         Modifier.size(16.dp),
@@ -1621,7 +1621,7 @@ private fun TerminalModelPicker(
                 cats.forEach { (cat, models) ->
                     val cc = if (models.first().isQwen) colors.warning else colors.accent
                     item {
-                        Text(
+                        AiModuleText(
                             cat.uppercase(),
                             color = cc,
                             fontFamily = JetBrainsMono,
@@ -1644,7 +1644,7 @@ private fun TerminalModelPicker(
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     if (p.supportsVision) AiModuleChip("vision", color = colors.textMuted)
                                     if (p.supportsFiles) AiModuleChip("files", color = cc)
-                                    if (selected) Icon(
+                                    if (selected) AiModuleIcon(
                                         Icons.Rounded.Check,
                                         null,
                                         Modifier.size(14.dp),
@@ -1656,7 +1656,7 @@ private fun TerminalModelPicker(
                     }
                 }
                 if (!geminiAvailable) item {
-                    Text(
+                    AiModuleText(
                         "add gemini key in [ settings ]",
                         color = colors.textMuted,
                         fontFamily = JetBrainsMono,
@@ -1665,7 +1665,7 @@ private fun TerminalModelPicker(
                     )
                 }
                 if (!qwenAvailable) item {
-                    Text(
+                    AiModuleText(
                         "add qwen key in [ settings ]",
                         color = colors.textMuted,
                         fontFamily = JetBrainsMono,
@@ -1765,7 +1765,7 @@ private fun TerminalMonoField(
                 .heightIn(min = minHeight),
         )
         if (value.isEmpty()) {
-            Text(
+            AiModuleText(
                 placeholder,
                 color = colors.textMuted,
                 fontFamily = JetBrainsMono,

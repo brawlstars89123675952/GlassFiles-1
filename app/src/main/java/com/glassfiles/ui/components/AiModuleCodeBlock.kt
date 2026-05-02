@@ -87,7 +87,7 @@ fun AiModuleCodeBlock(
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
-            Text(
+            AiModuleText(
                 text = highlighted,
                 fontSize = AiModuleTheme.type.code,
                 fontFamily = JetBrainsMono,
@@ -120,7 +120,7 @@ private fun AiModuleCodeHeader(
             .padding(start = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        AiModuleText(
             display,
             fontSize = AiModuleTheme.type.label,
             color = colors.textSecondary,
@@ -129,16 +129,16 @@ private fun AiModuleCodeHeader(
                 .weight(1f)
                 .padding(vertical = 8.dp),
         )
-        IconButton(onClick = onCopy, modifier = Modifier.size(36.dp)) {
-            Icon(
+        AiModuleIconButton(onClick = onCopy, modifier = Modifier.size(36.dp)) {
+            AiModuleIcon(
                 Icons.Rounded.ContentCopy,
                 contentDescription = "copy",
                 modifier = Modifier.size(16.dp),
                 tint = colors.textSecondary,
             )
         }
-        IconButton(onClick = onExpand, modifier = Modifier.size(36.dp)) {
-            Icon(
+        AiModuleIconButton(onClick = onExpand, modifier = Modifier.size(36.dp)) {
+            AiModuleIcon(
                 Icons.Rounded.OpenInFull,
                 contentDescription = "expand",
                 modifier = Modifier.size(16.dp),
@@ -174,7 +174,7 @@ private fun AiModuleFullscreenCodeView(
                 .padding(start = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
+            AiModuleText(
                 buildString {
                     append(lang.ifBlank { "code" }.replaceFirstChar { it.uppercase() })
                     if (!filePath.isNullOrBlank()) {
@@ -186,16 +186,16 @@ private fun AiModuleFullscreenCodeView(
                 fontFamily = JetBrainsMono,
                 modifier = Modifier.weight(1f).padding(vertical = 10.dp),
             )
-            IconButton(onClick = { copyCodeToClipboard(context, text) }, modifier = Modifier.size(40.dp)) {
-                Icon(
+            AiModuleIconButton(onClick = { copyCodeToClipboard(context, text) }, modifier = Modifier.size(40.dp)) {
+                AiModuleIcon(
                     Icons.Rounded.ContentCopy,
                     contentDescription = "copy",
                     modifier = Modifier.size(18.dp),
                     tint = colors.textSecondary,
                 )
             }
-            IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
-                Icon(
+            AiModuleIconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
+                AiModuleIcon(
                     Icons.Rounded.Close,
                     contentDescription = "close",
                     modifier = Modifier.size(18.dp),
@@ -210,7 +210,7 @@ private fun AiModuleFullscreenCodeView(
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
-            Text(
+            AiModuleText(
                 text = highlighted,
                 fontSize = AiModuleTheme.type.code,
                 fontFamily = JetBrainsMono,

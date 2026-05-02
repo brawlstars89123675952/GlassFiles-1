@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.sp
 import com.glassfiles.data.ai.usage.AiUsageAccounting
 import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModulePillButton
-import com.glassfiles.ui.components.Text
+import com.glassfiles.ui.components.AiModuleText
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
 
@@ -65,14 +65,14 @@ fun AiCostPreviewDialog(
         },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
+            AiModuleText(
                 text = "this request is expected to cost",
                 fontFamily = JetBrainsMono,
                 fontSize = 12.sp,
                 color = colors.textMuted,
                 lineHeight = 1.4.em,
             )
-            Text(
+            AiModuleText(
                 text = AiUsageAccounting.formatUsd(estimatedCostUsd, estimated = true) +
                     " · " +
                     AiUsageAccounting.formatTokens(estimatedTokens, estimated = true) +
@@ -82,7 +82,7 @@ fun AiCostPreviewDialog(
                 fontSize = 16.sp,
                 color = colors.warning,
             )
-            Text(
+            AiModuleText(
                 text = "your threshold: " +
                     AiUsageAccounting.formatUsd(thresholdUsd) +
                     "  ·  set in Settings → AI Module",
