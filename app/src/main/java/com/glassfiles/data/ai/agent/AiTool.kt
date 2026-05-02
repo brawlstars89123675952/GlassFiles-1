@@ -29,6 +29,34 @@ data class AiTool(
  * [GitHubToolExecutor]; memory tools operate on app-owned local files.
  */
 object AgentTools {
+    val TOOL_SEARCH = AiTool(
+        name = "tool_search",
+        description = "Search the available agent tool registry by name, domain, kind, or capability. Read-only discovery tool.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("query", obj {
+                    put("type", "string")
+                    put("description", "Search text, e.g. archive, pdf, duplicate, github public, terminal.")
+                })
+                put("domain", obj {
+                    put("type", "string")
+                    put("description", "Optional domain filter, e.g. LOCAL_FILE, ARCHIVE, WEB, REPOSITORY, SKILL.")
+                })
+                put("include_deferred", obj {
+                    put("type", "boolean")
+                    put("description", "Include heavy/deferred tools in the result.")
+                })
+                put("limit", obj {
+                    put("type", "integer")
+                    put("description", "Maximum number of results, default 12.")
+                })
+            })
+            put("required", arr("query"))
+        },
+        readOnly = true,
+    )
+
     val ARTIFACT_WRITE = AiTool(
         name = "artifact_write",
         description = "Create a file attachment in the current chat. Use this in chat-only mode when the user asks you to produce a downloadable file.",
@@ -1051,6 +1079,7 @@ object AgentTools {
 
     /** All tools, in canonical order. */
     val ALL: List<AiTool> = listOf(
+        TOOL_SEARCH,
         TODO_WRITE, TODO_UPDATE,
         LIST_DIR, READ_FILE, READ_FILE_RANGE, SEARCH_REPO,
         WEB_SEARCH, WEB_FETCH,
@@ -1064,7 +1093,7 @@ object AgentTools {
     ) + LOCAL_TOOLS + ARCHIVE_TOOLS + PUBLIC_REMOTE_TOOLS + SKILL_TOOLS
 
     val CHAT_ARTIFACTS: List<AiTool> = listOf(ARTIFACT_WRITE, ARTIFACT_UPDATE)
-    val TASK_TOOLS: List<AiTool> = listOf(TODO_WRITE, TODO_UPDATE)
+    val TASK_TOOLS: List<AiTool> = listOf(TOOL_SEARCH, TODO_WRITE, TODO_UPDATE)
     val CHAT_TOOLS: List<AiTool> = TASK_TOOLS + CHAT_ARTIFACTS + listOf(WEB_SEARCH, WEB_FETCH) + LOCAL_TOOLS + ARCHIVE_TOOLS + PUBLIC_REMOTE_TOOLS + SKILL_TOOLS
 
     fun byName(name: String): AiTool? =
@@ -1074,7 +1103,7 @@ object AgentTools {
         (LOCAL_TOOLS + ARCHIVE_TOOLS + PUBLIC_REMOTE_TOOLS + SKILL_TOOLS).any { it.name == name }
 
     fun isChatRuntimeTool(name: String): Boolean =
-        isLocalOrArchive(name) || name == WEB_SEARCH.name || name == WEB_FETCH.name
+        isLocalOrArchive(name) || name == TOOL_SEARCH.name || name == WEB_SEARCH.name || name == WEB_FETCH.name
 }
 
 /** Tiny helpers to keep the JSON-Schema literals readable above. */

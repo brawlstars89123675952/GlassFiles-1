@@ -94,6 +94,12 @@ class GitHubToolExecutor(
         val args = runCatching { JSONObject(call.argsJson) }.getOrElse { JSONObject() }
         return try {
             val output = when (call.name) {
+                AgentTools.TOOL_SEARCH.name -> AgentToolRegistry.searchText(
+                    query = args.getString("query"),
+                    domain = args.optString("domain").takeIf { it.isNotBlank() },
+                    includeDeferred = args.optBoolean("include_deferred", false),
+                    limit = args.optInt("limit", 12),
+                )
                 AgentTools.LIST_DIR.name -> listDir(context, args.optString("path", ""))
                 AgentTools.READ_FILE.name -> readFile(context, args.getString("path"))
                 AgentTools.READ_FILE_RANGE.name -> readFileRange(

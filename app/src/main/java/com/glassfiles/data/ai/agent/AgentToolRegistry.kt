@@ -1,5 +1,7 @@
 package com.glassfiles.data.ai.agent
 
+import java.util.Locale
+
 enum class AiToolDomain {
     REPOSITORY,
     MEMORY,
@@ -69,6 +71,7 @@ object AgentToolRegistry {
 
     val all: List<AiToolMetadata> by lazy {
         listOf(
+            meta(AgentTools.TOOL_SEARCH, AiToolDomain.SYSTEM, AiToolUiKind.SEARCH, AiAgentApprovalCategory.READ, AiToolRisk.READ_ONLY, true, "search available tools and capabilities"),
             meta(AgentTools.LIST_DIR, AiToolDomain.REPOSITORY, AiToolUiKind.LIST, AiAgentApprovalCategory.READ, AiToolRisk.READ_ONLY, false, "list repository directories"),
             meta(AgentTools.READ_FILE, AiToolDomain.REPOSITORY, AiToolUiKind.READ, AiAgentApprovalCategory.READ, AiToolRisk.READ_ONLY, false, "read repository files"),
             meta(AgentTools.READ_FILE_RANGE, AiToolDomain.REPOSITORY, AiToolUiKind.READ, AiAgentApprovalCategory.READ, AiToolRisk.READ_ONLY, false, "read repository file ranges"),
@@ -165,6 +168,70 @@ object AgentToolRegistry {
             .filter { it.allowedInChatOnly }
             .map { it.name }
             .toSet()
+
+    fun searchText(
+        query: String,
+        domain: String? = null,
+        includeDeferred: Boolean = false,
+        limit: Int = 12,
+    ): String {
+        val normalizedQuery = query.trim().lowercase(Locale.US)
+        val domainFilter = domain
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.replace('-', '_')
+            ?.uppercase(Locale.US)
+        val cappedLimit = limit.coerceIn(1, 30)
+        val tokens = normalizedQuery
+            .split(Regex("[^\\p{L}\\p{N}_-]+"))
+            .filter { it.length >= 2 }
+        val matches = all.asSequence()
+            .filter { includeDeferred || !it.shouldDefer }
+            .filter { domainFilter == null || it.domain.name == domainFilter }
+            .mapNotNull { metadata ->
+                val haystack = buildString {
+                    append(metadata.name).append(' ')
+                    append(metadata.domain.name).append(' ')
+                    append(metadata.uiKind.name).append(' ')
+                    append(metadata.searchHint).append(' ')
+                    append(metadata.description)
+                }.lowercase(Locale.US)
+                val score = when {
+                    normalizedQuery.isBlank() -> 1
+                    metadata.name.equals(normalizedQuery, ignoreCase = true) -> 100
+                    metadata.name.lowercase(Locale.US).contains(normalizedQuery) -> 80
+                    metadata.searchHint.lowercase(Locale.US).contains(normalizedQuery) -> 60
+                    metadata.description.lowercase(Locale.US).contains(normalizedQuery) -> 50
+                    tokens.isNotEmpty() -> tokens.count { it in haystack } * 12
+                    else -> 0
+                }
+                if (score > 0) metadata to score else null
+            }
+            .sortedWith(compareByDescending<Pair<AiToolMetadata, Int>> { it.second }.thenBy { it.first.name })
+            .take(cappedLimit)
+            .map { it.first }
+            .toList()
+        if (matches.isEmpty()) {
+            return "No tools found for query: ${query.ifBlank { "(empty)" }}"
+        }
+        return buildString {
+            appendLine("tools found: ${matches.size}")
+            matches.forEach { tool ->
+                append("- ")
+                append(tool.name)
+                append(" | ")
+                append(tool.domain.name.lowercase(Locale.US))
+                append("/")
+                append(tool.uiKind.name.lowercase(Locale.US))
+                append(" | ")
+                append(if (tool.readOnly) "read-only" else "write")
+                if (tool.shouldDefer) append(" | deferred")
+                if (tool.dangerous) append(" | dangerous")
+                appendLine()
+                appendLine("  ${tool.searchHint}")
+            }
+        }.trimEnd()
+    }
 
     fun uiKindFor(name: String): AiToolUiKind =
         byName(name)?.uiKind ?: AiToolUiKind.OTHER

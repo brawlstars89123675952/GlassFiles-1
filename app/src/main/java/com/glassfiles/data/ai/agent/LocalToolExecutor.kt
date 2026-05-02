@@ -104,6 +104,12 @@ class LocalToolExecutor(
         return try {
             val output = withContext(Dispatchers.IO) {
                 when (call.name) {
+                    AgentTools.TOOL_SEARCH.name -> AgentToolRegistry.searchText(
+                        query = args.getString("query"),
+                        domain = args.optString("domain").takeIf { it.isNotBlank() },
+                        includeDeferred = args.optBoolean("include_deferred", false),
+                        limit = args.optInt("limit", 12),
+                    )
                     AgentTools.FILE_PICKER_CURRENT_CONTEXT.name -> currentContext(context)
                     AgentTools.LOCAL_LIST_DIR.name -> listDir(
                         context,

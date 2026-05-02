@@ -147,7 +147,7 @@ fun summarise(records: List<AiUsageRecord>, window: AiUsageWindow): AiUsageSumma
         filesWrittenCount = written,
         byProvider = bucket { it.providerId },
         byModel = bucket { it.modelId },
-        byMode = bucket { it.mode.name },
+        byMode = bucket { it.mode.displayLabel() },
     )
 }
 
@@ -171,4 +171,13 @@ private fun AiUsageRecord.effectiveCostUsd(): Double? {
         effectiveInputTokens(),
         effectiveOutputTokens(),
     )
+}
+
+private fun AiUsageMode.displayLabel(): String = when (this) {
+    AiUsageMode.CHAT -> "chat"
+    AiUsageMode.CODING -> "coding"
+    AiUsageMode.IMAGE -> "image"
+    AiUsageMode.VIDEO -> "video"
+    AiUsageMode.GITHUB_AGENT -> "github agent"
+    AiUsageMode.SKILL_AUTO_DETECTION -> "skill auto-detection"
 }
