@@ -875,7 +875,7 @@ fun AiAgentScreen(
                     "pending approvals" to pendingApprovals.toString(),
                     "todos" to todoItems.size.toString(),
                     "generated files" to generatedFiles.toString(),
-                    "pending file" to (pendingFile?.displayName ?: "none"),
+                    "pending file" to (pendingFile?.name ?: "none"),
                     "pending image" to (pendingImage != null).toString(),
                 ),
             ),
