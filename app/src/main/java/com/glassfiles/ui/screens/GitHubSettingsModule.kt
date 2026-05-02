@@ -39,16 +39,6 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -86,7 +76,11 @@ import com.glassfiles.data.github.GHUserProfile
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleAlertDialog
+import com.glassfiles.ui.components.AiModuleIcon as Icon
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
+import com.glassfiles.ui.components.AiModuleTextAction
 import kotlinx.coroutines.launch
 
 private enum class SettingsSection(val title: String, val subtitle: String) {
@@ -550,30 +544,21 @@ internal fun GitHubSettingsScreen(
     }
 
     if (showChangeToken) {
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { showChangeToken = false },
-            containerColor = AiModuleTheme.colors.surface,
-            title = {
-                Text(
-                    "> change token",
-                    color = AiModuleTheme.colors.textPrimary,
-                    fontFamily = JetBrainsMono,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            },
-            text = { CompactField("Personal access token", newToken, password = true) { newToken = it } },
+            title = "change token",
+            content = { CompactField("Personal access token", newToken, password = true) { newToken = it } },
             confirmButton = {
-                TextButton(onClick = {
+                AiModuleTextAction(label = Strings.done.lowercase(), onClick = {
                     GitHubManager.saveToken(context, newToken.trim())
                     addLog("Token updated")
                     newToken = ""
                     showChangeToken = false
                     scope.launch { refreshSection(SettingsSection.DEVELOPER) }
-                }) { Text(Strings.done.lowercase(), color = AiModuleTheme.colors.accent, fontFamily = JetBrainsMono) }
+                })
             },
             dismissButton = {
-                TextButton(onClick = { showChangeToken = false }) { Text(Strings.cancel.lowercase(), color = AiModuleTheme.colors.textSecondary, fontFamily = JetBrainsMono) }
+                AiModuleTextAction(label = Strings.cancel.lowercase(), onClick = { showChangeToken = false }, tint = AiModuleTheme.colors.textSecondary)
             },
         )
     }
@@ -823,7 +808,7 @@ private fun EmailRow(email: GHEmailEntry, onDelete: () -> Unit) {
             }.joinToString(" • ")
             Text(tags, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono)
         }
-        TextButton(onClick = onDelete) { Text("delete", color = AiModuleTheme.colors.error, fontSize = 12.sp, fontFamily = JetBrainsMono) }
+        AiModuleTextAction(label = "delete", onClick = onDelete, tint = AiModuleTheme.colors.error)
     }
 }
 
@@ -836,7 +821,7 @@ private fun NotificationRow(item: GHNotification, onMarkRead: () -> Unit) {
             Text(item.title, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${item.repoName} • ${item.reason}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (item.unread) TextButton(onClick = onMarkRead) { Text("read", color = AiModuleTheme.colors.accent, fontSize = 12.sp, fontFamily = JetBrainsMono) }
+        if (item.unread) AiModuleTextAction(label = "read", onClick = onMarkRead)
     }
 }
 
@@ -849,7 +834,7 @@ private fun KeyRow(key: GHUserKeyEntry, onDelete: () -> Unit) {
             Text(key.title.ifBlank { "Key ${key.id}" }, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${key.kind} • ${key.createdAt.take(10)}", color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono)
         }
-        TextButton(onClick = onDelete) { Text("delete", color = AiModuleTheme.colors.error, fontSize = 12.sp, fontFamily = JetBrainsMono) }
+        AiModuleTextAction(label = "delete", onClick = onDelete, tint = AiModuleTheme.colors.error)
     }
 }
 
@@ -862,7 +847,7 @@ private fun SocialRow(acc: GHSocialAccountEntry, onDelete: () -> Unit) {
             Text(acc.provider.ifBlank { "Social account" }, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono)
             Text(acc.url, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        TextButton(onClick = onDelete) { Text("delete", color = AiModuleTheme.colors.error, fontSize = 12.sp, fontFamily = JetBrainsMono) }
+        AiModuleTextAction(label = "delete", onClick = onDelete, tint = AiModuleTheme.colors.error)
     }
 }
 
@@ -872,7 +857,7 @@ private fun CompactPersonRow(login: String, avatarUrl: String, action: String, o
         AsyncImage(model = avatarUrl, contentDescription = login, modifier = Modifier.size(24.dp).clip(CircleShape))
         Spacer(Modifier.width(10.dp))
         Text(login, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono, modifier = Modifier.weight(1f))
-        TextButton(onClick = onAction) { Text(action.lowercase(), color = AiModuleTheme.colors.accent, fontSize = 12.sp, fontFamily = JetBrainsMono) }
+        AiModuleTextAction(label = action.lowercase(), onClick = onAction)
     }
 }
 
@@ -882,7 +867,7 @@ private fun BlockedRow(entry: GHBlockedEntry, onUnblock: () -> Unit) {
         AsyncImage(model = entry.avatarUrl, contentDescription = entry.login, modifier = Modifier.size(24.dp).clip(CircleShape))
         Spacer(Modifier.width(10.dp))
         Text(entry.login, color = AiModuleTheme.colors.textPrimary, fontSize = 13.sp, fontFamily = JetBrainsMono, modifier = Modifier.weight(1f))
-        TextButton(onClick = onUnblock) { Text("unblock", color = AiModuleTheme.colors.error, fontSize = 12.sp, fontFamily = JetBrainsMono) }
+        AiModuleTextAction(label = "unblock", onClick = onUnblock, tint = AiModuleTheme.colors.error)
     }
 }
 
@@ -908,7 +893,7 @@ private fun CompactRepoRow(repo: GHRepo, onUnstar: () -> Unit) {
             val sub = listOfNotNull(repo.language.takeIf { it.isNotBlank() }, repo.updatedAt.takeIf { it.isNotBlank() }?.take(10)).joinToString(" • ")
             if (sub.isNotBlank()) Text(sub, color = AiModuleTheme.colors.textMuted, fontSize = 11.sp, fontFamily = JetBrainsMono)
         }
-        TextButton(onClick = onUnstar) { Text("unstar", color = AiModuleTheme.colors.error, fontSize = 12.sp, fontFamily = JetBrainsMono) }
+        AiModuleTextAction(label = "unstar", onClick = onUnstar, tint = AiModuleTheme.colors.error)
     }
 }
 
