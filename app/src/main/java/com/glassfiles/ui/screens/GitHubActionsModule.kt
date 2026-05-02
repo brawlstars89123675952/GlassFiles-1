@@ -54,16 +54,6 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -126,8 +116,11 @@ import com.glassfiles.ui.components.AiModuleDestructiveButton
 import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleGlyph
 import com.glassfiles.ui.components.AiModuleGlyphAction
+import com.glassfiles.ui.components.AiModuleIcon as Icon
+import com.glassfiles.ui.components.AiModuleIconButton as IconButton
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModuleSearchField
+import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.components.AiModuleTextAction
 import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.ui.components.AiModulePrimaryButton
@@ -1221,7 +1214,7 @@ private fun StatCard(
     color: Color,
     modifier: Modifier = Modifier
 ) {
-    val colors = MaterialTheme.colorScheme
+    val colors = AiModuleTheme.colors
     Column(
         modifier
             .ghGlassCard(12.dp)
@@ -1232,7 +1225,7 @@ private fun StatCard(
         Text(
             value,
             fontSize = 22.sp,
-            color = colors.onSurface,
+            color = colors.textPrimary,
             fontWeight = FontWeight.SemiBold,
             fontFamily = FontFamily.Monospace,
             maxLines = 1
@@ -1240,7 +1233,7 @@ private fun StatCard(
         Text(
             label.uppercase(),
             fontSize = 10.sp,
-            color = colors.onSurfaceVariant,
+            color = colors.textMuted,
             fontWeight = FontWeight.Medium,
             letterSpacing = 0.6.sp,
             maxLines = 1,
@@ -1280,15 +1273,15 @@ private fun RepositoryArtifactsPanel(repo: GHRepo) {
                 loading = loading,
                 onRefresh = { scope.launch { load(true) } }
             )
-            OutlinedTextField(
+            AiModuleTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = { Text("Artifact name filter") },
+                label = "Artifact name filter",
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = { scope.launch { load(true) } }, enabled = !loading) { Text("Apply", color = Blue) }
+                GitHubTerminalButton("apply", onClick = { scope.launch { load(true) } }, enabled = !loading, color = Blue)
             }
         }
         if (artifacts.isEmpty() && !loading) {
@@ -1320,9 +1313,7 @@ private fun RepositoryArtifactsPanel(repo: GHRepo) {
         }
         if (hasMore) {
             item {
-                TextButton(onClick = { scope.launch { load(false) } }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
-                    Text("Load more artifacts", color = Blue)
-                }
+                GitHubTerminalButton("load more artifacts", onClick = { scope.launch { load(false) } }, enabled = !loading, color = Blue, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -1399,11 +1390,11 @@ private fun ActionsVariablesPanel(repo: GHRepo) {
         item {
             ActionsPanelHeader("Actions variables", "Create, update and delete repository variables.", loading) { scope.launch { load() } }
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value, { value = it }, label = { Text("Value") }, modifier = Modifier.fillMaxWidth(), minLines = 1, maxLines = 3)
+                AiModuleTextField(name, { name = it }, label = "Name", modifier = Modifier.fillMaxWidth(), singleLine = true)
+                AiModuleTextField(value, { value = it }, label = "Value", modifier = Modifier.fillMaxWidth(), minLines = 1, maxLines = 3)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = {
-                        if (name.isBlank()) return@TextButton
+                    GitHubTerminalButton("save variable", onClick = {
+                        if (name.isBlank()) return@GitHubTerminalButton
                         scope.launch {
                             val existing = variables.any { it.name == name }
                             val ok = if (existing) GitHubManager.updateRepoActionsVariable(context, repo.owner, repo.name, name, value)
@@ -1411,7 +1402,7 @@ private fun ActionsVariablesPanel(repo: GHRepo) {
                             Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                             if (ok) { name = ""; value = ""; load() }
                         }
-                    }) { Text("Save variable", color = Blue) }
+                    }, color = Blue)
                 }
             }
         }
@@ -1457,18 +1448,18 @@ private fun ActionsSecretsPanel(repo: GHRepo) {
         item {
             ActionsPanelHeader("Actions secrets", "Create, update and delete repository secrets.", loading || saving) { scope.launch { load() } }
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SurfaceWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                AiModuleTextField(
                     value = name,
                     onValueChange = { name = it.trim() },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Secret name") },
+                    label = "Secret name",
                     singleLine = true
                 )
-                OutlinedTextField(
+                AiModuleTextField(
                     value = value,
                     onValueChange = { value = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Secret value") },
+                    label = "Secret value",
                     visualTransformation = PasswordVisualTransformation()
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -1478,7 +1469,7 @@ private fun ActionsSecretsPanel(repo: GHRepo) {
                         color = TextTertiary,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(enabled = !saving && name.isNotBlank() && value.isNotBlank(), onClick = {
+                    GitHubTerminalButton("save secret", enabled = !saving && name.isNotBlank() && value.isNotBlank(), onClick = {
                         scope.launch {
                             saving = true
                             val ok = GitHubManager.createOrUpdateRepoActionsSecret(context, repo.owner, repo.name, name, value)
@@ -1486,7 +1477,7 @@ private fun ActionsSecretsPanel(repo: GHRepo) {
                             Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                             if (ok) { name = ""; value = ""; load() }
                         }
-                    }) { Text("Save secret", color = Blue) }
+                    }, color = Blue)
                 }
             }
         }
@@ -1625,7 +1616,7 @@ private fun ActionsPanelHeader(title: String, subtitle: String, loading: Boolean
             Text(subtitle, fontSize = 12.sp, color = TextSecondary, lineHeight = 16.sp)
         }
         IconButton(onClick = onRefresh) {
-            if (loading) CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
+            if (loading) AiModuleSpinner()
             else Icon(Icons.Rounded.Refresh, null, tint = Blue)
         }
     }
@@ -1648,7 +1639,7 @@ private fun ArtifactRow(artifact: GHArtifact, busy: Boolean, onDownload: () -> U
             Text("Created ${artifact.createdAt.take(10)} • Expires ${artifact.expiresAt.take(10)}", fontSize = 11.sp, color = TextTertiary)
             if (artifact.digest.isNotBlank()) Text(artifact.digest, fontSize = 10.sp, color = TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (busy) CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
+        if (busy) AiModuleSpinner()
         else {
             IconButton(onClick = onDownload, enabled = !artifact.expired) { Icon(Icons.Rounded.Article, null, tint = if (artifact.expired) TextTertiary else Blue) }
             IconButton(onClick = onDelete) { Icon(Icons.Rounded.Delete, null, tint = Red) }
@@ -1713,7 +1704,7 @@ private fun ActionInfoCard(
             }
         }
         if (actionLabel != null) {
-            TextButton(onClick = onAction) { Text(actionLabel, color = actionTint, fontSize = 12.sp) }
+            GitHubTerminalButton(actionLabel.lowercase(), onClick = onAction, color = actionTint)
         }
     }
 }
@@ -1793,11 +1784,10 @@ private fun WorkflowDispatchInputField(
                 }
             }
         } else {
-            OutlinedTextField(
+            AiModuleTextField(
                 value = value,
                 onValueChange = onValueChange,
-                placeholder = { Text(input.key, fontSize = 12.sp, color = TextTertiary) },
-                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                placeholder = input.key,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = input.type.lowercase() != "environment"
             )
@@ -1862,7 +1852,7 @@ private fun ModernRunCard(
     val statusColor = runStatusColor(run)
     val live = isRunActive(run)
     val elapsed = calcRunDuration(run, nowMs)
-    val colors = MaterialTheme.colorScheme
+    val colors = AiModuleTheme.colors
 
     Column(
         Modifier
@@ -1883,7 +1873,7 @@ private fun ModernRunCard(
                     )
                 } else {
                     Box(
-                        Modifier.size(32.dp).clip(CircleShape).background(colors.surfaceVariant),
+                        Modifier.size(32.dp).clip(CircleShape).background(colors.background),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(runStatusIcon(run), null, tint = statusColor, modifier = Modifier.size(16.dp))
@@ -1910,7 +1900,7 @@ private fun ModernRunCard(
                     run.name,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = colors.onSurface,
+                    color = colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1918,7 +1908,7 @@ private fun ModernRunCard(
                     Text(
                         run.displayTitle,
                         fontSize = 12.sp,
-                        color = colors.onSurfaceVariant,
+                        color = colors.textMuted,
                         lineHeight = 16.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -1930,7 +1920,7 @@ private fun ModernRunCard(
                 "#${run.runNumber}",
                 fontSize = 12.sp,
                 fontFamily = FontFamily.Monospace,
-                color = colors.onSurfaceVariant,
+                color = colors.textMuted,
                 maxLines = 1
             )
         }
@@ -1954,7 +1944,7 @@ private fun ModernRunCard(
             Text(
                 footerParts.joinToString("  ·  "),
                 fontSize = 11.sp,
-                color = colors.onSurfaceVariant,
+                color = colors.textMuted,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1965,7 +1955,7 @@ private fun ModernRunCard(
             Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(colors.outlineVariant.copy(alpha = 0.10f))
+                .background(colors.border.copy(alpha = 0.10f))
         )
 
         Row(
@@ -2030,14 +2020,14 @@ private fun buildRunSummary(run: GHWorkflowRun, elapsed: String): String {
 
 @Composable
 private fun runStatusColor(run: GHWorkflowRun): Color = when {
-    run.status == "in_progress" -> MaterialTheme.colorScheme.primary
-    run.conclusion == "success" -> MaterialTheme.colorScheme.primary
-    run.conclusion == "failure" -> MaterialTheme.colorScheme.error
-    run.status in setOf("queued", "pending", "waiting", "requested") -> MaterialTheme.colorScheme.onSurfaceVariant
-    run.conclusion == "cancelled" -> MaterialTheme.colorScheme.onSurfaceVariant
-    run.conclusion == "skipped" || run.conclusion == "neutral" -> MaterialTheme.colorScheme.onSurfaceVariant
-    run.conclusion == "timed_out" -> MaterialTheme.colorScheme.error
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
+    run.status == "in_progress" -> AiModuleTheme.colors.accent
+    run.conclusion == "success" -> AiModuleTheme.colors.accent
+    run.conclusion == "failure" -> AiModuleTheme.colors.error
+    run.status in setOf("queued", "pending", "waiting", "requested") -> AiModuleTheme.colors.textMuted
+    run.conclusion == "cancelled" -> AiModuleTheme.colors.textMuted
+    run.conclusion == "skipped" || run.conclusion == "neutral" -> AiModuleTheme.colors.textMuted
+    run.conclusion == "timed_out" -> AiModuleTheme.colors.error
+    else -> AiModuleTheme.colors.textMuted
 }
 
 private fun runStatusIcon(run: GHWorkflowRun) = when {
@@ -2053,12 +2043,12 @@ private fun runStatusIcon(run: GHWorkflowRun) = when {
 
 @Composable
 private fun MiniActionsBadge(text: String, color: Color) {
-    val colors = MaterialTheme.colorScheme
+    val colors = AiModuleTheme.colors
     Box(
         Modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(colors.surfaceVariant)
-            .border(1.dp, colors.outlineVariant.copy(alpha = 0.10f), RoundedCornerShape(6.dp))
+            .background(colors.background)
+            .border(1.dp, colors.border.copy(alpha = 0.10f), RoundedCornerShape(6.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
         Text(
@@ -2395,14 +2385,14 @@ internal fun WorkflowRunDetailScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surface)
+                        .background(AiModuleTheme.colors.surface)
                         .border(1.dp, Orange.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Rounded.Info, null, tint = Orange, modifier = Modifier.size(16.dp))
-                    Text(notice, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 16.sp)
+                    Text(notice, fontSize = 12.sp, color = AiModuleTheme.colors.textPrimary, lineHeight = 16.sp)
                 }
             }
 
@@ -2719,8 +2709,14 @@ internal fun WorkflowRunDetailScreen(
                 }
             }
             if (selectedSection == RunDetailSection.JOBS && failedJobItemIndexes.isNotEmpty()) {
-                FloatingActionButton(
-                    onClick = {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(18.dp)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(Red)
+                        .clickable {
                         scope.launch {
                             try {
                                 val currentJobIndex = (jobListState.firstVisibleItemIndex - jobItemsStartIndex).coerceAtLeast(-1)
@@ -2743,11 +2739,9 @@ internal fun WorkflowRunDetailScreen(
                             }
                         }
                     },
-                    containerColor = Red,
-                    contentColor = Color.White,
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp).size(48.dp)
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Rounded.Error, "Jump to next failed job", Modifier.size(22.dp))
+                    Icon(Icons.Rounded.Error, "Jump to next failed job", Modifier.size(22.dp), tint = Color.White)
                 }
             }
             }
@@ -2875,7 +2869,7 @@ private fun FailureDiagnosisCard(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .background(AiModuleTheme.colors.surface)
             .border(1.dp, Red.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -2886,10 +2880,12 @@ private fun FailureDiagnosisCard(
                 Text("Failed build", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                 Text(job.name, fontSize = 12.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            TextButton(onClick = onOpenFailedLog, enabled = !loading) {
-                if (loading) CircularProgressIndicator(Modifier.size(14.dp), color = Red, strokeWidth = 2.dp)
-                else Text("Open failed log", color = Red, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            }
+            GitHubTerminalButton(
+                if (loading) "loading log" else "open failed log",
+                onClick = onOpenFailedLog,
+                enabled = !loading,
+                color = Red,
+            )
         }
         step?.let {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2938,27 +2934,23 @@ private fun PublishArtifactsReleaseDialog(
     var publishing by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf("") }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = { if (!publishing) onDismiss() },
-        title = { Text("Publish artifacts") },
-        text = {
+        title = "publish artifacts",
+        content = {
             Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("${publishableArtifacts.size} artifacts from run #${run.runNumber}", fontSize = 12.sp, color = TextSecondary)
-                OutlinedTextField(tag, { tag = it.trim() }, label = { Text("Tag") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(name, { name = it }, label = { Text("Release title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(body, { body = it }, label = { Text("Release notes") }, minLines = 5, maxLines = 8, modifier = Modifier.fillMaxWidth())
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(draft, { draft = it })
-                    Text("Draft", fontSize = 13.sp, color = TextPrimary)
-                    Spacer(Modifier.width(12.dp))
-                    Checkbox(prerelease, { prerelease = it })
-                    Text("Pre-release", fontSize = 13.sp, color = TextPrimary)
-                }
+                AiModuleTextField(tag, { tag = it.trim() }, label = "Tag", singleLine = true, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(name, { name = it }, label = "Release title", singleLine = true, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(body, { body = it }, label = "Release notes", minLines = 5, maxLines = 8, modifier = Modifier.fillMaxWidth())
+                GitHubTerminalCheckbox("draft", draft, onToggle = { draft = !draft })
+                GitHubTerminalCheckbox("pre-release", prerelease, onToggle = { prerelease = !prerelease })
                 if (progress.isNotBlank()) Text(progress, fontSize = 11.sp, color = TextTertiary)
             }
         },
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = if (publishing) "publishing" else "publish",
                 enabled = !publishing && tag.isNotBlank() && publishableArtifacts.isNotEmpty(),
                 onClick = {
                     publishing = true
@@ -2998,13 +2990,10 @@ private fun PublishArtifactsReleaseDialog(
                         onPublished()
                     }
                 }
-            ) {
-                if (publishing) CircularProgressIndicator(Modifier.size(16.dp), color = Blue, strokeWidth = 2.dp)
-                else Text("Publish", color = Green)
-            }
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !publishing) { Text(Strings.cancel) }
+            AiModuleTextAction(label = Strings.cancel.lowercase(), onClick = onDismiss, enabled = !publishing, tint = AiModuleTheme.colors.textSecondary)
         }
     )
 }
@@ -3090,8 +3079,8 @@ private fun PendingDeploymentsCard(
                     Text(reviewers, fontSize = 11.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (deployment.currentUserCanApprove) {
-                    TextButton(onClick = { onReview(deployment, true) }) { Text("Approve", color = Green, fontSize = 12.sp) }
-                    TextButton(onClick = { onReview(deployment, false) }) { Text("Reject", color = Red, fontSize = 12.sp) }
+                    GitHubTerminalButton("approve", onClick = { onReview(deployment, true) }, color = Green)
+                    GitHubTerminalButton("reject", onClick = { onReview(deployment, false) }, color = Red)
                 } else {
                     MiniActionsBadge("waiting", Orange)
                 }
@@ -3435,8 +3424,8 @@ private fun StepStatusPill(status: String, color: Color) {
         letterSpacing = 0.6.sp,
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.10f), RoundedCornerShape(999.dp))
+            .background(AiModuleTheme.colors.background)
+            .border(1.dp, AiModuleTheme.colors.border.copy(alpha = 0.10f), RoundedCornerShape(999.dp))
             .padding(horizontal = 7.dp, vertical = 3.dp)
     )
 }
@@ -3529,11 +3518,11 @@ private fun jobStatusIcon(status: String) = when (status) {
 
 @Composable
 private fun jobStatusColor(status: String): Color = when (status) {
-    "running", "in_progress" -> MaterialTheme.colorScheme.primary
-    "success" -> MaterialTheme.colorScheme.primary
-    "failed", "failure", "timed_out", "action_required" -> MaterialTheme.colorScheme.error
-    "cancelled", "skipped" -> MaterialTheme.colorScheme.onSurfaceVariant
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
+    "running", "in_progress" -> AiModuleTheme.colors.accent
+    "success" -> AiModuleTheme.colors.accent
+    "failed", "failure", "timed_out", "action_required" -> AiModuleTheme.colors.error
+    "cancelled", "skipped" -> AiModuleTheme.colors.textMuted
+    else -> AiModuleTheme.colors.textMuted
 }
 
 private fun matrixGroupDuration(jobs: List<GHJob>, nowMs: Long): String {
@@ -3550,11 +3539,11 @@ private fun cleanGithubText(value: String): String =
 
 @Composable
 private fun checkStatusColor(checkRun: GHCheckRun): Color = when (displayCheckStatus(checkRun)) {
-    "success" -> MaterialTheme.colorScheme.primary
-    "failure", "timed_out", "action_required" -> MaterialTheme.colorScheme.error
-    "running", "in_progress" -> MaterialTheme.colorScheme.primary
-    "queued" -> MaterialTheme.colorScheme.onSurfaceVariant
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
+    "success" -> AiModuleTheme.colors.accent
+    "failure", "timed_out", "action_required" -> AiModuleTheme.colors.error
+    "running", "in_progress" -> AiModuleTheme.colors.accent
+    "queued" -> AiModuleTheme.colors.textMuted
+    else -> AiModuleTheme.colors.textMuted
 }
 
 private fun ensureJobLogsLoaded(
@@ -3963,14 +3952,14 @@ private fun displayStepStatus(step: GHStep): String {
 @Composable
 private fun stepStatusColor(step: GHStep): Color {
     return when (displayStepStatus(step)) {
-        "success" -> MaterialTheme.colorScheme.primary
-        "failed" -> MaterialTheme.colorScheme.error
-        "cancelled" -> MaterialTheme.colorScheme.onSurfaceVariant
-        "skipped", "neutral" -> MaterialTheme.colorScheme.onSurfaceVariant
-        "running" -> MaterialTheme.colorScheme.primary
-        "queued", "pending", "waiting", "requested" -> MaterialTheme.colorScheme.onSurfaceVariant
-        "completed" -> MaterialTheme.colorScheme.onSurfaceVariant
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        "success" -> AiModuleTheme.colors.accent
+        "failed" -> AiModuleTheme.colors.error
+        "cancelled" -> AiModuleTheme.colors.textMuted
+        "skipped", "neutral" -> AiModuleTheme.colors.textMuted
+        "running" -> AiModuleTheme.colors.accent
+        "queued", "pending", "waiting", "requested" -> AiModuleTheme.colors.textMuted
+        "completed" -> AiModuleTheme.colors.textMuted
+        else -> AiModuleTheme.colors.textMuted
     }
 }
 
