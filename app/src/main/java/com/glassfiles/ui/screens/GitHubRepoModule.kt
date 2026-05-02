@@ -2289,7 +2289,6 @@ private fun ReadmeImage(block: ReadmeRenderBlock.Image, imageLoader: ImageLoader
         delay(README_IMAGE_TIMEOUT_MS)
         if (!loaded && !animatedGif) {
             Log.w(README_RENDER_TAG, "image timeout ${block.url}")
-            failed = true
         }
     }
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -2951,8 +2950,12 @@ private fun readmeIsBadgeImage(url: String, alt: String): Boolean {
         "img.shields.io" in lowerUrl ||
         "badge.fury.io" in lowerUrl ||
         "badgen.net" in lowerUrl ||
+        "crowdin" in lowerUrl ||
+        "localized.svg" in lowerUrl ||
         "badge" in lowerUrl ||
         "badge" in lowerAlt ||
+        "crowdin" in lowerAlt ||
+        "localized" in lowerAlt ||
         "license" in lowerAlt
 }
 
@@ -3005,7 +3008,7 @@ private fun readmeLooksLikeTable(lines: List<String>, index: Int): Boolean {
     if (index + 1 >= lines.size) return false
     val header = lines[index].trim()
     val divider = lines[index + 1].trim()
-    return header.startsWith("|") && header.endsWith("|") && divider.matches(Regex("^\\|?\\s*:?-{3,}:?\\s*(\\|\\s*:?-{3,}:?\\s*)+\\|?$"))
+    return header.startsWith("|") && header.endsWith("|") && divider.matches(Regex("^\\|?\\s*:?-{2,}:?\\s*(\\|\\s*:?-{2,}:?\\s*)+\\|?$"))
 }
 
 private fun readmeTableCells(line: String): List<String> =
