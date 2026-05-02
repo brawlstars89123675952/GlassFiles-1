@@ -28,13 +28,6 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,9 +48,15 @@ import com.glassfiles.data.github.GHOrgTeam
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.data.github.GHRepoTeam
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.ui.components.AiModuleAlertDialog
+import com.glassfiles.ui.components.AiModuleIcon as Icon
+import com.glassfiles.ui.components.AiModuleIconButton as IconButton
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModuleHairline
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
+import com.glassfiles.ui.components.AiModuleTextAction
+import com.glassfiles.ui.components.AiModuleTextField
 import kotlinx.coroutines.launch
 
 private val TEAM_PERMISSIONS = listOf(
@@ -120,7 +119,7 @@ internal fun RepoTeamsScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                AiModuleSpinner(label = "loading…")
             }
         } else {
             val visibleTeams = repoTeams.filter {
@@ -136,13 +135,13 @@ internal fun RepoTeamsScreen(
             ) {
                 item { RepoTeamsSummaryCard(repoTeams, orgTeams) }
                 item {
-                    OutlinedTextField(
+                    AiModuleTextField(
                         value = query,
                         onValueChange = { query = it },
-                        label = { Text("Search teams") },
+                        label = "Search teams",
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
+                        leading = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
                     )
                 }
                 items(visibleTeams) { team ->
@@ -166,11 +165,10 @@ internal fun RepoTeamsScreen(
     if (showAddDialog) {
         val availableTeams = orgTeams.filter { orgTeam -> repoTeams.none { it.slug == orgTeam.slug } }
         val selectedAvailableTeam = availableTeams.firstOrNull { it.slug == selectedTeamSlug }
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { showAddDialog = false },
-            containerColor = AiModuleTheme.colors.surface,
-            title = { Text("Add Team", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-            text = {
+            title = "Add Team",
+            content = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (availableTeams.isEmpty()) {
                         Text(
@@ -199,7 +197,8 @@ internal fun RepoTeamsScreen(
                 }
             },
             confirmButton = {
-                TextButton(
+                AiModuleTextAction(
+                    label = "add",
                     enabled = !actionInFlight && selectedAvailableTeam != null,
                     onClick = {
                         actionInFlight = true
@@ -213,26 +212,21 @@ internal fun RepoTeamsScreen(
                                 loadTeams()
                             }
                         }
-                    }
-                ) {
-                    Text("Add", color = AiModuleTheme.colors.accent)
-                }
+                    },
+                )
             },
             dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) {
-                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
-                }
+                AiModuleTextAction(label = "cancel", onClick = { showAddDialog = false }, tint = AiModuleTheme.colors.textSecondary)
             }
         )
     }
 
     if (teamToEdit != null) {
         var editPermission by remember(teamToEdit?.slug) { mutableStateOf(normalizeTeamPermission(teamToEdit!!.permission)) }
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { teamToEdit = null },
-            containerColor = AiModuleTheme.colors.surface,
-            title = { Text("Change Team Permission", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-            text = {
+            title = "Change Team Permission",
+            content = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(teamToEdit!!.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
                     Text("@${teamToEdit!!.slug}", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
@@ -240,10 +234,11 @@ internal fun RepoTeamsScreen(
                 }
             },
             confirmButton = {
-                TextButton(
+                AiModuleTextAction(
+                    label = "save",
                     enabled = !actionInFlight && editPermission != normalizeTeamPermission(teamToEdit!!.permission),
                     onClick = {
-                        val team = teamToEdit ?: return@TextButton
+                        val team = teamToEdit ?: return@AiModuleTextAction
                         actionInFlight = true
                         scope.launch {
                             val ok = GitHubManager.updateRepoTeamPermission(context, repoOwner, team.slug, repoOwner, repoName, editPermission)
@@ -252,32 +247,28 @@ internal fun RepoTeamsScreen(
                             teamToEdit = null
                             loadTeams()
                         }
-                    }
-                ) {
-                    Text("Save", color = AiModuleTheme.colors.accent)
-                }
+                    },
+                )
             },
             dismissButton = {
-                TextButton(onClick = { teamToEdit = null }) {
-                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
-                }
+                AiModuleTextAction(label = "cancel", onClick = { teamToEdit = null }, tint = AiModuleTheme.colors.textSecondary)
             }
         )
     }
 
     if (teamToRemove != null) {
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { teamToRemove = null },
-            containerColor = AiModuleTheme.colors.surface,
-            title = { Text("Remove Team?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-            text = {
+            title = "Remove Team?",
+            content = {
                 Text("Remove ${teamToRemove!!.name} from this repository?", fontSize = 14.sp, color = AiModuleTheme.colors.textSecondary)
             },
             confirmButton = {
-                TextButton(
+                AiModuleTextAction(
+                    label = "remove",
                     enabled = !actionInFlight,
                     onClick = {
-                        val team = teamToRemove ?: return@TextButton
+                        val team = teamToRemove ?: return@AiModuleTextAction
                         actionInFlight = true
                         scope.launch {
                             val ok = GitHubManager.removeRepoTeam(context, repoOwner, team.slug, repoOwner, repoName)
@@ -286,15 +277,12 @@ internal fun RepoTeamsScreen(
                             teamToRemove = null
                             loadTeams()
                         }
-                    }
-                ) {
-                    Text("Remove", color = Color(0xFFFF3B30))
-                }
+                    },
+                    tint = Color(0xFFFF3B30),
+                )
             },
             dismissButton = {
-                TextButton(onClick = { teamToRemove = null }) {
-                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
-                }
+                AiModuleTextAction(label = "cancel", onClick = { teamToRemove = null }, tint = AiModuleTheme.colors.textSecondary)
             }
         )
     }
@@ -350,10 +338,10 @@ private fun RepoTeamCard(
             Spacer(Modifier.height(4.dp))
             Text(teamPermissionLabel(permission), fontSize = 12.sp, color = color, fontWeight = FontWeight.Medium)
         }
-        IconButton(onClick = onPermissionChange) {
+        IconButton(onClick = onPermissionChange, modifier = Modifier.size(34.dp)) {
             Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.accent)
         }
-        IconButton(onClick = onRemove) {
+        IconButton(onClick = onRemove, modifier = Modifier.size(34.dp)) {
             Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = Color(0xFFFF3B30))
         }
     }
