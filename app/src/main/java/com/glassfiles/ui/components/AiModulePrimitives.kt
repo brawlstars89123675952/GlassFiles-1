@@ -178,7 +178,7 @@ fun AiModulePageBar(
                 lineHeight = 1.25.em,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
+                modifier = Modifier.weight(1f),
             )
             if (trailing != null) {
                 Spacer(Modifier.width(6.dp))

@@ -54,17 +54,19 @@ class ChatHistoryManager(context: Context) {
         dir.listFiles()?.forEach { it.delete() }
     }
 
-    fun createSession(provider: AiProvider): ChatSession {
+    fun createSession(provider: String = "AUTO"): ChatSession {
         val id = System.currentTimeMillis().toString()
         return ChatSession(
             id = id,
             title = Strings.newChat,
-            provider = provider.name,
+            provider = provider,
             messages = emptyList(),
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis()
         )
     }
+
+    fun createSession(provider: AiProvider): ChatSession = createSession(provider.name)
 
     /** Auto-generate title from first user message */
     fun generateTitle(messages: List<ChatMessage>): String {

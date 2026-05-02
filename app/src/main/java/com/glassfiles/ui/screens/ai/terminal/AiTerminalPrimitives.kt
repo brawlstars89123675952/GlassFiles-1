@@ -185,8 +185,10 @@ fun TerminalPageBar(
                 fontWeight = FontWeight.Medium,
                 fontSize = AgentTerminal.type.topBarTitle,
                 lineHeight = 1.25.em,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
-            Spacer(Modifier.weight(1f))
             if (trailing != null) trailing()
         }
         if (!subtitle.isNullOrBlank()) {

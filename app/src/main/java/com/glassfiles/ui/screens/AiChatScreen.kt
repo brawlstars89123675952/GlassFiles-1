@@ -72,6 +72,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -96,13 +98,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.ai.AiCostPreviewPrefs
+import com.glassfiles.data.ai.AiKeyStore
 import com.glassfiles.data.ai.AiManager
-import com.glassfiles.data.ai.AiProvider
 import com.glassfiles.data.ai.ChatHistoryManager
 import com.glassfiles.data.ai.ChatMessage
 import com.glassfiles.data.ai.ChatSession
-import com.glassfiles.data.ai.GeminiKeyStore
+import com.glassfiles.data.ai.ModelRegistry
+import com.glassfiles.data.ai.models.AiCapability
+import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
+import com.glassfiles.data.ai.providers.AiProviders
 import com.glassfiles.data.ai.usage.AiUsageAccounting
 import com.glassfiles.data.ai.usage.AiUsageEstimate
 import com.glassfiles.data.ai.usage.AiUsageMode
@@ -171,15 +176,15 @@ private fun AiChatScreenInner(
     var activeSessionId by remember { mutableStateOf<String?>(null) }
     var sessions by remember { mutableStateOf(historyMgr.getSessions()) }
     var consumedPrompt by remember { mutableStateOf(false) }
-    var hasKey by remember { mutableStateOf(GeminiKeyStore.hasKey(context) || GeminiKeyStore.hasQwenKey(context)) }
+    var keyRefreshTick by remember { mutableIntStateOf(0) }
+    val hasKey = remember(keyRefreshTick) { AiKeyStore.configuredProviders(context).isNotEmpty() }
     if (!hasKey) {
-        ApiKeySetupScreen(onBack = onBack, onKeySet = { hasKey = true })
+        ApiKeySetupScreen(onBack = onBack, onKeySet = { keyRefreshTick++ })
         return
     }
     LaunchedEffect(initialPrompt, initialImageBase64) {
         if (initialPrompt != null && activeSessionId == null && !consumedPrompt) {
-            val dp = if (GeminiKeyStore.hasKey(context)) AiProvider.GEMINI_FLASH else AiProvider.QWEN_PLUS
-            val s = historyMgr.createSession(dp)
+            val s = historyMgr.createSession(loadSavedChatModelKey(context) ?: CHAT_AUTO_PROVIDER)
             historyMgr.saveSession(s)
             activeSessionId = s.id
             consumedPrompt = true
@@ -198,11 +203,10 @@ private fun AiChatScreenInner(
             onRunInTerminal = onRunInTerminal,
         )
     } else {
-        val dp = if (GeminiKeyStore.hasKey(context)) AiProvider.GEMINI_FLASH else AiProvider.QWEN_PLUS
         ChatHistoryList(
             sessions = sessions,
             onNew = {
-                val s = historyMgr.createSession(dp)
+                val s = historyMgr.createSession(loadSavedChatModelKey(context) ?: CHAT_AUTO_PROVIDER)
                 historyMgr.saveSession(s)
                 activeSessionId = s.id
             },
@@ -220,9 +224,13 @@ private fun AiChatScreenInner(
 @Composable
 private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
     val context = LocalContext.current
-    var geminiKey by remember { mutableStateOf("") }
-    var qwenKey by remember { mutableStateOf("") }
-    var proxy by remember { mutableStateOf(GeminiKeyStore.getProxy(context)) }
+    val keyValues = remember {
+        mutableStateMapOf<AiProviderId, String>().apply {
+            AiProviderId.entries.forEach { put(it, AiKeyStore.getKey(context, it)) }
+        }
+    }
+    var proxy by remember { mutableStateOf(AiKeyStore.getGeminiProxy(context)) }
+    var qwenRegion by remember { mutableStateOf(AiKeyStore.getQwenRegion(context)) }
     val colors = AiModuleTheme.colors
     AiModuleScreenScaffold(title = "AI · setup", onBack = onBack) {
         Column(
@@ -239,47 +247,49 @@ private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
                 fontSize = 13.sp,
                 lineHeight = 1.4.em,
             )
-            AiModuleSectionLabel("> gemini")
-            TerminalMonoField(
-                value = geminiKey,
-                onValueChange = { geminiKey = it },
-                placeholder = "AIza...",
-                singleLine = true,
-            )
-            AiModuleText(
-                "aistudio.google.com/apikey",
-                color = colors.textMuted,
-                fontFamily = JetBrainsMono,
-                fontSize = 11.sp,
-            )
+            AiProviderId.entries.forEach { provider ->
+                AiModuleSectionLabel("> ${provider.displayName.lowercase()}")
+                TerminalMonoField(
+                    value = keyValues[provider].orEmpty(),
+                    onValueChange = { keyValues[provider] = it },
+                    placeholder = provider.keyPlaceholder(),
+                    singleLine = true,
+                )
+                AiModuleText(
+                    provider.consoleUrl,
+                    color = colors.textMuted,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.sp,
+                )
+            }
+            AiModuleHairline()
+            AiModuleSectionLabel("> google proxy (optional)")
             TerminalMonoField(
                 value = proxy,
                 onValueChange = { proxy = it },
                 placeholder = "proxy (optional)",
                 singleLine = true,
             )
-            AiModuleHairline()
-            AiModuleSectionLabel("> qwen")
-            TerminalMonoField(
-                value = qwenKey,
-                onValueChange = { qwenKey = it },
-                placeholder = "sk-...",
-                singleLine = true,
-            )
-            AiModuleText(
-                "bailian.console.alibabacloud.com",
-                color = colors.textMuted,
-                fontFamily = JetBrainsMono,
-                fontSize = 11.sp,
-            )
+            AiModuleSectionLabel("> qwen region")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("intl" to "singapore", "cn" to "beijing").forEach { (code, label) ->
+                    AiModulePillButton(
+                        label = label,
+                        onClick = { qwenRegion = code },
+                        accent = qwenRegion == code,
+                    )
+                }
+            }
             Spacer(Modifier.height(8.dp))
-            val ok = geminiKey.length > 10 || qwenKey.length > 10
+            val ok = keyValues.values.any { it.trim().length > 10 }
             AiModulePillButton(
                 label = "continue",
                 onClick = {
-                    if (geminiKey.length > 10) GeminiKeyStore.saveKey(context, geminiKey)
-                    if (proxy.isNotBlank()) GeminiKeyStore.saveProxy(context, proxy)
-                    if (qwenKey.length > 10) GeminiKeyStore.saveQwenKey(context, qwenKey)
+                    AiProviderId.entries.forEach { provider ->
+                        AiKeyStore.saveKey(context, provider, keyValues[provider].orEmpty())
+                    }
+                    AiKeyStore.saveGeminiProxy(context, proxy)
+                    AiKeyStore.saveQwenRegion(context, qwenRegion)
                     onKeySet()
                 },
                 enabled = ok,
@@ -399,14 +409,15 @@ private fun ChatHistoryList(
                     contentPadding = PaddingValues(vertical = 4.dp),
                 ) {
                     items(filtered) { s ->
-                        val provider = try { AiProvider.valueOf(s.provider) } catch (_: Exception) { null }
-                        val pc = if (provider?.isQwen == true) colors.warning else colors.accent
+                        val providerId = chatProviderIdFromSession(s.provider)
+                        val pc = if (providerId == AiProviderId.ALIBABA) colors.warning else colors.accent
+                        val providerLabel = chatSessionLabel(s.provider)
                         AiModuleListRow(
                             title = s.title,
                             prefix = "▸",
                             prefixColor = pc,
                             subtitle = "${sdf.format(Date(s.updatedAt))}  ·  ${s.messages.size} msg" +
-                                (provider?.let { "  ·  ${it.label}" } ?: ""),
+                                (providerLabel?.let { "  ·  $it" } ?: ""),
                             onClick = { onOpen(s) },
                             trailing = {
                                 AiModuleIconButton(onClick = { onDel(s) }, modifier = Modifier.size(28.dp)) {
@@ -447,32 +458,35 @@ private fun ChatView(
     var input by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var currentResponse by remember { mutableStateOf("") }
-    var provider by remember {
+    val sessionModelKey = remember(session?.provider) { parseChatModelKey(session?.provider) }
+    var selectedProvider by remember {
         mutableStateOf(
-            try { AiProvider.valueOf(session?.provider ?: "GEMINI_FLASH") }
-            catch (_: Exception) { AiProvider.GEMINI_FLASH }
+            sessionModelKey?.providerId
+                ?: loadSavedChatProvider(context, AiKeyStore.configuredProviders(context)),
         )
     }
+    var modelId by remember { mutableStateOf(sessionModelKey?.modelId ?: loadSavedChatModelId(context).orEmpty()) }
+    val chatModels = remember { mutableStateListOf<AiModel>() }
+    var loadingModels by remember { mutableStateOf(false) }
+    var modelLoadError by remember { mutableStateOf<String?>(null) }
+    var keyRefreshTick by remember { mutableIntStateOf(0) }
     var showModelPicker by remember { mutableStateOf(false) }
     var attachedImage by remember { mutableStateOf<String?>(null) }
     var attachedFile by remember { mutableStateOf<Pair<String, String>?>(null) }
     var attachedZip by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
-    var geminiKey by remember { mutableStateOf(GeminiKeyStore.getKey(context)) }
-    var qwenKey by remember { mutableStateOf(GeminiKeyStore.getQwenKey(context)) }
-    var qwenRegion by remember { mutableStateOf(GeminiKeyStore.getQwenRegion(context)) }
-    var proxyUrl by remember { mutableStateOf(GeminiKeyStore.getProxy(context)) }
     var showSettings by remember { mutableStateOf(false) }
     var autoSent by remember { mutableStateOf(false) }
     var currentJob by remember { mutableStateOf<Job?>(null) }
     var editIdx by remember { mutableIntStateOf(-1) }
     var editTxt by remember { mutableStateOf("") }
     val colors = AiModuleTheme.colors
-    val usageEstimate = remember(messages, currentResponse, provider) {
-        val providerId = legacyUsageProviderId(provider).name
+    val configuredProviders = remember(keyRefreshTick) { AiKeyStore.configuredProviders(context) }
+    val currentModel = chatModels.firstOrNull { it.providerId == selectedProvider && it.id == modelId }
+    val usageEstimate = remember(messages, currentResponse, selectedProvider, modelId) {
         AiUsageAccounting.estimate(
-            providerId = providerId,
-            modelId = provider.modelId,
+            providerId = selectedProvider?.name.orEmpty(),
+            modelId = modelId,
             inputChars = chatInputChars(messages),
             outputChars = chatOutputChars(messages) + currentResponse.length,
         )
@@ -542,6 +556,45 @@ private fun ChatView(
         }
     }
 
+    LaunchedEffect(keyRefreshTick) {
+        loadingModels = true
+        modelLoadError = null
+        chatModels.clear()
+        try {
+            configuredProviders.forEach { providerId ->
+                val list = ModelRegistry.getModels(
+                    context = context,
+                    provider = providerId,
+                    apiKey = AiKeyStore.getKey(context, providerId),
+                    force = false,
+                )
+                chatModels.addAll(list.filter { it.isChatEligible() })
+            }
+
+            val sessionMatch = sessionModelKey?.let { key ->
+                chatModels.firstOrNull { it.providerId == key.providerId && it.id == key.modelId }
+            }
+            val savedProvider = loadSavedChatProvider(context, configuredProviders)
+            val savedModelId = loadSavedChatModelId(context)
+            val savedMatch = if (savedProvider != null && savedModelId != null) {
+                chatModels.firstOrNull { it.providerId == savedProvider && it.id == savedModelId }
+            } else {
+                null
+            }
+            val currentMatch = selectedProvider?.let { p ->
+                chatModels.firstOrNull { it.providerId == p && it.id == modelId }
+            }
+            val chosen = sessionMatch ?: currentMatch ?: savedMatch ?: chatModels.firstOrNull()
+            selectedProvider = chosen?.providerId
+            modelId = chosen?.id.orEmpty()
+            chosen?.let { saveChatSelection(context, it.providerId, it.id) }
+        } catch (e: Exception) {
+            modelLoadError = e.message ?: e.javaClass.simpleName
+        } finally {
+            loadingModels = false
+        }
+    }
+
     val folderFiles = remember(currentFolder) {
         if (currentFolder != null) try {
             File(currentFolder).listFiles()
@@ -555,7 +608,10 @@ private fun ChatView(
             ChatSession(
                 id = sessionId,
                 title = historyMgr.generateTitle(msgs),
-                provider = provider.name,
+                provider = currentModel?.uniqueKey
+                    ?: selectedProvider?.takeIf { modelId.isNotBlank() }?.let { providerId -> chatModelKey(providerId, modelId) }
+                    ?: session?.provider
+                    ?: CHAT_AUTO_PROVIDER,
                 messages = msgs,
                 createdAt = session?.createdAt ?: System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis(),
@@ -568,7 +624,11 @@ private fun ChatView(
         Toast.makeText(context, Strings.copied, Toast.LENGTH_SHORT).show()
     }
     fun exportChat() {
-        val sb = StringBuilder("# AI Chat\n**${provider.label}** — ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())}\n\n---\n\n")
+        val modelLabel = currentModel?.displayName
+            ?: modelId.takeIf { it.isNotBlank() }
+            ?: selectedProvider?.displayName
+            ?: "AI"
+        val sb = StringBuilder("# AI Chat\n**$modelLabel** — ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())}\n\n---\n\n")
         messages.forEach { m -> sb.append(if (m.role == "user") "**You:**\n" else "**AI:**\n").append(m.content).append("\n\n") }
         val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_AI")
         dir.mkdirs()
@@ -605,11 +665,11 @@ private fun ChatView(
             Toast.makeText(context, "Voice not available", Toast.LENGTH_SHORT).show()
         }
     }
-    fun recordUsage(requestProvider: AiProvider, requestMessages: List<ChatMessage>, output: String) {
+    fun recordUsage(requestProvider: AiProviderId, requestModelId: String, requestMessages: List<ChatMessage>, output: String) {
         AiUsageAccounting.appendEstimated(
             context = context,
-            providerId = legacyUsageProviderId(requestProvider).name,
-            modelId = requestProvider.modelId,
+            providerId = requestProvider.name,
+            modelId = requestModelId,
             mode = AiUsageMode.CHAT,
             messages = requestMessages,
             output = output,
@@ -632,18 +692,35 @@ private fun ChatView(
         messages = messages + um
         isLoading = true
         val msgsForApi = if (folderFiles != null && messages.size == 1) listOf(ChatMessage("user", fullText, image, fc)) else messages
-        val requestProvider = provider
+        val requestProvider = selectedProvider
+        val requestModelId = modelId
+        val requestModel = currentModel
         currentJob = scope.launch {
             try {
-                val r = AiManager.chat(requestProvider, msgsForApi, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
-                recordUsage(requestProvider, msgsForApi, r)
+                if (requestProvider == null || requestModelId.isBlank()) {
+                    throw IllegalStateException("Select an API model first")
+                }
+                val apiKey = AiKeyStore.getKey(context, requestProvider)
+                if (apiKey.isBlank()) {
+                    throw IllegalStateException("Enter the ${requestProvider.displayName} API key in AI settings")
+                }
+                val requestMessages = safeChatMessagesForModel(msgsForApi, requestModel)
+                val r = AiProviders.get(requestProvider).chat(
+                    context = context,
+                    modelId = requestModelId,
+                    messages = requestMessages,
+                    apiKey = apiKey,
+                ) { currentResponse += it }
+                recordUsage(requestProvider, requestModelId, requestMessages, r)
                 messages = messages + ChatMessage("assistant", r)
                 currentResponse = ""
                 save(messages)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException && currentResponse.isNotBlank()) {
                     val partial = currentResponse
-                    recordUsage(requestProvider, msgsForApi, partial)
+                    requestProvider?.takeIf { requestModelId.isNotBlank() }?.let {
+                        recordUsage(it, requestModelId, msgsForApi, partial)
+                    }
                     messages = messages + ChatMessage("assistant", partial + "\n\n*(stopped)*")
                     currentResponse = ""
                 } else {
@@ -702,19 +779,36 @@ private fun ChatView(
         messages = m
         isLoading = true
         currentResponse = ""
-        val requestProvider = provider
+        val requestProvider = selectedProvider
+        val requestModelId = modelId
+        val requestModel = currentModel
         val requestMessages = messages
         currentJob = scope.launch {
             try {
-                val r = AiManager.chat(requestProvider, requestMessages, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
-                recordUsage(requestProvider, requestMessages, r)
+                if (requestProvider == null || requestModelId.isBlank()) {
+                    throw IllegalStateException("Select an API model first")
+                }
+                val apiKey = AiKeyStore.getKey(context, requestProvider)
+                if (apiKey.isBlank()) {
+                    throw IllegalStateException("Enter the ${requestProvider.displayName} API key in AI settings")
+                }
+                val apiMessages = safeChatMessagesForModel(requestMessages, requestModel)
+                val r = AiProviders.get(requestProvider).chat(
+                    context = context,
+                    modelId = requestModelId,
+                    messages = apiMessages,
+                    apiKey = apiKey,
+                ) { currentResponse += it }
+                recordUsage(requestProvider, requestModelId, apiMessages, r)
                 messages = messages + ChatMessage("assistant", r)
                 currentResponse = ""
                 save(messages)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException && currentResponse.isNotBlank()) {
                     val partial = currentResponse
-                    recordUsage(requestProvider, requestMessages, partial)
+                    requestProvider?.takeIf { requestModelId.isNotBlank() }?.let {
+                        recordUsage(it, requestModelId, requestMessages, partial)
+                    }
                     messages = messages + ChatMessage("assistant", partial + "\n\n*(stopped)*")
                 } else {
                     messages = messages + ChatMessage("assistant", "Error: ${e.message}")
@@ -748,12 +842,27 @@ private fun ChatView(
         editTxt = ""
         isLoading = true
         currentResponse = ""
-        val requestProvider = provider
+        val requestProvider = selectedProvider
+        val requestModelId = modelId
+        val requestModel = currentModel
         val requestMessages = messages
         currentJob = scope.launch {
             try {
-                val r = AiManager.chat(requestProvider, requestMessages, geminiKey, "", proxyUrl, qwenKey, qwenRegion) { currentResponse += it }
-                recordUsage(requestProvider, requestMessages, r)
+                if (requestProvider == null || requestModelId.isBlank()) {
+                    throw IllegalStateException("Select an API model first")
+                }
+                val apiKey = AiKeyStore.getKey(context, requestProvider)
+                if (apiKey.isBlank()) {
+                    throw IllegalStateException("Enter the ${requestProvider.displayName} API key in AI settings")
+                }
+                val apiMessages = safeChatMessagesForModel(requestMessages, requestModel)
+                val r = AiProviders.get(requestProvider).chat(
+                    context = context,
+                    modelId = requestModelId,
+                    messages = apiMessages,
+                    apiKey = apiKey,
+                ) { currentResponse += it }
+                recordUsage(requestProvider, requestModelId, apiMessages, r)
                 messages = messages + ChatMessage("assistant", r)
                 currentResponse = ""
                 save(messages)
@@ -821,13 +930,22 @@ private fun ChatView(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        val pc = if (provider.isQwen) colors.warning else colors.accent
+                        val pc = if (selectedProvider == AiProviderId.ALIBABA) colors.warning else colors.accent
                         Box(Modifier.size(6.dp).clip(RoundedCornerShape(50)).background(pc))
                         AiModuleText(
-                            provider.label.removePrefix("Gemini ").removePrefix("Qwen "),
+                            when {
+                                loadingModels -> "loading"
+                                modelLoadError != null -> "model err"
+                                currentModel != null -> currentModel.displayName
+                                modelId.isNotBlank() -> modelId
+                                else -> "model"
+                            },
                             color = colors.textPrimary,
                             fontFamily = JetBrainsMono,
                             fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 138.dp),
                         )
                         AiModuleIcon(
                             Icons.Rounded.KeyboardArrowDown,
@@ -867,7 +985,9 @@ private fun ChatView(
             if (messages.isEmpty()) {
                 item {
                     EmptyChatBanner(
-                        provider = provider,
+                        model = currentModel,
+                        provider = selectedProvider,
+                        modelLoadError = modelLoadError,
                         currentFolder = currentFolder,
                         onSuggestion = { input = it },
                     )
@@ -1035,25 +1155,31 @@ private fun ChatView(
 
     if (showModelPicker) {
         TerminalModelPicker(
-            current = provider,
-            geminiAvailable = geminiKey.isNotBlank(),
-            qwenAvailable = qwenKey.isNotBlank(),
-            onSelect = { provider = it; showModelPicker = false },
+            current = currentModel,
+            models = chatModels,
+            loading = loadingModels,
+            error = modelLoadError,
+            configuredProviders = configuredProviders,
+            onSelect = {
+                selectedProvider = it.providerId
+                modelId = it.id
+                saveChatSelection(context, it.providerId, it.id)
+                showModelPicker = false
+            },
             onDismiss = { showModelPicker = false },
         )
     }
 
     if (showSettings) {
         TerminalKeysDialog(
-            initialGemini = geminiKey,
-            initialProxy = proxyUrl,
-            initialQwen = qwenKey,
-            initialRegion = qwenRegion,
-            onSave = { gK, pU, qK, rI ->
-                GeminiKeyStore.saveKey(context, gK); geminiKey = gK.trim()
-                GeminiKeyStore.saveProxy(context, pU); proxyUrl = pU.trim()
-                GeminiKeyStore.saveQwenKey(context, qK); qwenKey = qK.trim()
-                GeminiKeyStore.saveQwenRegion(context, rI); qwenRegion = rI
+            initialKeys = AiProviderId.entries.associateWith { AiKeyStore.getKey(context, it) },
+            initialProxy = AiKeyStore.getGeminiProxy(context),
+            initialRegion = AiKeyStore.getQwenRegion(context),
+            onSave = { keys, proxyUrl, region ->
+                keys.forEach { (providerId, key) -> AiKeyStore.saveKey(context, providerId, key) }
+                AiKeyStore.saveGeminiProxy(context, proxyUrl)
+                AiKeyStore.saveQwenRegion(context, region)
+                keyRefreshTick++
                 showSettings = false
                 Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
             },
@@ -1087,6 +1213,124 @@ private data class PendingChatSend(
     val estimatedTokens: Int,
 )
 
+private const val CHAT_AUTO_PROVIDER = "AUTO"
+private const val CHAT_PREFS = "ai_chat_screen"
+private const val CHAT_PREF_PROVIDER = "provider"
+private const val CHAT_PREF_MODEL = "model"
+
+private data class ChatModelKey(
+    val providerId: AiProviderId,
+    val modelId: String,
+)
+
+private fun AiModel.isChatEligible(): Boolean =
+    !deprecated && (
+        AiCapability.TEXT in capabilities ||
+            AiCapability.CODING in capabilities ||
+            AiCapability.REASONING in capabilities ||
+            AiCapability.VISION in capabilities
+        )
+
+private fun safeChatMessagesForModel(messages: List<ChatMessage>, model: AiModel?): List<ChatMessage> {
+    if (model == null || AiCapability.VISION in model.capabilities) return messages
+    return messages.map { message ->
+        if (message.imageBase64 == null) message else message.copy(imageBase64 = null)
+    }
+}
+
+private fun chatModelKey(providerId: AiProviderId, modelId: String): String = "${providerId.name}:$modelId"
+
+private fun parseChatModelKey(raw: String?): ChatModelKey? {
+    val value = raw?.takeIf { it.isNotBlank() && it != CHAT_AUTO_PROVIDER } ?: return null
+    val parts = value.split(":", limit = 2)
+    if (parts.size == 2) {
+        val providerId = runCatching { AiProviderId.valueOf(parts[0]) }.getOrNull()
+        if (providerId != null && parts[1].isNotBlank()) return ChatModelKey(providerId, parts[1])
+    }
+    return when {
+        value.startsWith("GEMINI") -> ChatModelKey(AiProviderId.GOOGLE, legacyChatModelId(value))
+        value.startsWith("QWEN") || value.startsWith("QWQ") -> ChatModelKey(AiProviderId.ALIBABA, legacyChatModelId(value))
+        else -> null
+    }
+}
+
+private fun legacyChatModelId(value: String): String =
+    when (value) {
+        "GEMINI_FLASH" -> "gemini-2.5-flash"
+        "GEMINI_PRO" -> "gemini-2.5-pro"
+        "GEMINI_FLASH_LITE" -> "gemini-2.5-flash-lite"
+        "GEMINI_3_FLASH" -> "gemini-3-flash-preview"
+        "GEMINI_31_PRO" -> "gemini-3.1-pro-preview"
+        "QWEN3_MAX" -> "qwen3-max"
+        "QWEN35_PLUS" -> "qwen3.5-plus"
+        "QWEN_PLUS" -> "qwen-plus"
+        "QWEN35_FLASH" -> "qwen3.5-flash"
+        "QWEN_FLASH" -> "qwen-flash"
+        "QWEN_TURBO" -> "qwen-turbo"
+        "QWEN_LONG" -> "qwen-long"
+        "QWEN3_CODER_PLUS" -> "qwen3-coder-plus"
+        "QWEN3_CODER_FLASH" -> "qwen3-coder-flash"
+        "QWEN3_VL_PLUS" -> "qwen3-vl-plus"
+        "QWEN3_VL_FLASH" -> "qwen3-vl-flash"
+        "QWEN_VL_PLUS" -> "qwen-vl-plus"
+        "QWEN_VL_MAX" -> "qwen-vl-max"
+        "QWEN_OCR" -> "qwen-ocr-latest"
+        "QWQ_PLUS" -> "qwq-plus"
+        "QWEN_MATH_PLUS" -> "qwen-math-plus"
+        "QWEN_MATH_TURBO" -> "qwen-math-turbo"
+        "QWEN3_235B" -> "qwen3-235b-a22b"
+        "QWEN3_32B" -> "qwen3-32b"
+        "QWEN3_14B" -> "qwen3-14b"
+        "QWEN3_8B" -> "qwen3-8b"
+        "QWEN3_4B" -> "qwen3-4b"
+        "QWEN25_72B" -> "qwen2.5-72b-instruct"
+        "QWEN25_32B" -> "qwen2.5-32b-instruct"
+        else -> value.lowercase().replace('_', '-')
+    }
+
+private fun chatProviderIdFromSession(raw: String): AiProviderId? =
+    parseChatModelKey(raw)?.providerId ?: runCatching { AiProviderId.valueOf(raw) }.getOrNull()
+
+private fun chatSessionLabel(raw: String): String? {
+    val key = parseChatModelKey(raw)
+    if (key != null) return "${key.providerId.displayName} · ${key.modelId}"
+    return runCatching { AiProviderId.valueOf(raw).displayName }.getOrNull()
+}
+
+private fun loadSavedChatProvider(context: Context, configured: List<AiProviderId>): AiProviderId? {
+    val saved = context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
+        .getString(CHAT_PREF_PROVIDER, null)
+        ?.let { runCatching { AiProviderId.valueOf(it) }.getOrNull() }
+    return saved?.takeIf { it in configured } ?: configured.firstOrNull()
+}
+
+private fun loadSavedChatModelId(context: Context): String? =
+    context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
+        .getString(CHAT_PREF_MODEL, null)
+        ?.takeIf { it.isNotBlank() }
+
+private fun loadSavedChatModelKey(context: Context): String? {
+    val configured = AiKeyStore.configuredProviders(context)
+    val provider = loadSavedChatProvider(context, configured) ?: return null
+    val model = loadSavedChatModelId(context) ?: return null
+    return chatModelKey(provider, model)
+}
+
+private fun saveChatSelection(context: Context, providerId: AiProviderId, modelId: String) {
+    context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putString(CHAT_PREF_PROVIDER, providerId.name)
+        .putString(CHAT_PREF_MODEL, modelId)
+        .apply()
+}
+
+private fun AiProviderId.keyPlaceholder(): String =
+    when (this) {
+        AiProviderId.GOOGLE -> "AIza..."
+        AiProviderId.ALIBABA -> "sk-..."
+        else -> "api key"
+    }
+
 @Composable
 private fun AiChatUsageChip(estimate: AiUsageEstimate) {
     val colors = AiModuleTheme.colors
@@ -1111,13 +1355,6 @@ private fun AiChatUsageChip(estimate: AiUsageEstimate) {
     )
 }
 
-private fun legacyUsageProviderId(provider: AiProvider): AiProviderId =
-    when {
-        provider.isGemini -> AiProviderId.GOOGLE
-        provider.isQwen -> AiProviderId.ALIBABA
-        else -> AiProviderId.OPENROUTER
-    }
-
 private fun chatInputChars(messages: List<ChatMessage>): Int =
     messages.sumOf { message ->
         if (message.role == "assistant") {
@@ -1137,11 +1374,15 @@ private fun chatOutputChars(messages: List<ChatMessage>): Int =
 // ═══════════════════════════════════
 @Composable
 private fun EmptyChatBanner(
-    provider: AiProvider,
+    model: AiModel?,
+    provider: AiProviderId?,
+    modelLoadError: String?,
     currentFolder: String?,
     onSuggestion: (String) -> Unit,
 ) {
     val colors = AiModuleTheme.colors
+    val providerColor = if (provider == AiProviderId.ALIBABA) colors.warning else colors.accent
+    val providerName = provider?.name?.lowercase() ?: "api"
     Column(
         Modifier
             .fillMaxWidth()
@@ -1149,14 +1390,19 @@ private fun EmptyChatBanner(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         AiModuleText(
-            "> ai/${provider.name.lowercase()} ready",
-            color = if (provider.isQwen) colors.warning else colors.accent,
+            "> ai/$providerName ready",
+            color = providerColor,
             fontFamily = JetBrainsMono,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
         )
         AiModuleText(
-            provider.desc,
+            when {
+                modelLoadError != null -> "model load failed: $modelLoadError"
+                model != null -> "${model.providerId.displayName} · ${model.displayName}"
+                provider != null -> "Select a chat-capable API model."
+                else -> "Add an API key and select a chat-capable model."
+            },
             color = colors.textMuted,
             fontFamily = JetBrainsMono,
             fontSize = 12.sp,
@@ -1596,16 +1842,18 @@ private fun TerminalChatInput(
 // ═══════════════════════════════════
 @Composable
 private fun TerminalModelPicker(
-    current: AiProvider,
-    geminiAvailable: Boolean,
-    qwenAvailable: Boolean,
-    onSelect: (AiProvider) -> Unit,
+    current: AiModel?,
+    models: List<AiModel>,
+    loading: Boolean,
+    error: String?,
+    configuredProviders: List<AiProviderId>,
+    onSelect: (AiModel) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = AiModuleTheme.colors
     AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        title = "select model",
+        title = "select api model",
         confirmButton = {
             AiModulePillButton(label = "close", onClick = onDismiss, accent = false)
         },
@@ -1614,15 +1862,50 @@ private fun TerminalModelPicker(
                 Modifier.heightIn(max = 480.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                val avail = AiProvider.entries.filter {
-                    (it.isGemini && geminiAvailable) || (it.isQwen && qwenAvailable)
+                when {
+                    loading -> item {
+                        AiModuleText(
+                            "loading model catalog...",
+                            color = colors.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    }
+                    error != null -> item {
+                        AiModuleText(
+                            "model load failed: $error",
+                            color = colors.error,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    }
+                    configuredProviders.isEmpty() -> item {
+                        AiModuleText(
+                            "add an API key in [ settings ]",
+                            color = colors.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    }
+                    models.isEmpty() -> item {
+                        AiModuleText(
+                            "no chat-capable models found for configured providers",
+                            color = colors.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    }
                 }
-                val cats = avail.groupBy { it.category }.toList()
-                cats.forEach { (cat, models) ->
-                    val cc = if (models.first().isQwen) colors.warning else colors.accent
+                val cats = models.groupBy { it.providerId }.toList()
+                cats.forEach { (providerId, providerModels) ->
+                    val cc = if (providerId == AiProviderId.ALIBABA) colors.warning else colors.accent
                     item {
                         AiModuleText(
-                            cat.uppercase(),
+                            providerId.displayName.uppercase(),
                             color = cc,
                             fontFamily = JetBrainsMono,
                             fontSize = 11.sp,
@@ -1630,20 +1913,21 @@ private fun TerminalModelPicker(
                             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
                         )
                     }
-                    items(models) { p ->
-                        val selected = p == current
+                    items(providerModels) { model ->
+                        val selected = model.uniqueKey == current?.uniqueKey
                         AiModuleListRow(
-                            title = p.label,
-                            subtitle = p.desc,
+                            title = model.displayName,
+                            subtitle = model.id,
                             prefix = if (selected) "▣" else "▸",
                             prefixColor = cc,
                             titleColor = if (selected) cc else colors.textPrimary,
-                            onClick = { onSelect(p) },
+                            onClick = { onSelect(model) },
                             paddingVertical = 8.dp,
                             trailing = {
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    if (p.supportsVision) AiModuleChip("vision", color = colors.textMuted)
-                                    if (p.supportsFiles) AiModuleChip("files", color = cc)
+                                    if (AiCapability.VISION in model.capabilities) AiModuleChip("vision", color = colors.textMuted)
+                                    if (AiCapability.CODING in model.capabilities) AiModuleChip("code", color = cc)
+                                    if (AiCapability.REASONING in model.capabilities) AiModuleChip("think", color = colors.textMuted)
                                     if (selected) AiModuleIcon(
                                         Icons.Rounded.Check,
                                         null,
@@ -1655,24 +1939,6 @@ private fun TerminalModelPicker(
                         )
                     }
                 }
-                if (!geminiAvailable) item {
-                    AiModuleText(
-                        "add gemini key in [ settings ]",
-                        color = colors.textMuted,
-                        fontFamily = JetBrainsMono,
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(8.dp),
-                    )
-                }
-                if (!qwenAvailable) item {
-                    AiModuleText(
-                        "add qwen key in [ settings ]",
-                        color = colors.textMuted,
-                        fontFamily = JetBrainsMono,
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(8.dp),
-                    )
-                }
             }
     }
 }
@@ -1682,23 +1948,25 @@ private fun TerminalModelPicker(
 // ═══════════════════════════════════
 @Composable
 private fun TerminalKeysDialog(
-    initialGemini: String,
+    initialKeys: Map<AiProviderId, String>,
     initialProxy: String,
-    initialQwen: String,
     initialRegion: String,
-    onSave: (String, String, String, String) -> Unit,
+    onSave: (Map<AiProviderId, String>, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = AiModuleTheme.colors
-    var gK by remember { mutableStateOf(initialGemini) }
+    val keys = remember {
+        mutableStateMapOf<AiProviderId, String>().apply {
+            AiProviderId.entries.forEach { put(it, initialKeys[it].orEmpty()) }
+        }
+    }
     var pU by remember { mutableStateOf(initialProxy) }
-    var qK by remember { mutableStateOf(initialQwen) }
     var rI by remember { mutableStateOf(initialRegion) }
     AiModuleAlertDialog(
         onDismissRequest = onDismiss,
         title = "ai · keys",
         confirmButton = {
-            AiModulePillButton(label = "save", onClick = { onSave(gK, pU, qK, rI) }, accent = true)
+            AiModulePillButton(label = "save", onClick = { onSave(keys.toMap(), pU, rI) }, accent = true)
         },
         dismissButton = {
             AiModulePillButton(label = "cancel", onClick = onDismiss, accent = false)
@@ -1708,13 +1976,17 @@ private fun TerminalKeysDialog(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                AiModuleSectionLabel("> gemini")
-                TerminalMonoField(value = gK, onValueChange = { gK = it }, placeholder = "AIza…")
+                AiProviderId.entries.forEach { provider ->
+                    AiModuleSectionLabel("> ${provider.displayName.lowercase()}")
+                    TerminalMonoField(
+                        value = keys[provider].orEmpty(),
+                        onValueChange = { keys[provider] = it },
+                        placeholder = provider.keyPlaceholder(),
+                    )
+                }
                 AiModuleSectionLabel("> proxy (optional)")
                 TerminalMonoField(value = pU, onValueChange = { pU = it }, placeholder = "https://proxy/v1beta/models")
                 AiModuleHairline()
-                AiModuleSectionLabel("> qwen")
-                TerminalMonoField(value = qK, onValueChange = { qK = it }, placeholder = "sk-…")
                 AiModuleSectionLabel("> region")
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("intl" to "singapore", "cn" to "beijing").forEach { (c, l) ->
