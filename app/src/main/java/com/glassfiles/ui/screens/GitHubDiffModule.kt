@@ -8,9 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,9 +20,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
-import com.glassfiles.ui.components.AiModulePageBar
-import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleAlertDialog
+import com.glassfiles.ui.components.AiModuleIcon as Icon
+import com.glassfiles.ui.components.AiModuleIconButton as IconButton
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
+import com.glassfiles.ui.components.AiModuleTextAction
+import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.data.github.GHCommitDetail
 import com.glassfiles.data.github.GHDiffFile
 import com.glassfiles.data.github.GHPullFile
@@ -232,21 +234,22 @@ private fun FileDiffScreen(
     // Add comment dialog
     if (showCommentDialog && pullNumber != null) {
         var commentBody by remember { mutableStateOf("") }
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { showCommentDialog = false },
-            containerColor = AiModuleTheme.colors.surface,
-            title = { Text("Add comment on line $commentLine", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-            text = {
-                OutlinedTextField(
+            title = "Add comment on line $commentLine",
+            content = {
+                AiModuleTextField(
                     value = commentBody,
                     onValueChange = { commentBody = it },
-                    label = { Text("Comment") },
+                    label = "Comment",
                     modifier = Modifier.fillMaxWidth().height(120.dp),
                     maxLines = 6
                 )
             },
             confirmButton = {
-                TextButton(
+                AiModuleTextAction(
+                    label = "comment",
+                    enabled = commentBody.isNotBlank(),
                     onClick = {
                         scope.launch {
                             val ok = GitHubManager.createPullRequestReviewComment(
@@ -260,15 +263,11 @@ private fun FileDiffScreen(
                                 onCommentAdded()
                             }
                         }
-                    }
-                ) {
-                    Text("Comment", color = AiModuleTheme.colors.accent)
-                }
+                    },
+                )
             },
             dismissButton = {
-                TextButton(onClick = { showCommentDialog = false }) {
-                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
-                }
+                AiModuleTextAction(label = "cancel", onClick = { showCommentDialog = false }, tint = AiModuleTheme.colors.textSecondary)
             }
         )
     }
@@ -552,29 +551,25 @@ private fun ReviewCommentEditDialog(
 ) {
     var body by remember(comment.id) { mutableStateOf(comment.body) }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text("Edit review comment", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = {
+        title = "Edit review comment",
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("${comment.path}:${comment.line}", fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
-                OutlinedTextField(
+                AiModuleTextField(
                     value = body,
                     onValueChange = { body = it },
-                    label = { Text("Comment") },
+                    label = "Comment",
                     modifier = Modifier.fillMaxWidth().height(140.dp),
                     maxLines = 8
                 )
             }
         },
         confirmButton = {
-            TextButton(enabled = !saving && body.isNotBlank(), onClick = { onSave(body) }) {
-                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
-                else Text("Save", color = AiModuleTheme.colors.accent)
-            }
+            AiModuleTextAction(label = if (saving) "saving" else "save", enabled = !saving && body.isNotBlank(), onClick = { onSave(body) })
         },
-        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
+        dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), enabled = !saving, onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary) }
     )
 }
 
@@ -585,18 +580,14 @@ private fun ReviewCommentDeleteDialog(
     onDismiss: () -> Unit,
     onDelete: () -> Unit
 ) {
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text("Delete review comment?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-        text = { Text("Delete comment on ${comment.path}:${comment.line}?", fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary) },
+        title = "Delete review comment?",
+        content = { Text("Delete comment on ${comment.path}:${comment.line}?", fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary) },
         confirmButton = {
-            TextButton(enabled = !deleting, onClick = onDelete) {
-                if (deleting) CircularProgressIndicator(Modifier.size(14.dp), color = Color(0xFFFF3B30), strokeWidth = 2.dp)
-                else Text("Delete", color = Color(0xFFFF3B30))
-            }
+            AiModuleTextAction(label = if (deleting) "deleting" else "delete", enabled = !deleting, onClick = onDelete, tint = Color(0xFFFF3B30))
         },
-        dismissButton = { TextButton(enabled = !deleting, onClick = onDismiss) { Text(Strings.cancel, color = AiModuleTheme.colors.textSecondary) } }
+        dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), enabled = !deleting, onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary) }
     )
 }
 
@@ -623,7 +614,7 @@ fun PullRequestDiffScreen(
 
     if (loading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = AiModuleTheme.colors.accent)
+            AiModuleSpinner(label = "loading…")
         }
         return
     }
@@ -679,7 +670,7 @@ fun CommitDiffScreen(
 
     if (loading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = AiModuleTheme.colors.accent)
+            AiModuleSpinner(label = "loading…")
         }
         return
     }

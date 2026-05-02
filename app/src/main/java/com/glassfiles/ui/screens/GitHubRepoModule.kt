@@ -57,6 +57,7 @@ import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleGlyph
 import com.glassfiles.ui.components.AiModuleGlyphAction
 import com.glassfiles.ui.components.AiModuleIcon
+import com.glassfiles.ui.components.AiModuleIconButton
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModulePillButton
 import com.glassfiles.ui.components.AiModuleHairline
@@ -396,7 +397,7 @@ internal fun RepoDetailScreen(
                     },
                 )
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = loadingPalette.accent, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    AiModuleSpinner(label = "loading…")
                 }
             }
         }
@@ -790,7 +791,7 @@ internal fun RepoDetailScreen(
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.outlineVariant.copy(alpha = 0.10f)))
-        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Blue, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp) }
+        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { AiModuleSpinner(label = "loading…") }
         else when (selectedTab) {
             RepoTab.FILES -> FilesTab(
                 rootContents = filteredContents,
@@ -3266,14 +3267,13 @@ private fun IssueMetaDialog(repo: GHRepo, detail: GHIssueDetail, onDismiss: () -
         loading = false
     }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Issue metadata", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = {
+        title = "Issue metadata",
+        content = {
             if (loading) {
                 Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    AiModuleSpinner(label = "loading…")
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -3333,9 +3333,10 @@ private fun IssueMetaDialog(repo: GHRepo, detail: GHIssueDetail, onDismiss: () -
             }
         },
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = if (saving) "saving" else "save",
                 onClick = {
-                    if (saving) return@TextButton
+                    if (saving) return@AiModuleTextAction
                     saving = true
                     scope.launch {
                         val milestoneNumber = milestones.firstOrNull { it.title == selectedMilestone }?.number
@@ -3355,9 +3356,9 @@ private fun IssueMetaDialog(repo: GHRepo, detail: GHIssueDetail, onDismiss: () -
                     }
                 },
                 enabled = !loading && !saving
-            ) { Text("Save", color = Blue) }
+            )
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), onClick = onDismiss, tint = TextSecondary) }
     )
 }
 
@@ -3371,15 +3372,14 @@ private fun PullEditDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Uni
     var state by remember(pr.number) { mutableStateOf(pr.state) }
     var saving by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Edit PR #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = {
+        title = "Edit PR #${pr.number}",
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(body, { body = it }, label = { Text("Body") }, minLines = 4, maxLines = 8, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(base, { base = it.trim() }, label = { Text("Base branch") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(title, { title = it }, label = "Title", singleLine = true, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(body, { body = it }, label = "Body", minLines = 4, maxLines = 8, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(base, { base = it.trim() }, label = "Base branch", singleLine = true, modifier = Modifier.fillMaxWidth())
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("open" to "Open", "closed" to "Closed").forEach { (value, label) ->
                         val selected = state == value
@@ -3396,10 +3396,11 @@ private fun PullEditDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Uni
             }
         },
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = if (saving) "saving" else "save",
                 enabled = !saving && title.isNotBlank() && base.isNotBlank(),
                 onClick = {
-                    if (saving) return@TextButton
+                    if (saving) return@AiModuleTextAction
                     saving = true
                     scope.launch {
                         val ok = GitHubManager.updatePullRequest(
@@ -3416,13 +3417,10 @@ private fun PullEditDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Uni
                         Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                         if (ok) onDone()
                     }
-                }
-            ) {
-                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
-                else Text("Save", color = Blue)
-            }
+                },
+            )
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), onClick = onDismiss, tint = TextSecondary) }
     )
 }
 
@@ -3434,11 +3432,10 @@ private fun PullReviewersDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -
     var saving by remember { mutableStateOf(false) }
     val reviewers = reviewersRaw.split(",").map { it.trim().removePrefix("@") }.filter { it.isNotBlank() }.distinct()
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Reviewers #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = {
+        title = "Reviewers #${pr.number}",
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (pr.requestedReviewers.isNotEmpty()) {
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3447,10 +3444,10 @@ private fun PullReviewersDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -
                 } else {
                     Text("No requested reviewers", fontSize = 12.sp, color = TextTertiary)
                 }
-                OutlinedTextField(
+                AiModuleTextField(
                     value = reviewersRaw,
                     onValueChange = { reviewersRaw = it },
-                    label = { Text("Usernames, comma-separated") },
+                    label = "Usernames, comma-separated",
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -3459,7 +3456,8 @@ private fun PullReviewersDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(
+                AiModuleTextAction(
+                    label = "remove",
                     enabled = !saving && reviewers.isNotEmpty(),
                     onClick = {
                         saving = true
@@ -3469,9 +3467,11 @@ private fun PullReviewersDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -
                             Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                             if (ok) onDone()
                         }
-                    }
-                ) { Text("Remove", color = Color(0xFFFF3B30)) }
-                TextButton(
+                    },
+                    tint = Color(0xFFFF3B30),
+                )
+                AiModuleTextAction(
+                    label = if (saving) "saving" else "request",
                     enabled = !saving && reviewers.isNotEmpty(),
                     onClick = {
                         saving = true
@@ -3481,14 +3481,11 @@ private fun PullReviewersDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -
                             Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
                             if (ok) onDone()
                         }
-                    }
-                ) {
-                    if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
-                    else Text("Request", color = Blue)
-                }
+                    },
+                )
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), onClick = onDismiss, tint = TextSecondary) }
     )
 }
 
@@ -3507,11 +3504,10 @@ private fun PullReviewHistoryDialog(
     var deleteReview by remember { mutableStateOf<GHPullReview?>(null) }
     var actionInFlight by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Review history", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = {
+        title = "Review history",
+        content = {
             if (reviews.isEmpty()) {
                 Text("No reviews yet", fontSize = 13.sp, color = TextTertiary)
             } else {
@@ -3535,7 +3531,7 @@ private fun PullReviewHistoryDialog(
                                 Text(review.user.ifBlank { "GitHub" }, fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                                 if (review.submittedAt.isNotBlank()) Text(review.submittedAt.take(10), fontSize = 10.sp, color = TextTertiary)
                                 if (review.htmlUrl.isNotBlank()) {
-                                    IconButton(
+                                    AiModuleIconButton(
                                         onClick = {
                                             try {
                                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(review.htmlUrl)))
@@ -3545,15 +3541,15 @@ private fun PullReviewHistoryDialog(
                                         },
                                         modifier = Modifier.size(28.dp)
                                     ) {
-                                        Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = TextSecondary)
+                                        AiModuleIcon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = TextSecondary)
                                     }
                                 }
                                 if (canMutate) {
-                                    IconButton(onClick = { editReview = review }, modifier = Modifier.size(28.dp)) {
-                                        Icon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = Blue)
+                                    AiModuleIconButton(onClick = { editReview = review }, modifier = Modifier.size(28.dp)) {
+                                        AiModuleIcon(Icons.Rounded.Edit, null, Modifier.size(16.dp), tint = Blue)
                                     }
-                                    IconButton(onClick = { deleteReview = review }, modifier = Modifier.size(28.dp)) {
-                                        Icon(Icons.Rounded.Delete, null, Modifier.size(16.dp), tint = Color(0xFFFF3B30))
+                                    AiModuleIconButton(onClick = { deleteReview = review }, modifier = Modifier.size(28.dp)) {
+                                        AiModuleIcon(Icons.Rounded.Delete, null, Modifier.size(16.dp), tint = Color(0xFFFF3B30))
                                     }
                                 }
                             }
@@ -3564,7 +3560,7 @@ private fun PullReviewHistoryDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+        confirmButton = { AiModuleTextAction(label = "close", onClick = onDismiss) }
     )
 
     selectedReview?.let { review ->
@@ -3593,13 +3589,13 @@ private fun PullReviewHistoryDialog(
     }
 
     deleteReview?.let { review ->
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { if (!actionInFlight) deleteReview = null },
-            containerColor = SurfaceWhite,
-            title = { Text("Delete pending review?", fontWeight = FontWeight.Bold, color = TextPrimary) },
-            text = { Text("Delete review #${review.id}?", fontSize = 13.sp, color = TextSecondary) },
+            title = "Delete pending review?",
+            content = { Text("Delete review #${review.id}?", fontSize = 13.sp, color = TextSecondary) },
             confirmButton = {
-                TextButton(
+                AiModuleTextAction(
+                    label = "delete",
                     enabled = !actionInFlight,
                     onClick = {
                         actionInFlight = true
@@ -3613,21 +3609,21 @@ private fun PullReviewHistoryDialog(
                                 onChanged()
                             }
                         }
-                    }
-                ) { Text("Delete", color = Color(0xFFFF3B30)) }
+                    },
+                    tint = Color(0xFFFF3B30),
+                )
             },
-            dismissButton = { TextButton(enabled = !actionInFlight, onClick = { deleteReview = null }) { Text(Strings.cancel, color = TextSecondary) } }
+            dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), enabled = !actionInFlight, onClick = { deleteReview = null }, tint = TextSecondary) }
         )
     }
 }
 
 @Composable
 private fun PullReviewDetailDialog(review: GHPullReview, onDismiss: () -> Unit) {
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Review #${review.id}", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = {
+        title = "Review #${review.id}",
+        content = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     PullBadge(review.state.ifBlank { "review" }, reviewStateColor(review.state))
@@ -3641,7 +3637,7 @@ private fun PullReviewDetailDialog(review: GHPullReview, onDismiss: () -> Unit) 
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+        confirmButton = { AiModuleTextAction(label = "close", onClick = onDismiss) }
     )
 }
 
@@ -3654,29 +3650,25 @@ private fun PullReviewEditDialog(
 ) {
     var body by remember(review.id) { mutableStateOf(review.body) }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Edit pending review", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = {
+        title = "Edit pending review",
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PullBadge(review.state.ifBlank { "review" }, reviewStateColor(review.state))
-                OutlinedTextField(
+                AiModuleTextField(
                     value = body,
                     onValueChange = { body = it },
-                    label = { Text("Review body") },
+                    label = "Review body",
                     modifier = Modifier.fillMaxWidth().height(150.dp),
                     maxLines = 8
                 )
             }
         },
         confirmButton = {
-            TextButton(enabled = !saving, onClick = { onSave(body) }) {
-                if (saving) CircularProgressIndicator(Modifier.size(14.dp), color = Blue, strokeWidth = 2.dp)
-                else Text("Save", color = Blue)
-            }
+            AiModuleTextAction(label = if (saving) "saving" else "save", enabled = !saving, onClick = { onSave(body) })
         },
-        dismissButton = { TextButton(enabled = !saving, onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), enabled = !saving, onClick = onDismiss, tint = TextSecondary) }
     )
 }
 
@@ -3700,11 +3692,10 @@ private fun PullMergeDialog(
     var title by remember { mutableStateOf("${pr.title} (#${pr.number})") }
     var message by remember { mutableStateOf("") }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = { if (!merging) onDismiss() },
-        containerColor = SurfaceWhite,
-        title = { Text("Merge PR #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = {
+        title = "Merge PR #${pr.number}",
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("merge" to "Merge", "squash" to "Squash", "rebase" to "Rebase").forEach { (value, label) ->
@@ -3719,18 +3710,15 @@ private fun PullMergeDialog(
                         }
                     }
                 }
-                OutlinedTextField(title, { title = it }, label = { Text("Commit title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(message, { message = it }, label = { Text("Commit message") }, minLines = 3, maxLines = 5, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(title, { title = it }, label = "Commit title", singleLine = true, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(message, { message = it }, label = "Commit message", minLines = 3, maxLines = 5, modifier = Modifier.fillMaxWidth())
                 Text("${pr.head} -> ${pr.base}", fontSize = 11.sp, color = TextTertiary)
             }
         },
         confirmButton = {
-            TextButton(enabled = !merging && title.isNotBlank(), onClick = { onMerge(method, title, message) }) {
-                if (merging) CircularProgressIndicator(Modifier.size(14.dp), color = Color(0xFF34C759), strokeWidth = 2.dp)
-                else Text(Strings.ghMerge, color = Color(0xFF34C759))
-            }
+            AiModuleTextAction(label = if (merging) "merging" else Strings.ghMerge.lowercase(), enabled = !merging && title.isNotBlank(), onClick = { onMerge(method, title, message) }, tint = Color(0xFF34C759))
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !merging) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), onClick = onDismiss, enabled = !merging, tint = TextSecondary) }
     )
 }
 
@@ -3750,11 +3738,10 @@ private fun PullReviewDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> U
     var event by remember { mutableStateOf("COMMENT") }
     var sending by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Review #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = {
+        title = "Review #${pr.number}",
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("COMMENT" to "Comment", "APPROVE" to "Approve", "REQUEST_CHANGES" to "Request changes").forEach { (value, label) ->
@@ -3769,18 +3756,18 @@ private fun PullReviewDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> U
                         }
                     }
                 }
-                OutlinedTextField(
+                AiModuleTextField(
                     value = body,
                     onValueChange = { body = it },
-                    label = { Text("Review message") },
+                    label = "Review message",
                     modifier = Modifier.fillMaxWidth().height(140.dp),
                     maxLines = 8
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                if (sending) return@TextButton
+            AiModuleTextAction(label = if (sending) "sending" else "submit", onClick = {
+                if (sending) return@AiModuleTextAction
                 sending = true
                 scope.launch {
                     val ok = GitHubManager.submitPullRequestReview(context, repo.owner, repo.name, pr.number, event, body)
@@ -3788,9 +3775,9 @@ private fun PullReviewDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> U
                     sending = false
                     if (ok) onDone()
                 }
-            }) { Text("Submit", color = Blue) }
+            })
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel, color = TextSecondary) } }
+        dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), onClick = onDismiss, tint = TextSecondary) }
     )
 }
 
@@ -3806,14 +3793,13 @@ private fun PullFilesDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Un
         loading = false
     }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Files #${pr.number}", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = {
+        title = "Files #${pr.number}",
+        content = {
             if (loading) {
                 Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    AiModuleSpinner(label = "loading…")
                 }
             } else {
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3834,7 +3820,7 @@ private fun PullFilesDialog(repo: GHRepo, pr: GHPullRequest, onDismiss: () -> Un
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+        confirmButton = { AiModuleTextAction(label = "close", onClick = onDismiss) }
     )
 }
 
@@ -3849,7 +3835,7 @@ internal fun CommitDiffScreen(repo: GHRepo, sha: String, onBack: () -> Unit) { v
             subtitle = detail?.message?.lines()?.firstOrNull(),
             onBack = onBack,
         )
-        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = commitPalette.accent, modifier = Modifier.size(20.dp), strokeWidth = 2.dp) }
+        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { AiModuleSpinner(label = "loading…") }
         else if (detail != null) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("+${detail!!.totalAdditions}", fontSize = 12.sp, fontFamily = JetBrainsMono, fontWeight = FontWeight.Medium, color = GitHubSuccessGreen)
@@ -4001,14 +3987,13 @@ private fun IssueTimelineDialog(repo: GHRepo, issueNumber: Int, onDismiss: () ->
         loading = false
     }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceWhite,
-        title = { Text("Timeline", fontWeight = FontWeight.Bold, color = TextPrimary) },
-        text = {
+        title = "Timeline",
+        content = {
             if (loading) {
                 Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Blue, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    AiModuleSpinner(label = "loading…")
                 }
             } else if (events.isEmpty()) {
                 Text("No timeline events", fontSize = 13.sp, color = TextTertiary)
@@ -4041,6 +4026,6 @@ private fun IssueTimelineDialog(repo: GHRepo, issueNumber: Int, onDismiss: () ->
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close", color = Blue) } }
+        confirmButton = { AiModuleTextAction(label = "close", onClick = onDismiss) }
     )
 }
