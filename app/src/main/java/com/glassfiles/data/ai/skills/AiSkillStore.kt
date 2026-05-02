@@ -190,6 +190,7 @@ object AiSkillStore {
             trusted = false,
         )
         manifest
+            .put("format", "glassfiles.skillpack.v2")
             .put("tools", JSONArray(requestedTools))
             .put("risk", effectivePackRisk.name.lowercase(Locale.US))
         manifestFile.writeText(manifest.toString(2))
@@ -213,6 +214,7 @@ object AiSkillStore {
             val missing = skill.tools.filterNot { it in pack.tools }
             require(missing.isEmpty()) { "${skill.id}: tools not declared in manifest: ${missing.joinToString()}" }
         }
+        ensureInternalSkillPackLayout(tempDir, pack, skills, warnings)
         return AiSkillImportPreview(tempDir.absolutePath, pack, skills, warnings.toList())
     }
 
@@ -279,6 +281,7 @@ object AiSkillStore {
         }
         val sourceFiles = if (skillFiles.isNotEmpty()) skillFiles else portableInstructionFiles
         writeGeneratedManifest(tempDir, pack, sourceFiles.zip(skills))
+        ensureInternalSkillPackLayout(tempDir, pack, skills, warnings)
         return AiSkillImportPreview(tempDir.absolutePath, pack, skills, warnings.toList())
     }
 
@@ -449,6 +452,7 @@ object AiSkillStore {
             if (skills.size > 40) appendLine("\n... ${skills.size - 40} more installed skills omitted from catalog")
             appendLine()
             appendLine("To inspect a selected skill or bundled references, call skill_read with skill_id and optional path.")
+            appendLine("Every installed pack uses manifest.json, SKILL.md, README.md, references/, and compatibility skills/*.skill.md.")
         }
         return body.take(maxChars)
     }
@@ -475,7 +479,7 @@ object AiSkillStore {
         baseDirectory?.let { appendLine("Base directory for this skill: $it") }
         appendLine("Allowed tools:")
         allowedTools.sorted().forEach { appendLine("- $it") }
-        appendLine("Bundled references/assets are read-only. Inspect them only with skill_read using skill_id '${skill.packId}/${skill.id}' and a relative path.")
+        appendLine("Bundled references/assets are read-only. Inspect README.md, SKILL.md, references/*, or other pack files only with skill_read using skill_id '${skill.packId}/${skill.id}' and a relative path.")
         appendLine("Do not execute files from the skill directory.")
         appendLine()
         appendLine("Skill instructions:")
@@ -619,6 +623,7 @@ object AiSkillStore {
     private fun writeGeneratedManifest(dir: File, pack: AiSkillPack, skillFiles: List<Pair<File, AiSkill>>) {
         File(dir, "manifest.json").writeText(
             JSONObject()
+                .put("format", "glassfiles.skillpack.v2")
                 .put("id", pack.id)
                 .put("name", pack.name)
                 .put("version", pack.version)
@@ -634,6 +639,89 @@ object AiSkillStore {
         skillFiles.forEach { (_, skill) ->
             File(skillsDir, "${skill.id}.skill.md").writeText(renderSkillFile(skill))
         }
+    }
+
+    private fun ensureInternalSkillPackLayout(
+        dir: File,
+        pack: AiSkillPack,
+        skills: List<AiSkill>,
+        warnings: Set<String>,
+    ) {
+        File(dir, "skills").apply {
+            if (exists()) deleteRecursively()
+            mkdirs()
+        }
+        skills.forEach { skill ->
+            val skillFile = File(dir, "skills/${skill.id}.skill.md")
+            skillFile.writeText(renderSkillFile(skill))
+        }
+        File(dir, "references").apply { mkdirs() }
+        File(dir, "references/INDEX.md").writeText(renderReferencesIndex(pack, skills))
+        File(dir, STANDARD_SKILL_FILE).writeText(renderPackSkillFile(pack, skills))
+        val readme = File(dir, "README.md")
+        if (!readme.isFile || readme.readText().isBlank()) {
+            readme.writeText(renderPackReadme(pack, skills, warnings))
+        }
+    }
+
+    private fun renderPackSkillFile(pack: AiSkillPack, skills: List<AiSkill>): String = buildString {
+        appendLine("---")
+        appendLine("name: ${pack.name}")
+        pack.description?.takeIf { it.isNotBlank() }?.let { appendLine("description: ${it.replace('\n', ' ')}") }
+        pack.whenToUse?.takeIf { it.isNotBlank() }?.let { appendLine("when_to_use: ${it.replace('\n', ' ')}") }
+        appendYamlList("tools", pack.tools)
+        appendLine("---")
+        appendLine()
+        appendLine("This is the GlassFiles internal entrypoint for skill pack `${pack.id}`.")
+        appendLine()
+        appendLine("Runtime skills:")
+        skills.forEach { skill ->
+            appendLine("- `${skill.id}`: ${skill.description ?: skill.name}")
+        }
+        appendLine()
+        appendLine("Detailed executable instructions are stored in `skills/*.skill.md` and are injected only when a skill is selected or confidently matched.")
+        appendLine("Read-only reference material is under `references/` and must be inspected through `skill_read`.")
+    }
+
+    private fun renderPackReadme(pack: AiSkillPack, skills: List<AiSkill>, warnings: Set<String>): String = buildString {
+        appendLine("# ${pack.name}")
+        appendLine()
+        pack.description?.takeIf { it.isNotBlank() }?.let {
+            appendLine(it)
+            appendLine()
+        }
+        appendLine("- id: `${pack.id}`")
+        appendLine("- format: `glassfiles.skillpack.v2`")
+        appendLine("- version: `${pack.version}`")
+        pack.author?.takeIf { it.isNotBlank() }?.let { appendLine("- author: `$it`") }
+        appendLine("- risk: `${pack.risk.name.lowercase(Locale.US)}`")
+        appendLine("- tools: ${pack.tools.joinToString(", ").ifBlank { "(none)" }}")
+        appendLine()
+        appendLine("## Skills")
+        appendLine()
+        skills.forEach { skill ->
+            appendLine("- `${skill.id}` - ${skill.name}")
+            skill.whenToUse?.takeIf { it.isNotBlank() }?.let { appendLine("  - when_to_use: $it") }
+            if (skill.triggers.isNotEmpty()) appendLine("  - triggers: ${skill.triggers.joinToString(", ")}")
+        }
+        if (warnings.isNotEmpty()) {
+            appendLine()
+            appendLine("## Import Warnings")
+            appendLine()
+            warnings.forEach { appendLine("- $it") }
+        }
+    }
+
+    private fun renderReferencesIndex(pack: AiSkillPack, skills: List<AiSkill>): String = buildString {
+        appendLine("# References")
+        appendLine()
+        appendLine("Pack: `${pack.id}`")
+        appendLine()
+        appendLine("This directory is reserved for read-only reference files bundled with the skill pack.")
+        appendLine("Agents must read these files with `skill_read`; files in a skill pack are never executed.")
+        appendLine()
+        appendLine("Runtime skill files:")
+        skills.forEach { appendLine("- `skills/${it.id}.skill.md`") }
     }
 
     private fun renderSkillFile(skill: AiSkill): String = buildString {
