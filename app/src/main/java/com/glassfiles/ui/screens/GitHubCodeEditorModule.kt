@@ -52,14 +52,6 @@ import androidx.compose.material.icons.rounded.Undo
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.WrapText
 import androidx.compose.material.icons.rounded.ZoomOutMap
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -102,8 +94,12 @@ import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleGlyph
 import com.glassfiles.ui.components.AiModuleGlyphAction
+import com.glassfiles.ui.components.AiModuleIcon as Icon
+import com.glassfiles.ui.components.AiModuleIconButton as IconButton
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModuleSearchField
+import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.components.AiModuleTextAction
 import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.ui.theme.AiModuleSurface
@@ -350,33 +346,33 @@ fun CodeEditorScreen(
     }
 
     if (showGoToLine) {
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { showGoToLine = false },
-            title = { Text("Go to line") },
-            text = {
-                OutlinedTextField(
+            title = "go to line",
+            content = {
+                AiModuleTextField(
                     value = goToLineText,
                     onValueChange = { goToLineText = it.filter(Char::isDigit) },
-                    label = { Text("Line") },
+                    label = "Line",
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                AiModuleTextAction(label = "go", onClick = {
                     goToLine(goToLineText.toIntOrNull() ?: 1)
                     showGoToLine = false
-                }) { Text("Go") }
+                })
             },
-            dismissButton = { TextButton(onClick = { showGoToLine = false }) { Text(Strings.cancel) } }
+            dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), onClick = { showGoToLine = false }, tint = AiModuleTheme.colors.textSecondary) }
         )
     }
 
     if (showOutline) {
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { showOutline = false },
-            title = { Text("Outline") },
-            text = {
+            title = "outline",
+            content = {
                 if (symbols.isEmpty()) {
                     Text("No symbols found", color = TextSecondary, fontSize = 13.sp)
                 } else {
@@ -406,22 +402,22 @@ fun CodeEditorScreen(
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showOutline = false }) { Text("Close") } }
+            confirmButton = { AiModuleTextAction(label = "close", onClick = { showOutline = false }) }
         )
     }
 
     if (showDiscardDialog) {
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { showDiscardDialog = false },
-            title = { Text("Discard changes?") },
-            text = { Text("This file has uncommitted edits.", color = TextSecondary, fontSize = 13.sp) },
+            title = "discard changes?",
+            content = { Text("This file has uncommitted edits.", color = TextSecondary, fontSize = 13.sp, fontFamily = JetBrainsMono) },
             confirmButton = {
-                TextButton(onClick = {
+                AiModuleTextAction(label = "discard", tint = AiModuleTheme.colors.error, onClick = {
                     showDiscardDialog = false
                     onBack()
-                }) { Text("Discard") }
+                })
             },
-            dismissButton = { TextButton(onClick = { showDiscardDialog = false }) { Text(Strings.cancel) } }
+            dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), onClick = { showDiscardDialog = false }, tint = AiModuleTheme.colors.textSecondary) }
         )
     }
 
@@ -583,21 +579,22 @@ fun CodeEditorScreen(
     if (showCommitDialog) {
         var aiSuggesting by remember { mutableStateOf(false) }
         var aiSuggestError by remember { mutableStateOf<String?>(null) }
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { showCommitDialog = false },
-            title = { Text("Commit changes") },
-            text = {
+            title = "commit changes",
+            content = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(file.path, fontSize = 12.sp, color = TextSecondary)
-                    OutlinedTextField(
+                    Text(file.path, fontSize = 12.sp, color = TextSecondary, fontFamily = JetBrainsMono)
+                    AiModuleTextField(
                         value = commitMessage,
                         onValueChange = { commitMessage = it },
-                        label = { Text("Commit message") },
+                        label = "Commit message",
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(
+                        AiModuleTextAction(
+                            label = if (aiSuggesting) Strings.aiCommitMsgGenerating else Strings.aiCommitMsgGenerate,
                             enabled = !aiSuggesting,
                             onClick = {
                                 aiSuggesting = true
@@ -617,34 +614,24 @@ fun CodeEditorScreen(
                                     }
                                 }
                             },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        ) {
-                            if (aiSuggesting) {
-                                CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp)
-                                Spacer(Modifier.width(6.dp))
-                                Text(Strings.aiCommitMsgGenerating, fontSize = 12.sp)
-                            } else {
-                                Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(14.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(Strings.aiCommitMsgGenerate, fontSize = 12.sp)
-                            }
-                        }
+                        )
                         aiSuggestError?.let { err ->
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 err.take(60),
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.error,
+                                color = AiModuleTheme.colors.error,
+                                fontFamily = JetBrainsMono,
                             )
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
+                AiModuleTextAction(label = if (saving) "committing" else "commit", enabled = !saving, onClick = {
                     if (commitMessage.isBlank()) {
                         Toast.makeText(context, "Commit message required", Toast.LENGTH_SHORT).show()
-                        return@TextButton
+                        return@AiModuleTextAction
                     }
                     saving = true
                     scope.launch {
@@ -670,12 +657,9 @@ fun CodeEditorScreen(
                             Toast.makeText(context, "Failed to commit", Toast.LENGTH_SHORT).show()
                         }
                     }
-                }, enabled = !saving) {
-                    if (saving) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    else Text("Commit")
-                }
+                })
             },
-            dismissButton = { TextButton(onClick = { showCommitDialog = false }) { Text(Strings.cancel) } }
+            dismissButton = { AiModuleTextAction(label = Strings.cancel.lowercase(), onClick = { showCommitDialog = false }, tint = AiModuleTheme.colors.textSecondary) }
         )
     }
 }
@@ -1340,7 +1324,7 @@ private fun AiQuickActionsRow(
     selectedText: String,
     onSendPrompt: (String) -> Unit,
 ) {
-    val colors = MaterialTheme.colorScheme
+    val colors = AiModuleTheme.colors
     val actions = listOf(
         Strings.aiAgentQuickExplain to "Read `$filePath` on branch `$branch` and explain what it does, including the key types and side effects.",
         Strings.aiAgentQuickAddTests to "Add unit tests for `$filePath` (branch `$branch`). Match the project's existing test framework and naming style. Read the file first to understand the scope.",
@@ -1360,7 +1344,7 @@ private fun AiQuickActionsRow(
             Icons.Rounded.AutoAwesome,
             null,
             Modifier.size(14.dp),
-            tint = colors.primary,
+            tint = colors.accent,
         )
         Spacer(Modifier.width(2.dp))
         // C2 — selection-first chip. We cap the snippet at ~4 KB to
@@ -1386,10 +1370,10 @@ private fun AiQuickActionsRow(
             Box(
                 Modifier
                     .clip(RoundedCornerShape(14.dp))
-                    .background(colors.primaryContainer.copy(alpha = 0.7f))
+                    .background(colors.accent.copy(alpha = 0.14f))
                     .border(
                         0.5.dp,
-                        colors.outlineVariant.copy(alpha = 0.5f),
+                        colors.border,
                         RoundedCornerShape(14.dp),
                     )
                     .clickable { onSendPrompt(prompt) }
@@ -1398,7 +1382,8 @@ private fun AiQuickActionsRow(
                 Text(
                     Strings.aiAgentSendSelectionChip,
                     fontSize = 11.sp,
-                    color = colors.onPrimaryContainer,
+                    color = colors.accent,
+                    fontFamily = JetBrainsMono,
                 )
             }
         }
@@ -1406,15 +1391,16 @@ private fun AiQuickActionsRow(
             Box(
                 Modifier
                     .clip(RoundedCornerShape(14.dp))
-                    .background(colors.surfaceVariant.copy(alpha = 0.6f))
-                    .border(0.5.dp, colors.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                    .background(colors.surface)
+                    .border(0.5.dp, colors.border, RoundedCornerShape(14.dp))
                     .clickable { onSendPrompt(prompt) }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 Text(
                     label,
                     fontSize = 11.sp,
-                    color = colors.onSurfaceVariant,
+                    color = colors.textSecondary,
+                    fontFamily = JetBrainsMono,
                 )
             }
         }
