@@ -24,7 +24,7 @@ import com.glassfiles.ui.theme.JetBrainsMono
 /**
  * Compact terminal-style topbar:
  *
- *   ←   AI Agent           $0.00 / 0.00k tok   ⚙ ⌬
+ *   ←   AI Agent           $0.00 / 0.00k tok      ⚙ ■
  *       repo@branch (subtitle, optional)
  *
  * Stays in a single row at the top and surfaces a tiny subtitle for
@@ -50,8 +50,6 @@ fun AgentTopBar(
     running: Boolean,
     onBack: () -> Unit,
     onSettings: () -> Unit,
-    onHistory: () -> Unit,
-    onSystemPrompt: () -> Unit,
     onStop: () -> Unit,
     onClose: (() -> Unit)? = null,
 ) {
@@ -122,24 +120,6 @@ fun AgentTopBar(
                     fontSize = AgentTerminal.type.topBarTitle,
                 )
             }
-            IconButton(onClick = onHistory, modifier = Modifier.size(36.dp)) {
-                Text(
-                    "≡",
-                    color = colors.textSecondary,
-                    fontFamily = JetBrainsMono,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = AgentTerminal.type.topBarTitle,
-                )
-            }
-            IconButton(onClick = onSystemPrompt, modifier = Modifier.size(36.dp)) {
-                Text(
-                    "\u232C",
-                    color = colors.textSecondary,
-                    fontFamily = JetBrainsMono,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = AgentTerminal.type.topBarTitle,
-                )
-            }
             if (running) {
                 IconButton(onClick = onStop, modifier = Modifier.size(36.dp)) {
                     Text(
@@ -150,8 +130,7 @@ fun AgentTopBar(
                         fontSize = AgentTerminal.type.topBarTitle,
                     )
                 }
-            }
-            if (onClose != null) {
+            } else if (onClose != null) {
                 IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
                     Text(
                         "\u00D7",

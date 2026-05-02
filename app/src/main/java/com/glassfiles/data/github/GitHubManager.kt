@@ -393,6 +393,72 @@ object GitHubManager {
         }
     }
 
+    suspend fun commitWorkspaceChanges(
+        context: Context,
+        owner: String,
+        repo: String,
+        branch: String,
+        changes: List<Pair<String, ByteArray?>>,
+        message: String,
+    ): String = withContext(Dispatchers.IO) {
+        try {
+            if (changes.isEmpty()) return@withContext ""
+            val refR = request(context, "/repos/$owner/$repo/git/ref/heads/$branch")
+            if (!refR.success) return@withContext ""
+            val latestSha = JSONObject(refR.body).getJSONObject("object").getString("sha")
+
+            val commitR = request(context, "/repos/$owner/$repo/git/commits/$latestSha")
+            if (!commitR.success) return@withContext ""
+            val baseTree = JSONObject(commitR.body).getJSONObject("tree").getString("sha")
+
+            val treeItems = JSONArray()
+            changes.forEach { (path, content) ->
+                val item = JSONObject().apply {
+                    put("path", path)
+                    put("mode", "100644")
+                    put("type", "blob")
+                }
+                if (content == null) {
+                    item.put("sha", JSONObject.NULL)
+                } else {
+                    val b64 = android.util.Base64.encodeToString(content, android.util.Base64.NO_WRAP)
+                    val blobBody = JSONObject().apply {
+                        put("content", b64)
+                        put("encoding", "base64")
+                    }.toString()
+                    val blobR = request(context, "/repos/$owner/$repo/git/blobs", "POST", blobBody)
+                    if (!blobR.success) return@withContext ""
+                    item.put("sha", JSONObject(blobR.body).getString("sha"))
+                }
+                treeItems.put(item)
+            }
+
+            val treeBody = JSONObject().apply {
+                put("base_tree", baseTree)
+                put("tree", treeItems)
+            }.toString()
+            val treeR = request(context, "/repos/$owner/$repo/git/trees", "POST", treeBody)
+            if (!treeR.success) return@withContext ""
+            val newTree = JSONObject(treeR.body).getString("sha")
+
+            val commitBody = JSONObject().apply {
+                put("message", message)
+                put("tree", newTree)
+                put("parents", JSONArray().put(latestSha))
+            }.toString()
+            val newCommitR = request(context, "/repos/$owner/$repo/git/commits", "POST", commitBody)
+            if (!newCommitR.success) return@withContext ""
+            val newCommitSha = JSONObject(newCommitR.body).getString("sha")
+
+            val refBody = JSONObject().apply { put("sha", newCommitSha) }.toString()
+            val refUpdate = request(context, "/repos/$owner/$repo/git/refs/heads/$branch", "PATCH", refBody)
+            if (refUpdate.success) newCommitSha else ""
+        } catch (e: Exception) {
+            Log.e(TAG, "Workspace commit: ${e.message}")
+            ""
+        }
+    }
+
     suspend fun deleteFile(
         context: Context, owner: String, repo: String, path: String,
         sha: String, message: String, branch: String? = null

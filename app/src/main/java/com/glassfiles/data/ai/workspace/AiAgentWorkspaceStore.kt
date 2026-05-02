@@ -6,6 +6,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.glassfiles.data.ai.AiAgentMemoryStore
 import com.glassfiles.data.ai.agent.LineDiff
+import com.glassfiles.data.github.GitHubManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
@@ -85,6 +86,45 @@ interface WorkspaceCommitter {
         message: String,
         applyChanges: suspend () -> Unit,
     ): String
+}
+
+class GitHubWorkspaceCommitter(
+    private val context: Context,
+    private val owner: String,
+    private val repo: String,
+    private val branch: String,
+) : WorkspaceCommitter {
+    override suspend fun commit(
+        workspace: WorkspaceRecord,
+        changes: List<WorkspaceFileRecord>,
+        message: String,
+        applyChanges: suspend () -> Unit,
+    ): String {
+        val currentHead = GitHubManager.getBranchHeadSha(context, owner, repo, branch).orEmpty()
+        if (workspace.baseCommitSha.isNotBlank() && currentHead != workspace.baseCommitSha) {
+            throw WorkspaceConflictException(
+                "Branch $branch changed. Workspace base=${workspace.baseCommitSha.take(7)}, current=${currentHead.take(7)}.",
+            )
+        }
+        val treeChanges = changes.map { file ->
+            file.path to when (file.operation) {
+                WorkspaceFileOperation.DELETE -> null
+                WorkspaceFileOperation.CREATE,
+                WorkspaceFileOperation.MODIFY,
+                WorkspaceFileOperation.RENAME -> file.newContent.orEmpty().toByteArray(Charsets.UTF_8)
+            }
+        }
+        return GitHubManager.commitWorkspaceChanges(
+            context = context,
+            owner = owner,
+            repo = repo,
+            branch = branch,
+            changes = treeChanges,
+            message = message,
+        ).ifBlank {
+            throw IllegalStateException("GitHub rejected workspace commit")
+        }
+    }
 }
 
 interface WorkspaceBackingFileSystem {

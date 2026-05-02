@@ -68,6 +68,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
@@ -185,6 +186,15 @@ fun AiAgentScreen(
     // composable so the sheet can be dismissed without leaving the
     // dialog stranded.
     var showMemoryFiles by remember { mutableStateOf(false) }
+    var pendingWorkspaceId by remember { mutableStateOf<String?>(null) }
+    var pendingWorkspaceDiff by remember {
+        mutableStateOf<com.glassfiles.data.ai.workspace.WorkspaceDiff?>(null)
+    }
+    var showWorkspaceReview by remember { mutableStateOf(false) }
+    var showWorkspaceCommit by remember { mutableStateOf(false) }
+    var workspaceCommitMessage by remember { mutableStateOf("") }
+    var workspaceReviewError by remember { mutableStateOf<String?>(null) }
+    var workspaceCommitBusy by remember { mutableStateOf(false) }
     // D2 — pending resumable run, if any. Read whenever
     // [activeSessionId] changes; once the user resumes/discards we set
     // it back to null without writing anything until the next launch.
@@ -585,6 +595,12 @@ fun AiAgentScreen(
                         branch = branch,
                     ),
                     db = workspaceDb,
+                    committer = com.glassfiles.data.ai.workspace.GitHubWorkspaceCommitter(
+                        context = context,
+                        owner = repoOwner(repo),
+                        repo = repoName(repo),
+                        branch = branch,
+                    ),
                 )
             } else null
             val executor = GitHubToolExecutor(
@@ -732,8 +748,12 @@ fun AiAgentScreen(
                             workspaceVfs.discard()
                         } else {
                             workspaceDb.markPendingReview(workspaceRecord.id)
+                            pendingWorkspaceId = workspaceRecord.id
+                            pendingWorkspaceDiff = diff
+                            workspaceCommitMessage = generateWorkspaceCommitMessage(diff)
+                            workspaceReviewError = null
                             transcript += AgentEntry.Assistant(
-                                text = "[workspace] pending review: ${diff.filesChanged} file(s), +${diff.additions}/-${diff.deletions}. Commit UI lands in Stage 3.",
+                                text = "[workspace] pending review: ${diff.filesChanged} file(s), +${diff.additions}/-${diff.deletions}. Review the diff before commit.",
                             )
                         }
                     }
@@ -1000,10 +1020,6 @@ fun AiAgentScreen(
             running = running,
             onBack = onBack,
             onSettings = { showSettings = true },
-            onHistory = { showHistory = true },
-            onSystemPrompt = {
-                if (selectedRepo != null) showSystemPrompt = true else showSettings = true
-            },
             onStop = ::stop,
             onClose = onClose,
         )
@@ -1198,6 +1214,37 @@ fun AiAgentScreen(
             }
         }
 
+        pendingWorkspaceDiff?.let { diff ->
+            WorkspacePendingReviewBlock(
+                diff = diff,
+                error = workspaceReviewError,
+                onReview = { showWorkspaceReview = true },
+                onCommit = {
+                    workspaceCommitMessage = workspaceCommitMessage.ifBlank {
+                        generateWorkspaceCommitMessage(diff)
+                    }
+                    showWorkspaceCommit = true
+                },
+                onDiscard = {
+                    val workspaceId = pendingWorkspaceId
+                    if (workspaceId != null) {
+                        scope.launch {
+                            runCatching {
+                                com.glassfiles.data.ai.workspace.WorkspaceDatabase(context)
+                                    .deleteWorkspace(workspaceId)
+                            }.onSuccess {
+                                pendingWorkspaceId = null
+                                pendingWorkspaceDiff = null
+                                workspaceReviewError = null
+                            }.onFailure {
+                                workspaceReviewError = it.message ?: it.javaClass.simpleName
+                            }
+                        }
+                    }
+                },
+            )
+        }
+
         if (pendingImage != null) {
             AgentAttachmentPreview(
                 base64 = pendingImage.orEmpty(),
@@ -1225,6 +1272,66 @@ fun AiAgentScreen(
             placeholder = Strings.aiAgentInputHint,
             modifier = Modifier.navigationBarsPadding(),
         )
+        pendingWorkspaceDiff?.let { diff ->
+            if (showWorkspaceReview) {
+                WorkspaceReviewDialog(
+                    diff = diff,
+                    onDismiss = { showWorkspaceReview = false },
+                )
+            }
+            if (showWorkspaceCommit) {
+                WorkspaceCommitDialog(
+                    message = workspaceCommitMessage,
+                    busy = workspaceCommitBusy,
+                    error = workspaceReviewError,
+                    onMessageChange = { workspaceCommitMessage = it },
+                    onDismiss = { if (!workspaceCommitBusy) showWorkspaceCommit = false },
+                    onCommit = {
+                        val workspaceId = pendingWorkspaceId ?: return@WorkspaceCommitDialog
+                        val repoForCommit = selectedRepo ?: return@WorkspaceCommitDialog
+                        val branchForCommit = selectedBranch.orEmpty()
+                        workspaceCommitBusy = true
+                        workspaceReviewError = null
+                        scope.launch {
+                            runCatching {
+                                val db = com.glassfiles.data.ai.workspace.WorkspaceDatabase(context)
+                                val vfs = com.glassfiles.data.ai.workspace.WorkspaceFileSystem(
+                                    workspaceId = workspaceId,
+                                    realFs = com.glassfiles.data.ai.workspace.GitHubRepositoryFileSystem(
+                                        context = context,
+                                        owner = repoOwner(repoForCommit),
+                                        repo = repoName(repoForCommit),
+                                        branch = branchForCommit,
+                                    ),
+                                    db = db,
+                                    committer = com.glassfiles.data.ai.workspace.GitHubWorkspaceCommitter(
+                                        context = context,
+                                        owner = repoOwner(repoForCommit),
+                                        repo = repoName(repoForCommit),
+                                        branch = branchForCommit,
+                                    ),
+                                )
+                                vfs.commit(workspaceCommitMessage.trim().ifBlank {
+                                    generateWorkspaceCommitMessage(diff)
+                                })
+                            }.onSuccess { sha ->
+                                transcript += AgentEntry.Assistant(
+                                    text = "[workspace] committed ${sha.take(7)}",
+                                )
+                                pendingWorkspaceId = null
+                                pendingWorkspaceDiff = null
+                                showWorkspaceCommit = false
+                                showWorkspaceReview = false
+                                workspaceReviewError = null
+                            }.onFailure {
+                                workspaceReviewError = it.message ?: it.javaClass.simpleName
+                            }
+                            workspaceCommitBusy = false
+                        }
+                    },
+                )
+            }
+        }
         if (showHistory) {
             AgentHistorySheet(
                 sessions = sessions,
@@ -1511,6 +1618,14 @@ fun AiAgentScreen(
                     com.glassfiles.data.ai.AiAgentMemoryStore.clearAll(context)
                 },
                 onInstantRenderChange = { instantRender = it },
+                onOpenHistory = {
+                    showSettings = false
+                    showHistory = true
+                },
+                onOpenSystemPrompt = {
+                    showSettings = false
+                    if (selectedRepo != null) showSystemPrompt = true
+                },
                 onClearChat = {
                     transcript.clear()
                     startNewSession()
@@ -1635,6 +1750,223 @@ private fun EmptyAgentState(message: String) {
             color = colors.textMuted,
         )
     }
+}
+
+@Composable
+private fun WorkspacePendingReviewBlock(
+    diff: com.glassfiles.data.ai.workspace.WorkspaceDiff,
+    error: String?,
+    onReview: () -> Unit,
+    onCommit: () -> Unit,
+    onDiscard: () -> Unit,
+) {
+    val colors = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.surfaceElevated)
+            .border(1.dp, colors.warning, RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            "workspace: pending review",
+            color = colors.warning,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+        )
+        Text(
+            "${diff.filesChanged} files modified · ${diff.additions} (+) · ${diff.deletions} (-)",
+            color = colors.textPrimary,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp,
+        )
+        diff.changes.take(4).forEach { change ->
+            Text(
+                "${change.operation.name.lowercase().padEnd(8)} ${change.path} (+${change.additions} -${change.deletions})",
+                color = colors.textSecondary,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+            )
+        }
+        if (diff.changes.size > 4) {
+            Text(
+                "... ${diff.changes.size - 4} more",
+                color = colors.textMuted,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+            )
+        }
+        if (!error.isNullOrBlank()) {
+            Text(error, color = colors.error, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AgentTextButton("[ review diff ]", colors.accent, true, onReview)
+            AgentTextButton("[ commit ]", colors.warning, true, onCommit)
+            AgentTextButton("[ discard ]", colors.error, true, onDiscard)
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceReviewDialog(
+    diff: com.glassfiles.data.ai.workspace.WorkspaceDiff,
+    onDismiss: () -> Unit,
+) {
+    val colors = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors
+    var selectedPath by remember(diff.workspaceId) {
+        mutableStateOf(diff.changes.firstOrNull()?.path.orEmpty())
+    }
+    val selected = diff.changes.firstOrNull { it.path == selectedPath } ?: diff.changes.firstOrNull()
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(colors.background)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "workspace diff",
+                    color = colors.textPrimary,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f),
+                )
+                AgentTextButton("[ close ]", colors.textSecondary, true, onDismiss)
+            }
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyColumn(
+                    Modifier
+                        .weight(0.42f)
+                        .fillMaxSize()
+                        .border(1.dp, colors.border, RoundedCornerShape(6.dp))
+                        .padding(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(diff.changes, key = { it.path }) { change ->
+                        val selectedFile = change.path == selected?.path
+                        Text(
+                            "${if (selectedFile) ">" else " "} ${change.path} (+${change.additions} -${change.deletions})",
+                            color = if (selectedFile) colors.accent else colors.textSecondary,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable { selectedPath = change.path }
+                                .padding(horizontal = 6.dp, vertical = 5.dp),
+                        )
+                    }
+                }
+                LazyColumn(
+                    Modifier
+                        .weight(0.58f)
+                        .fillMaxSize()
+                        .border(1.dp, colors.border, RoundedCornerShape(6.dp))
+                        .padding(6.dp),
+                ) {
+                    val lines = selected?.unifiedDiff?.lines().orEmpty()
+                    items(lines.size) { index ->
+                        val line = lines[index]
+                        val color = when {
+                            line.startsWith("+") -> colors.accent
+                            line.startsWith("-") -> colors.error
+                            line.startsWith("@@") -> colors.warning
+                            else -> colors.textSecondary
+                        }
+                        Text(line, color = color, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceCommitDialog(
+    message: String,
+    busy: Boolean,
+    error: String?,
+    onMessageChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onCommit: () -> Unit,
+) {
+    val colors = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(colors.surfaceElevated)
+                .border(1.dp, colors.border, RoundedCornerShape(10.dp))
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                "commit message:",
+                color = colors.textPrimary,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+            )
+            BasicTextField(
+                value = message,
+                onValueChange = onMessageChange,
+                enabled = !busy,
+                textStyle = TextStyle(
+                    color = colors.textPrimary,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                ),
+                cursorBrush = SolidColor(colors.accent),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 120.dp)
+                    .border(1.dp, colors.border, RoundedCornerShape(6.dp))
+                    .padding(10.dp),
+            )
+            if (!error.isNullOrBlank()) {
+                Text(error, color = colors.error, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                AgentTextButton(
+                    label = if (busy) "[ committing... ]" else "[ commit & push ]",
+                    color = if (busy) colors.textMuted else colors.accent,
+                    enabled = !busy && message.isNotBlank(),
+                    onClick = onCommit,
+                )
+                AgentTextButton("[ cancel ]", colors.textSecondary, !busy, onDismiss)
+            }
+        }
+    }
+}
+
+private fun generateWorkspaceCommitMessage(
+    diff: com.glassfiles.data.ai.workspace.WorkspaceDiff,
+): String {
+    val first = diff.changes.firstOrNull()?.path?.substringAfterLast('/') ?: "workspace changes"
+    return buildString {
+        append("chore: update ")
+        append(first)
+        appendLine()
+        appendLine()
+        diff.changes.take(6).forEach { change ->
+            append("- ")
+            append(change.operation.name.lowercase())
+            append(" ")
+            append(change.path)
+            appendLine()
+        }
+    }.trimEnd()
 }
 
 @Composable

@@ -19,6 +19,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +35,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import com.glassfiles.ui.components.AiPickerSheet
@@ -69,26 +73,57 @@ fun AgentSettingsBottomSheet(
     onViewMemoryFiles: () -> Unit,
     onClearMemory: () -> Unit,
     onInstantRenderChange: (Boolean) -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenSystemPrompt: () -> Unit,
     onClearChat: () -> Unit,
     onExportChat: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = AgentTerminal.colors
     var showProtectedPaths by remember { mutableStateOf(false) }
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.58f))
+                .padding(top = 48.dp),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
+                .widthIn(max = 720.dp)
+                .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
                 .background(colors.surfaceElevated)
-                .border(1.dp, colors.border, RoundedCornerShape(8.dp))
-                .statusBarsPadding()
+                .border(
+                    1.dp,
+                    colors.border,
+                    RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
+                )
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .navigationBarsPadding(),
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             AgentSheetHeader("AGENT SETTINGS")
+            AgentSheetLabel("CHAT")
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                AgentSheetCommand(
+                    label = "[ chat history \u2192 ]",
+                    color = colors.textSecondary,
+                    onClick = onOpenHistory,
+                )
+                AgentSheetCommand(
+                    label = "[ system prompt \u2192 ]",
+                    color = colors.warning,
+                    onClick = onOpenSystemPrompt,
+                )
+            }
+            AgentSheetDivider()
             AgentTerminalPickerRow(
                 label = "REPO",
                 value = state.repoLabel,
@@ -284,6 +319,7 @@ fun AgentSettingsBottomSheet(
                 )
             }
             Spacer(Modifier.height(8.dp))
+        }
         }
     }
     if (showProtectedPaths) {
