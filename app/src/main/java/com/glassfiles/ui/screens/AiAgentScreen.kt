@@ -1060,6 +1060,7 @@ fun AiAgentScreen(
                     initialApiKey = key,
                     tools = effectiveTools,
                     executor = executor,
+                    localSessionId = activeSessionId,
                     transcript = transcript,
                     approvals = approvals,
                     approvalSettings = approvalSettings,
@@ -3922,6 +3923,7 @@ private fun generatedFileBytes(context: Context, file: AiChatSessionStore.Genera
             context.filesDir,
             context.cacheDir,
             context.getExternalFilesDir(null),
+            runCatching { Environment.getExternalStorageDirectory() }.getOrNull(),
         ).map { it.canonicalFile }
         require(allowedRoots.any { root -> source.path == root.path || source.path.startsWith(root.path + File.separator) }) {
             "Generated file source is outside app storage"
@@ -3932,7 +3934,7 @@ private fun generatedFileBytes(context: Context, file: AiChatSessionStore.Genera
     return file.content.toByteArray(Charsets.UTF_8)
 }
 
-private val generatedArchiveExtensions = setOf("zip", "jar", "aar", "7z", "tar", "gz", "tgz", "rar")
+private val generatedArchiveExtensions = setOf("zip", "gskill", "jar", "aar", "7z", "tar", "gz", "tgz", "rar")
 
 private fun isGeneratedArchiveName(name: String): Boolean =
     name.substringAfterLast('.', "").lowercase(Locale.US) in generatedArchiveExtensions
@@ -3990,6 +3992,7 @@ private fun uniqueDownloadFile(directory: java.io.File, name: String): java.io.F
 private fun mimeForGeneratedFile(name: String): String =
     when (name.substringAfterLast('.', "").lowercase(Locale.US)) {
         "zip" -> "application/zip"
+        "gskill" -> "application/zip"
         "jar" -> "application/java-archive"
         "aar" -> "application/zip"
         "7z" -> "application/x-7z-compressed"
@@ -4376,6 +4379,7 @@ private suspend fun runAgentLoop(
     initialApiKey: String,
     tools: List<com.glassfiles.data.ai.agent.AiTool>,
     executor: GitHubToolExecutor,
+    localSessionId: String? = null,
     transcript: androidx.compose.runtime.snapshots.SnapshotStateList<AgentEntry>,
     approvals: androidx.compose.runtime.snapshots.SnapshotStateList<PendingApproval>,
     /**
@@ -4627,6 +4631,19 @@ private suspend fun runAgentLoop(
                 AiToolResult(callId = call.id, name = call.name, output = Strings.aiAgentRejected, isError = true)
             } else {
                 executor.execute(context, call)
+            }
+            val localGeneratedFile = if (approved && !result.isError && localSessionId != null) {
+                generatedFileForLocalTool(context, localSessionId, call)
+            } else {
+                null
+            }
+            localGeneratedFile?.let { fileOut ->
+                val replacedPaths = if (call.name == AgentTools.ARCHIVE_CREATE.name) {
+                    archiveSourceGeneratedPaths(runCatching { JSONObject(call.argsJson) }.getOrElse { JSONObject() })
+                } else {
+                    emptyList()
+                }
+                attachGeneratedFileToAssistant(transcript, streamingIndex, fileOut, replacedPaths)
             }
             // Bump the per-task write counter on any approved non-readOnly
             // tool call. Read-only calls (list_dir / read_file / search_repo /
@@ -5042,7 +5059,7 @@ file contents here
 ```
 The app will turn that block into a clickable chat attachment. You can also use artifact_write or local_write_file to create a visible chat attachment.
 
-Do not send archives as fenced file blocks. To send a zip/tar/7z archive, write the source files in the local workspace, call archive_create, and then reply with a short note naming the archive.
+Do not send archives as fenced file blocks. To send a zip/tar/7z/.gskill archive, write the source files in the local workspace, call archive_create, and then reply with a short note naming the archive.
 
 For any long prompt, skill, template, code file, markdown document, or other output longer than about 2000 characters, create a chat attachment with artifact_write instead of writing the full content inline in the chat. After the tool succeeds, reply with a short note naming the file. Do not split long files across chat messages unless the user explicitly asks for inline text.
 """.trimIndent()
@@ -5191,6 +5208,58 @@ private fun generatedArchiveFile(
         content = "",
         sourcePath = archive.absolutePath,
     )
+}
+
+private fun generatedFileForLocalTool(
+    context: Context,
+    sessionId: String,
+    call: AiToolCall,
+): AiChatSessionStore.GeneratedFile? {
+    val args = runCatching { JSONObject(call.argsJson) }.getOrElse { JSONObject() }
+    return when (call.name) {
+        AgentTools.LOCAL_WRITE_FILE.name -> {
+            val rawPath = args.optString("path")
+            val path = cleanGeneratedFileName(
+                if (rawPath.startsWith("/")) rawPath.substringAfterLast('/') else rawPath,
+            )
+            val content = args.optString("content", "")
+            path?.let {
+                AiChatSessionStore.GeneratedFile(
+                    name = it,
+                    language = languageForGeneratedFile(it, ""),
+                    content = content,
+                )
+            }
+        }
+        AgentTools.ARCHIVE_CREATE.name -> generatedArchiveFile(context, sessionId, args)
+        else -> null
+    }
+}
+
+private fun attachGeneratedFileToAssistant(
+    transcript: MutableList<AgentEntry>,
+    assistantIndex: Int,
+    file: AiChatSessionStore.GeneratedFile,
+    replacedPaths: List<String>,
+) {
+    val current = transcript.getOrNull(assistantIndex) as? AgentEntry.Assistant
+    if (current != null) {
+        val visibleFiles = removeGeneratedFilesForArchive(current.generatedFiles, replacedPaths, file.name)
+        transcript[assistantIndex] = current.copy(
+            generatedFiles = mergeGeneratedFiles(visibleFiles, listOf(file)),
+        )
+    } else {
+        if (replacedPaths.isNotEmpty()) {
+            transcript.indices.forEach { index ->
+                val entry = transcript[index] as? AgentEntry.Assistant ?: return@forEach
+                val visibleFiles = removeGeneratedFilesForArchive(entry.generatedFiles, replacedPaths, file.name)
+                if (visibleFiles.size != entry.generatedFiles.size) {
+                    transcript[index] = entry.copy(generatedFiles = visibleFiles)
+                }
+            }
+        }
+        transcript += AgentEntry.Assistant(text = "", generatedFiles = listOf(file))
+    }
 }
 
 private fun archiveSourceGeneratedPaths(args: JSONObject): List<String> {
