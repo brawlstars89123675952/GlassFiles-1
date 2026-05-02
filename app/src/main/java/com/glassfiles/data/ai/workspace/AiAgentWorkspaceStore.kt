@@ -342,7 +342,7 @@ class WorkspaceFileSystem(
         sha
     }
 
-    override suspend fun discard() = withWorkspaceLock {
+    override suspend fun discard(): Unit = withWorkspaceLock {
         db.deleteWorkspace(workspaceId)
     }
 
