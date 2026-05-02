@@ -14,7 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +34,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.glassfiles.data.Strings
 import com.glassfiles.data.github.*
+import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.components.AiModuleGlyphAction
 import com.glassfiles.ui.components.aiModuleRepoBadge
 import com.glassfiles.ui.theme.*
@@ -53,11 +53,11 @@ internal val GitHubMergedPurple = Color(0xFF6F42C1)
 @Composable
 internal fun Modifier.ghGlassCard(radius: androidx.compose.ui.unit.Dp = 16.dp): Modifier {
     val shape = RoundedCornerShape(radius)
-    val colors = MaterialTheme.colorScheme
+    val colors = AiModuleTheme.colors
     return this
         .clip(shape)
         .background(color = colors.surface, shape = shape)
-        .border(1.dp, colors.outlineVariant.copy(alpha = 0.08f), shape)
+        .border(1.dp, colors.border.copy(alpha = 0.65f), shape)
 }
 
 @Composable

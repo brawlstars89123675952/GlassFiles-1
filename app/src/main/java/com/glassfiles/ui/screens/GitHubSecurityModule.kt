@@ -14,7 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,9 +27,12 @@ import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHCodeScanningAlert
 import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleIcon as Icon
+import com.glassfiles.ui.components.AiModuleIconButton as IconButton
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModuleSearchField
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.components.AiModuleTextAction
 import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.data.github.GHCommunityProfile
@@ -125,7 +127,7 @@ internal fun RulesetsScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                AiModuleSpinner(label = "loading rulesets")
             }
         } else {
             val visibleRulesets = rulesets.filter { ruleset ->
@@ -316,7 +318,7 @@ private fun RulesetDetailScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                AiModuleSpinner(label = "loading ruleset")
             }
         } else {
             val current = detail
@@ -714,7 +716,7 @@ internal fun SecurityScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                AiModuleSpinner(label = "loading security")
             }
         } else {
             LazyColumn(
@@ -1019,7 +1021,7 @@ private fun SecuritySettingsCard(
         }
         if (settings == null) {
             Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                AiModuleSpinner(label = "loading controls")
             }
         } else {
             SecurityToggleRow(
@@ -1064,23 +1066,27 @@ private fun CommunityProfileCard(profile: GHCommunityProfile?, onOpenDocs: () ->
             }
             Text("$health%", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = healthColor)
         }
-        LinearProgressIndicator(
-            progress = { (health.coerceIn(0, 100) / 100f) },
-            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(6.dp)),
-            color = healthColor,
-            trackColor = AiModuleTheme.colors.background
-        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(AiModuleTheme.colors.background)
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth((health.coerceIn(0, 100) / 100f))
+                    .height(6.dp)
+                    .background(healthColor)
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             SecurityPill("Present ${profile?.files?.count { it.present } ?: 0}", Color(0xFF34C759))
             SecurityPill("Missing ${profile?.files?.count { !it.present } ?: 0}", AiModuleTheme.colors.textMuted)
             profile?.updatedAt?.takeIf { it.isNotBlank() }?.take(10)?.let { SecurityPill("Updated $it", AiModuleTheme.colors.textSecondary) }
         }
         if (!profile?.documentationUrl.isNullOrBlank()) {
-            TextButton(onClick = onOpenDocs, contentPadding = PaddingValues(horizontal = 0.dp)) {
-                Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = AiModuleTheme.colors.accent)
-                Spacer(Modifier.width(6.dp))
-                Text("Open documentation", color = AiModuleTheme.colors.accent, fontSize = 13.sp)
-            }
+            GitHubTerminalButton("open documentation", onClick = onOpenDocs, color = AiModuleTheme.colors.accent)
         }
     }
 }
@@ -1131,7 +1137,12 @@ private fun SecurityToggleRow(
             Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = AiModuleTheme.colors.textPrimary)
             Text(subtitle, fontSize = 12.sp, color = AiModuleTheme.colors.textMuted)
         }
-        Switch(checked = checked, onCheckedChange = onToggle, enabled = enabled, colors = SwitchDefaults.colors(checkedTrackColor = AiModuleTheme.colors.accent))
+        GitHubTerminalCheckbox(
+            label = if (checked) "enabled" else "disabled",
+            checked = checked,
+            enabled = enabled,
+            onToggle = { onToggle(!checked) },
+        )
     }
 }
 

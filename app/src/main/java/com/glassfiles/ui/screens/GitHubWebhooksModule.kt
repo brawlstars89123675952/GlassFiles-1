@@ -12,7 +12,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,9 +25,12 @@ import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHWebhook
 import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleIcon as Icon
+import com.glassfiles.ui.components.AiModuleIconButton as IconButton
 import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModuleSearchField
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.components.AiModuleTextAction
 import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.data.github.GHWebhookConfig
@@ -107,7 +109,7 @@ internal fun WebhooksScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                AiModuleSpinner(label = "loading webhooks")
             }
         } else {
             val visibleHooks = webhooks.filter { hook ->
@@ -470,14 +472,8 @@ private fun WebhookEditorDialog(
                 }
             AiModuleTextField(value = secret, onValueChange = { secret = it }, label = if (webhook == null) "Secret (optional)" else "New secret (leave blank to keep)")
             Text("GitHub never returns existing webhook secrets.", fontSize = 11.sp, color = AiModuleTheme.colors.textMuted, fontFamily = JetBrainsMono)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Switch(checked = active, onCheckedChange = { active = it }, colors = SwitchDefaults.colors(checkedThumbColor = AiModuleTheme.colors.accent))
-                Text("Active", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Checkbox(checked = insecureSsl, onCheckedChange = { insecureSsl = it })
-                Text("Disable SSL verification", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono)
-            }
+            GitHubTerminalCheckbox("active", active, onToggle = { active = !active })
+            GitHubTerminalCheckbox("disable ssl verification", insecureSsl, onToggle = { insecureSsl = !insecureSsl })
         }
     }
 }
@@ -547,8 +543,7 @@ private fun WebhookConfigDialog(
         Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (loading) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Text("Loading config", fontSize = 13.sp, color = AiModuleTheme.colors.textSecondary, fontFamily = JetBrainsMono)
+                    AiModuleSpinner(label = "loading config")
                 }
             }
             AiModuleTextField(value = url, onValueChange = { url = it }, label = "Payload URL")
@@ -565,10 +560,7 @@ private fun WebhookConfigDialog(
                 color = AiModuleTheme.colors.textMuted,
                 fontFamily = JetBrainsMono,
             )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Checkbox(checked = insecureSsl, onCheckedChange = { insecureSsl = it })
-                Text("Disable SSL verification", fontSize = 13.sp, color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono)
-            }
+            GitHubTerminalCheckbox("disable ssl verification", insecureSsl, onToggle = { insecureSsl = !insecureSsl })
         }
     }
 }
@@ -616,7 +608,7 @@ private fun WebhookDeliveriesScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                AiModuleSpinner(label = "loading deliveries")
             }
         } else {
             val visibleDeliveries = deliveries.filter { delivery ->
