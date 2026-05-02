@@ -22,8 +22,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,8 +47,9 @@ import com.glassfiles.data.github.GHOrg
 import com.glassfiles.data.github.GHRepo
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.components.AiModuleHairline
-import com.glassfiles.ui.components.AiModuleScreenScaffold
+import com.glassfiles.ui.components.AiModuleIcon as Icon
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.launch

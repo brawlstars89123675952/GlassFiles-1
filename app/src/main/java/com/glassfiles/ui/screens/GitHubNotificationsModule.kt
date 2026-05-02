@@ -25,11 +25,6 @@ import androidx.compose.material.icons.automirrored.rounded.MergeType
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,10 +44,14 @@ import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHNotification
 import com.glassfiles.data.github.GHThreadSubscription
 import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleIcon as Icon
+import com.glassfiles.ui.components.AiModuleIconButton as IconButton
 import com.glassfiles.ui.components.AiModulePillButton
-import com.glassfiles.ui.components.AiModuleScreenScaffold
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
+import com.glassfiles.ui.components.AiModuleTextAction
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.launch
@@ -267,19 +266,10 @@ private fun NotificationSubscriptionDialog(notification: GHNotification, onDismi
     LaunchedEffect(notification.id) { loadSubscription() }
 
     val palette = AiModuleTheme.colors
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = palette.surface,
-        title = {
-            Text(
-                "> subscription",
-                color = palette.textPrimary,
-                fontFamily = JetBrainsMono,
-                fontWeight = FontWeight.Medium,
-                fontSize = 14.sp,
-            )
-        },
-        text = {
+        title = "subscription",
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     notification.title,
@@ -369,14 +359,7 @@ private fun NotificationSubscriptionDialog(notification: GHNotification, onDismi
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    "[ close ]",
-                    color = palette.accent,
-                    fontFamily = JetBrainsMono,
-                    fontSize = 13.sp,
-                )
-            }
+            AiModuleTextAction(label = "[ close ]", onClick = onDismiss)
         },
     )
 }

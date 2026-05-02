@@ -32,14 +32,6 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.QuestionAnswer
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ThumbUp
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,9 +54,15 @@ import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.data.github.GHDiscussion
 import com.glassfiles.data.github.GHDiscussionCategory
 import com.glassfiles.data.github.GitHubManager
-import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleIcon as Icon
+import com.glassfiles.ui.components.AiModulePillButton
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
+import com.glassfiles.ui.components.AiModuleTextAction
+import com.glassfiles.ui.components.AiModuleTextField
+import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.launch
 
 @Composable
@@ -133,7 +131,7 @@ internal fun DiscussionsScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.5.dp)
+                AiModuleSpinner(label = "loading discussions…")
             }
         } else {
             val visibleDiscussions = discussions.filter { discussion ->
@@ -152,13 +150,13 @@ internal fun DiscussionsScreen(
             ) {
                 item { DiscussionsSummaryCard(discussions, categories) }
                 item {
-                    OutlinedTextField(
+                    AiModuleTextField(
                         value = query,
                         onValueChange = { query = it },
-                        label = { Text("Search discussions") },
+                        label = "Search discussions",
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) }
+                        leading = { Icon(Icons.Rounded.Search, null, Modifier.size(18.dp), tint = AiModuleTheme.colors.textSecondary) },
                     )
                 }
                 item {
@@ -343,16 +341,17 @@ private fun DiscussionDetailScreen(
             item { DiscussionBodyCard(discussion) }
             item {
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AiModuleTheme.colors.surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
+                    AiModuleTextField(
                         value = newComment,
                         onValueChange = { newComment = it },
-                        label = { Text("Add a comment") },
+                        label = "Add a comment",
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3,
-                        maxLines = 6
+                        maxLines = 6,
                     )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        Button(
+                        AiModulePillButton(
+                            label = "Comment",
                             enabled = !actionInFlight && newComment.isNotBlank() && discussion.id.isNotBlank(),
                             onClick = {
                                 actionInFlight = true
@@ -366,16 +365,14 @@ private fun DiscussionDetailScreen(
                                     }
                                 }
                             }
-                        ) {
-                            Text("Comment")
-                        }
+                        )
                     }
                 }
             }
             if (loading) {
                 item {
                     Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = AiModuleTheme.colors.accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        AiModuleSpinner(label = "loading comments…")
                     }
                 }
             } else {
@@ -412,14 +409,22 @@ private fun DiscussionDetailScreen(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            containerColor = AiModuleTheme.colors.surface,
-            title = { Text("Delete Discussion?", fontWeight = FontWeight.Bold, color = AiModuleTheme.colors.textPrimary) },
-            text = { Text("Delete #${discussion.number} and all replies?", fontSize = 14.sp, color = AiModuleTheme.colors.textSecondary) },
+            title = "Delete Discussion?",
+            content = {
+                Text(
+                    "Delete #${discussion.number} and all replies?",
+                    fontSize = 14.sp,
+                    color = AiModuleTheme.colors.textSecondary,
+                    fontFamily = JetBrainsMono,
+                )
+            },
             confirmButton = {
-                TextButton(
+                AiModuleTextAction(
+                    label = "Delete",
                     enabled = !actionInFlight && discussion.id.isNotBlank(),
+                    tint = AiModuleTheme.colors.error,
                     onClick = {
                         actionInFlight = true
                         scope.launch {
@@ -429,16 +434,16 @@ private fun DiscussionDetailScreen(
                             showDeleteDialog = false
                             if (ok) onDeleted()
                         }
-                    }
-                ) {
-                    Text("Delete", color = Color(0xFFFF3B30))
-                }
+                    },
+                )
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel", color = AiModuleTheme.colors.textSecondary)
-                }
-            }
+                AiModuleTextAction(
+                    label = "Cancel",
+                    onClick = { showDeleteDialog = false },
+                    tint = AiModuleTheme.colors.textSecondary,
+                )
+            },
         )
     }
 }
@@ -501,26 +506,25 @@ private fun DiscussionEditorDialog(
     var draftBody by remember(initialBody) { mutableStateOf(initialBody) }
     var categoryId by remember(initialCategoryId, categories) { mutableStateOf(initialCategoryId.ifBlank { categories.firstOrNull()?.id.orEmpty() }) }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = AiModuleTheme.colors.surface,
-        title = { Text(title, color = AiModuleTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
-        text = {
+        title = title,
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
+                AiModuleTextField(
                     value = draftTitle,
                     onValueChange = { draftTitle = it },
-                    label = { Text("Title") },
+                    label = "Title",
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(
+                AiModuleTextField(
                     value = draftBody,
                     onValueChange = { draftBody = it },
-                    label = { Text("Body") },
+                    label = "Body",
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 5,
-                    maxLines = 8
+                    maxLines = 8,
                 )
                 Text("Category", fontSize = 12.sp, color = AiModuleTheme.colors.textSecondary)
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -536,18 +540,19 @@ private fun DiscussionEditorDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = confirmLabel,
                 enabled = draftTitle.isNotBlank() && draftBody.isNotBlank() && categoryId.isNotBlank(),
-                onClick = { onSave(draftTitle, draftBody, categoryId) }
-            ) {
-                Text(confirmLabel, color = AiModuleTheme.colors.accent)
-            }
+                onClick = { onSave(draftTitle, draftBody, categoryId) },
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = AiModuleTheme.colors.textSecondary)
-            }
-        }
+            AiModuleTextAction(
+                label = "Cancel",
+                onClick = onDismiss,
+                tint = AiModuleTheme.colors.textSecondary,
+            )
+        },
     )
 }
 

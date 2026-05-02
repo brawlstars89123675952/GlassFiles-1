@@ -38,6 +38,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -59,6 +60,7 @@ fun AiModuleText(
     fontWeight: FontWeight? = null,
     lineHeight: TextUnit = TextUnit.Unspecified,
     letterSpacing: TextUnit = TextUnit.Unspecified,
+    textAlign: TextAlign? = null,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
 ) {
@@ -75,6 +77,7 @@ fun AiModuleText(
             fontWeight = fontWeight,
             lineHeight = lineHeight,
             letterSpacing = letterSpacing,
+            textAlign = textAlign,
         ),
     )
 }
@@ -90,6 +93,7 @@ fun AiModuleText(
     fontWeight: FontWeight? = null,
     lineHeight: TextUnit = TextUnit.Unspecified,
     letterSpacing: TextUnit = TextUnit.Unspecified,
+    textAlign: TextAlign? = null,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
 ) {
@@ -106,6 +110,7 @@ fun AiModuleText(
             fontWeight = fontWeight,
             lineHeight = lineHeight,
             letterSpacing = letterSpacing,
+            textAlign = textAlign,
         ),
     )
 }

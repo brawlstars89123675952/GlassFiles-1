@@ -16,12 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.PersonAdd
-import androidx.compose.material.icons.rounded.PersonRemove
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,9 +39,9 @@ import com.glassfiles.data.github.GHUserProfile
 import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.components.AiModuleHairline
 import com.glassfiles.ui.components.AiModuleKeyValueRow
-import com.glassfiles.ui.components.AiModuleScreenScaffold
 import com.glassfiles.ui.components.AiModuleSectionLabel
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.launch
