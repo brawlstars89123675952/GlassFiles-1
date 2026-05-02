@@ -64,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -1945,6 +1946,7 @@ private fun TranscriptEntry(
     activeBranch: String?,
     activeDefaultBranch: String?,
 ) {
+    val context = LocalContext.current
     when (entry) {
         is AgentEntry.User -> {
             com.glassfiles.ui.screens.ai.terminal.AgentMessageRow(
@@ -1955,11 +1957,10 @@ private fun TranscriptEntry(
                     Spacer(Modifier.height(6.dp))
                 }
                 if (entry.text.isNotBlank()) {
-                    Text(
-                        entry.text,
-                        color = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors.textPrimary,
-                        fontSize = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.type.message,
-                        fontFamily = com.glassfiles.ui.theme.JetBrainsMono,
+                    TerminalMessageBody(
+                        text = entry.text,
+                        context = context,
+                        plainColor = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors.accent,
                     )
                 }
             }
@@ -1969,12 +1970,7 @@ private fun TranscriptEntry(
                 com.glassfiles.ui.screens.ai.terminal.AgentMessageRow(
                     role = com.glassfiles.ui.screens.ai.terminal.AgentRole.ASSISTANT,
                 ) {
-                    Text(
-                        entry.text,
-                        color = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors.textPrimary,
-                        fontSize = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.type.message,
-                        fontFamily = com.glassfiles.ui.theme.JetBrainsMono,
-                    )
+                    TerminalMessageBody(text = entry.text, context = context)
                 }
             }
         }
@@ -2000,6 +1996,78 @@ private fun TranscriptEntry(
             )
         }
     }
+}
+
+/**
+ * Splits chat text into plain segments and triple-backtick code fences.
+ * Each fence uses [AgentTerminalCodeBlock], whose header exposes a copy
+ * command; plain text keeps the message role color.
+ */
+@Composable
+private fun TerminalMessageBody(
+    text: String,
+    context: Context,
+    plainColor: Color = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors.textPrimary,
+) {
+    val cleaned = com.glassfiles.ui.screens.ai.terminal.cleanAgentText(text)
+    val segments = remember(cleaned) { splitCodeFences(cleaned) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        segments.forEach { segment ->
+            when (segment) {
+                is TerminalSegment.Plain -> {
+                    if (segment.text.isNotBlank()) {
+                        com.glassfiles.ui.screens.ai.terminal.AgentMessageText(
+                            text = segment.text,
+                            color = plainColor,
+                        )
+                    }
+                }
+                is TerminalSegment.Code -> {
+                    com.glassfiles.ui.screens.ai.terminal.AgentTerminalCodeBlock(
+                        text = segment.text,
+                        lang = segment.lang,
+                        filePath = null,
+                        context = context,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private sealed class TerminalSegment {
+    data class Plain(val text: String) : TerminalSegment()
+    data class Code(val text: String, val lang: String) : TerminalSegment()
+}
+
+private fun splitCodeFences(input: String): List<TerminalSegment> {
+    if (!input.contains("```")) return listOf(TerminalSegment.Plain(input))
+    val out = mutableListOf<TerminalSegment>()
+    var index = 0
+    while (index < input.length) {
+        val open = input.indexOf("```", index)
+        if (open < 0) {
+            out += TerminalSegment.Plain(input.substring(index))
+            break
+        }
+        if (open > index) out += TerminalSegment.Plain(input.substring(index, open).trimEnd('\n'))
+        val newline = input.indexOf('\n', open + 3)
+        val langStart = open + 3
+        val (lang, contentStart) = if (newline < 0) {
+            "" to (open + 3)
+        } else {
+            input.substring(langStart, newline).trim() to (newline + 1)
+        }
+        val close = input.indexOf("```", contentStart)
+        if (close < 0) {
+            out += TerminalSegment.Code(input.substring(contentStart), lang)
+            break
+        }
+        out += TerminalSegment.Code(input.substring(contentStart, close).trimEnd('\n'), lang)
+        index = close + 3
+        if (index < input.length && input[index] == '\n') index++
+    }
+    return out
 }
 
 @Composable
@@ -3126,4 +3194,3 @@ private data class PendingApproval(
     val call: AiToolCall,
     val deferred: CompletableDeferred<Boolean>,
 )
-

@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,17 +15,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.OpenInFull
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -135,22 +129,8 @@ private fun AgentCodeHeader(
                 .weight(1f)
                 .padding(vertical = 8.dp),
         )
-        IconButton(onClick = onCopy, modifier = Modifier.size(36.dp)) {
-            Icon(
-                Icons.Rounded.ContentCopy,
-                contentDescription = "copy",
-                modifier = Modifier.size(16.dp),
-                tint = colors.textSecondary,
-            )
-        }
-        IconButton(onClick = onExpand, modifier = Modifier.size(36.dp)) {
-            Icon(
-                Icons.Rounded.OpenInFull,
-                contentDescription = "expand",
-                modifier = Modifier.size(16.dp),
-                tint = colors.textSecondary,
-            )
-        }
+        AgentCodeHeaderButton(label = "copy", onClick = onCopy)
+        AgentCodeHeaderButton(label = "open", onClick = onExpand)
     }
 }
 
@@ -192,22 +172,8 @@ private fun AgentFullscreenCodeView(
                 fontFamily = JetBrainsMono,
                 modifier = Modifier.weight(1f).padding(vertical = 10.dp),
             )
-            IconButton(onClick = { copyToClipboard(context, text) }, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    Icons.Rounded.ContentCopy,
-                    contentDescription = "copy",
-                    modifier = Modifier.size(18.dp),
-                    tint = colors.textSecondary,
-                )
-            }
-            IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    Icons.Rounded.Close,
-                    contentDescription = "close",
-                    modifier = Modifier.size(18.dp),
-                    tint = colors.textSecondary,
-                )
-            }
+            AgentCodeHeaderButton(label = "copy", onClick = { copyToClipboard(context, text) })
+            AgentCodeHeaderButton(label = "close", onClick = onClose)
         }
         Box(
             Modifier
@@ -225,6 +191,20 @@ private fun AgentFullscreenCodeView(
             )
         }
     }
+}
+
+@Composable
+private fun AgentCodeHeaderButton(label: String, onClick: () -> Unit) {
+    val colors = AgentTerminal.colors
+    Text(
+        text = "[ $label ]",
+        color = colors.textSecondary,
+        fontFamily = JetBrainsMono,
+        fontSize = AgentTerminal.type.label,
+        modifier = Modifier
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+    )
 }
 
 private fun copyToClipboard(context: Context, text: String) {
