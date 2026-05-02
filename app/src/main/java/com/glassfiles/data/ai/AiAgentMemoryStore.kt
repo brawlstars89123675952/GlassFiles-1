@@ -17,6 +17,8 @@ object AiAgentMemoryStore {
     private const val PROJECT_FILE = "project.md"
     private const val PREFERENCES_FILE = "preferences.md"
     private const val DECISIONS_FILE = "decisions.md"
+    private const val MEMORY_INDEX_FILE = "MEMORY.md"
+    private const val TOPICS_DIR = "topics"
     /** Per-repo working memory file (BUGS_FIX.md Section 3). */
     const val WORKING_MEMORY_FILE: String = "working_memory.md"
     /** Hard cap on the working-memory blob we paste into the system prompt. */
@@ -69,6 +71,9 @@ object AiAgentMemoryStore {
         ensureDefaults(context, repoFullName)
         AiAgentMemoryIndex.rebuildIfStale(context, repoFullName)
         val blocks = mutableListOf<String>()
+        readMemoryIndex(context, repoFullName).takeIf { it.isNotBlank() }?.let {
+            blocks += "## Memory index\n$it"
+        }
         if (AiAgentMemoryPrefs.getUserPreferences(context)) {
             readGlobalPreferences(context).takeIf { it.isNotBlank() }?.let {
                 blocks += "## User preferences\n$it"
@@ -212,6 +217,7 @@ object AiAgentMemoryStore {
 
     fun rebuildIndex(context: Context, repoFullName: String) {
         ensureDefaults(context, repoFullName)
+        refreshMemoryIndex(context, repoFullName)
         AiAgentMemoryIndex.rebuildRepo(context, repoFullName)
     }
 
@@ -663,6 +669,7 @@ object AiAgentMemoryStore {
         memoryRoot(context).mkdirs()
         val repo = repoDir(context, repoFullName).apply { mkdirs() }
         File(repo, "chats").mkdirs()
+        File(repo, TOPICS_DIR).mkdirs()
         val project = File(repo, PROJECT_FILE)
         if (!project.exists()) {
             project.writeText(defaultProject(repoFullName.substringAfter('/').ifBlank { repoFullName }))
@@ -684,7 +691,15 @@ object AiAgentMemoryStore {
             preferences.parentFile?.mkdirs()
             preferences.writeText(defaultPreferences())
         }
+        refreshMemoryIndex(context, repoFullName)
     }
+
+    private fun readMemoryIndex(context: Context, repoFullName: String): String =
+        File(repoDir(context, repoFullName), MEMORY_INDEX_FILE)
+            .takeIf { it.exists() }
+            ?.readText()
+            ?.take(2_400)
+            .orEmpty()
 
     private fun readProjectKnowledge(context: Context, repoFullName: String): String =
         File(repoDir(context, repoFullName), PROJECT_FILE).takeIf { it.exists() }?.readText().orEmpty()
@@ -703,6 +718,51 @@ object AiAgentMemoryStore {
 
     fun memoryRootDir(context: Context): File =
         memoryRoot(context)
+
+    fun refreshMemoryIndex(context: Context, repoFullName: String) {
+        if (repoFullName.isBlank()) return
+        val repo = repoDir(context, repoFullName).apply { mkdirs() }
+        val topics = File(repo, TOPICS_DIR).apply { mkdirs() }
+        val files = listOf(
+            File(repo, PROJECT_FILE),
+            globalPreferencesFile(context),
+            File(repo, DECISIONS_FILE),
+            File(repo, WORKING_MEMORY_FILE),
+        )
+        val topicFiles = topics.listFiles()
+            ?.asSequence()
+            ?.filter { it.isFile && it.extension.equals("md", ignoreCase = true) }
+            ?.sortedBy { it.name.lowercase(Locale.US) }
+            ?.toList()
+            .orEmpty()
+        val content = buildString {
+            appendLine("# Memory Index")
+            appendLine()
+            appendLine("Scope: `$repoFullName`")
+            appendLine()
+            appendLine("This generated index is intentionally short. Detailed memory belongs in project.md, preferences.md, decisions.md, working_memory.md, and topics/*.md.")
+            appendLine()
+            appendLine("## Core files")
+            files.forEach { file ->
+                appendLine("- `${displayMemoryIndexPath(context, repoFullName, file)}` - ${memoryFileSummary(file)}")
+            }
+            appendLine()
+            appendLine("## Topics")
+            if (topicFiles.isEmpty()) {
+                appendLine("- No topic files yet. Create `topics/<topic>.md` for focused long-term notes.")
+            } else {
+                topicFiles.take(40).forEach { file ->
+                    appendLine("- `${displayMemoryIndexPath(context, repoFullName, file)}` - ${memoryFileSummary(file)}")
+                }
+                if (topicFiles.size > 40) appendLine("- ... ${topicFiles.size - 40} more topic files")
+            }
+        }.trimEnd() + "\n"
+        val index = File(repo, MEMORY_INDEX_FILE)
+        index.parentFile?.mkdirs()
+        if (!index.isFile || index.readText() != content) {
+            index.writeText(content)
+        }
+    }
 
     private fun repoDir(context: Context, repoFullName: String): File {
         val safe = repoFullName.replace("/", "__").replace(Regex("[^A-Za-z0-9_.-]"), "_")
@@ -748,6 +808,24 @@ object AiAgentMemoryStore {
         val root = memoryRoot(context).canonicalFile
         return file.canonicalFile.relativeTo(root).path.replace('\\', '/')
     }
+
+    private fun displayMemoryIndexPath(context: Context, repoFullName: String, file: File): String {
+        val repo = repoDir(context, repoFullName).canonicalFile
+        val canonical = file.canonicalFile
+        return if (canonical.path == repo.path || canonical.path.startsWith(repo.path + File.separator)) {
+            canonical.relativeTo(repo).path.replace('\\', '/')
+        } else {
+            canonical.relativeTo(memoryRoot(context).canonicalFile).path.replace('\\', '/')
+        }
+    }
+
+    private fun memoryFileSummary(file: File): String =
+        if (file.isFile) {
+            val size = file.length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            "${formatBytes(size)}, ${file.readText().lineCount()} lines"
+        } else {
+            "missing"
+        }
 
     private fun globalPreferencesFile(context: Context): File =
         File(memoryRoot(context), PREFERENCES_FILE)

@@ -27,6 +27,7 @@ object AiAgentMemoryIndex {
 
     fun rebuildRepo(context: Context, repoFullName: String) {
         if (repoFullName.isBlank()) return
+        AiAgentMemoryStore.refreshMemoryIndex(context, repoFullName)
         val db = Db(context).writableDatabase
         val fingerprint = buildFingerprint(context, repoFullName)
         db.beginTransaction()
