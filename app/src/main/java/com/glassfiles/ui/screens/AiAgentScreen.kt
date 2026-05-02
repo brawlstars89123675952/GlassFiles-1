@@ -1,13 +1,22 @@
 package com.glassfiles.ui.screens
 
 import android.content.Context
+import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Base64
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +27,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -656,9 +666,10 @@ fun AiAgentScreen(
                     val assistant = transcript.getOrNull(assistantIndex) as? AgentEntry.Assistant
                     val assistantText = assistant?.text?.ifBlank { turn.assistantText } ?: turn.assistantText
                     val parsedFiles = extractAgentGeneratedFiles(assistantText)
+                    val displayText = stripAgentGeneratedFileBlocks(assistantText)
                     if (assistant != null) {
                         transcript[assistantIndex] = assistant.copy(
-                            text = assistantText,
+                            text = displayText,
                             generatedFiles = mergeGeneratedFiles(assistant.generatedFiles, parsedFiles),
                         )
                     }
@@ -675,7 +686,7 @@ fun AiAgentScreen(
 
                     messages += AiMessage(
                         role = "assistant",
-                        content = assistantText,
+                        content = displayText,
                         toolCalls = turn.toolCalls,
                     )
                     for (call in turn.toolCalls) {
@@ -2360,6 +2371,14 @@ private fun AgentGeneratedFilesRow(
     onClick: (AiChatSessionStore.GeneratedFile) -> Unit,
 ) {
     val colors = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors
+    val pulse by rememberInfiniteTransition().animateFloat(
+        initialValue = 0.22f,
+        targetValue = 0.72f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 850),
+            repeatMode = RepeatMode.Reverse,
+        ),
+    )
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         files.forEach { file ->
             Row(
@@ -2367,12 +2386,20 @@ private fun AgentGeneratedFilesRow(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
                     .background(colors.surfaceElevated)
-                    .border(1.dp, colors.accent, RoundedCornerShape(8.dp))
+                    .border(1.dp, colors.accent.copy(alpha = pulse), RoundedCornerShape(8.dp))
                     .clickable { onClick(file) }
                     .padding(horizontal = 8.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Rounded.AttachFile, null, Modifier.size(14.dp), tint = colors.accent)
+                Box(
+                    Modifier
+                        .size(20.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(colors.accent.copy(alpha = pulse * 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.AttachFile, null, Modifier.size(14.dp), tint = colors.accent)
+                }
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -2403,6 +2430,9 @@ private fun AgentGeneratedFilePreviewSheet(
 ) {
     val colors = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var saving by remember(file.name, file.content) { mutableStateOf(false) }
+    var saveStatus by remember(file.name, file.content) { mutableStateOf<String?>(null) }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -2417,6 +2447,7 @@ private fun AgentGeneratedFilePreviewSheet(
             Column(
                 Modifier
                     .fillMaxWidth()
+                    .fillMaxHeight(0.88f)
                     .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
                     .background(colors.background)
                     .border(
@@ -2454,13 +2485,48 @@ private fun AgentGeneratedFilePreviewSheet(
                             maxLines = 1,
                         )
                     }
-                    AgentTextButton("[ done ]", colors.textSecondary, true, onDismiss)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        AgentTextButton(
+                            if (saving) "[ saving... ]" else "[ download ]",
+                            if (saving) colors.textMuted else colors.accent,
+                            !saving,
+                        ) {
+                            saving = true
+                            saveStatus = null
+                            scope.launch {
+                                val result = runCatching {
+                                    withContext(Dispatchers.IO) {
+                                        saveGeneratedFileToDownloads(context, file)
+                                    }
+                                }
+                                saveStatus = result.fold(
+                                    onSuccess = { "saved: $it" },
+                                    onFailure = { "error: ${it.message ?: it.javaClass.simpleName}" },
+                                )
+                                saving = false
+                            }
+                        }
+                        AgentTextButton("[ done ]", colors.textSecondary, true, onDismiss)
+                    }
+                }
+                if (!saveStatus.isNullOrBlank()) {
+                    Text(
+                        saveStatus.orEmpty(),
+                        color = if (saveStatus?.startsWith("error:") == true) colors.error else colors.accent,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                    )
                 }
                 com.glassfiles.ui.screens.ai.terminal.AgentTerminalCodeBlock(
                     text = file.content,
                     lang = file.language,
                     filePath = file.name,
                     context = context,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    scrollBody = true,
+                    fillBody = true,
                 )
             }
         }
@@ -2974,7 +3040,7 @@ private fun ToolCallCard(
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            entry.call.argsJson,
+            redactedToolArgsJson(entry.call),
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
             color = colors.textSecondary,
@@ -3045,6 +3111,114 @@ private fun targetsProtectedBranch(
     } ?: return false
     return target == def
 }
+
+private fun redactedToolArgsJson(call: AiToolCall): String =
+    runCatching {
+        val obj = org.json.JSONObject(call.argsJson)
+        redactJsonValue(obj).toString(2)
+    }.getOrElse { call.argsJson }
+
+private fun redactJsonValue(value: Any?): Any? = when (value) {
+    is org.json.JSONObject -> org.json.JSONObject().also { out ->
+        value.keys().forEachRemaining { key ->
+            val child = value.opt(key)
+            out.put(
+                key,
+                if (key.shouldHideToolArg()) hiddenToolArgLabel(child) else redactJsonValue(child),
+            )
+        }
+    }
+    is org.json.JSONArray -> org.json.JSONArray().also { out ->
+        for (i in 0 until value.length()) out.put(redactJsonValue(value.opt(i)))
+    }
+    else -> value
+}
+
+private fun String.shouldHideToolArg(): Boolean {
+    val key = lowercase(Locale.US)
+    return key == "content" ||
+        key == "old_string" ||
+        key == "new_string" ||
+        key == "patch"
+}
+
+private fun hiddenToolArgLabel(value: Any?): String {
+    val length = when (value) {
+        is String -> value.length
+        is org.json.JSONArray -> value.length()
+        is org.json.JSONObject -> value.length()
+        else -> 0
+    }
+    return "[hidden ${if (length > 0) "$length chars" else "value"}]"
+}
+
+private fun saveGeneratedFileToDownloads(
+    context: Context,
+    file: AiChatSessionStore.GeneratedFile,
+): String {
+    val displayName = safeDownloadFileName(file.name)
+    val bytes = file.content.toByteArray(Charsets.UTF_8)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeForGeneratedFile(displayName))
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: error("MediaStore insert returned null")
+        resolver.openOutputStream(uri)?.use { output ->
+            output.write(bytes)
+        } ?: error("Unable to open Downloads output stream")
+        values.clear()
+        values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+        return "${Environment.DIRECTORY_DOWNLOADS}/$displayName"
+    }
+    val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+    downloads.mkdirs()
+    val outFile = uniqueDownloadFile(downloads, displayName)
+    outFile.writeBytes(bytes)
+    return outFile.absolutePath
+}
+
+private fun safeDownloadFileName(name: String): String {
+    val base = name.replace('\\', '/')
+        .substringAfterLast('/')
+        .replace(Regex("[^A-Za-z0-9._ -]"), "_")
+        .trim()
+        .trim('.')
+    return base.ifBlank { "agent_file.txt" }
+}
+
+private fun uniqueDownloadFile(directory: java.io.File, name: String): java.io.File {
+    val initial = java.io.File(directory, name)
+    if (!initial.exists()) return initial
+    val stem = name.substringBeforeLast('.', name)
+    val ext = name.substringAfterLast('.', "")
+        .takeIf { it != name }
+        ?.let { ".$it" }
+        .orEmpty()
+    var index = 1
+    while (true) {
+        val candidate = java.io.File(directory, "$stem ($index)$ext")
+        if (!candidate.exists()) return candidate
+        index += 1
+    }
+}
+
+private fun mimeForGeneratedFile(name: String): String =
+    when (name.substringAfterLast('.', "").lowercase(Locale.US)) {
+        "md", "markdown" -> "text/markdown"
+        "json" -> "application/json"
+        "xml" -> "application/xml"
+        "html", "htm" -> "text/html"
+        "css" -> "text/css"
+        "csv" -> "text/csv"
+        "txt", "kt", "kts", "java", "dart", "js", "ts", "py", "sh", "gradle", "log" -> "text/plain"
+        else -> "application/octet-stream"
+    }
 
 @Composable
 private fun ProtectedBranchWarning(
@@ -3591,8 +3765,12 @@ private suspend fun runAgentLoop(
             if (current is AgentEntry.Assistant) {
                 val fullText = current.text.ifBlank { turn.assistantText }
                 val generatedFiles = extractAgentGeneratedFiles(fullText)
-                if (generatedFiles.isNotEmpty()) {
-                    transcript[streamingIndex] = current.copy(generatedFiles = generatedFiles)
+                val displayText = stripAgentGeneratedFileBlocks(fullText)
+                if (generatedFiles.isNotEmpty() || displayText != current.text) {
+                    transcript[streamingIndex] = current.copy(
+                        text = displayText,
+                        generatedFiles = mergeGeneratedFiles(current.generatedFiles, generatedFiles),
+                    )
                 }
             }
         }
@@ -3610,7 +3788,7 @@ private suspend fun runAgentLoop(
 
         val assistantMsg = AiMessage(
             role = "assistant",
-            content = turn.assistantText,
+            content = stripAgentGeneratedFileBlocks(turn.assistantText),
             toolCalls = turn.toolCalls,
         )
         val results = mutableListOf<AiMessage>()
@@ -4239,13 +4417,26 @@ private fun extractAgentGeneratedFiles(text: String): List<AiChatSessionStore.Ge
 private fun stripAgentGeneratedFileBlocks(text: String): String {
     if (!text.contains("```")) return text
     val fence = Regex("```([^\\n`]*)\\n([\\s\\S]*?)```")
-    return fence.replace(text) { match ->
+    val withoutClosedBlocks = fence.replace(text) { match ->
         val info = match.groupValues[1].trim()
         val body = match.groupValues[2].trimEnd()
         val firstLine = body.lineSequence().firstOrNull().orEmpty()
         val isGeneratedFile = fileNameFromFenceInfo(info) != null || fileNameFromMarkerLine(firstLine) != null
         if (isGeneratedFile) "" else match.value
-    }.replace(Regex("\n{3,}"), "\n\n").trim()
+    }
+    val fenceCount = Regex("```").findAll(withoutClosedBlocks).count()
+    val openFenceStart = withoutClosedBlocks.lastIndexOf("```")
+    val withoutOpenFileBlock = if (fenceCount % 2 == 1 && openFenceStart >= 0) {
+        val openBlock = withoutClosedBlocks.substring(openFenceStart + 3)
+        val info = openBlock.substringBefore('\n', missingDelimiterValue = openBlock).trim()
+        val body = openBlock.substringAfter('\n', missingDelimiterValue = "")
+        val firstLine = body.lineSequence().firstOrNull().orEmpty()
+        val isGeneratedFile = fileNameFromFenceInfo(info) != null || fileNameFromMarkerLine(firstLine) != null
+        if (isGeneratedFile) withoutClosedBlocks.substring(0, openFenceStart) else withoutClosedBlocks
+    } else {
+        withoutClosedBlocks
+    }
+    return withoutOpenFileBlock.replace(Regex("\n{3,}"), "\n\n").trim()
 }
 
 private fun fileNameFromFenceInfo(info: String): String? {

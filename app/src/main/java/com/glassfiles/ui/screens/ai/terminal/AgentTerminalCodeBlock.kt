@@ -52,6 +52,9 @@ fun AgentTerminalCodeBlock(
     lang: String,
     filePath: String? = null,
     context: Context,
+    modifier: Modifier = Modifier,
+    scrollBody: Boolean = false,
+    fillBody: Boolean = false,
 ) {
     var fullscreen by remember { mutableStateOf(false) }
     if (fullscreen) {
@@ -73,7 +76,7 @@ fun AgentTerminalCodeBlock(
         highlightCode(text, lang, colors.toCodeColors())
     }
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(colors.surface)
@@ -85,10 +88,20 @@ fun AgentTerminalCodeBlock(
             onCopy = { copyToClipboard(context, text) },
             onExpand = { fullscreen = true },
         )
-        Box(
-            Modifier
-                .fillMaxWidth()
+        val bodyModifier = if (fillBody) {
+            Modifier.weight(1f).fillMaxWidth()
+        } else {
+            Modifier.fillMaxWidth()
+        }
+        val scrolledBodyModifier = if (scrollBody) {
+            bodyModifier
+                .verticalScroll(rememberScrollState())
                 .horizontalScroll(rememberScrollState())
+        } else {
+            bodyModifier.horizontalScroll(rememberScrollState())
+        }
+        Box(
+            scrolledBodyModifier
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
             Text(
