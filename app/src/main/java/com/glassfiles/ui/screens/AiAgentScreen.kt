@@ -190,6 +190,8 @@ fun AiAgentScreen(
     // without leaving overlays stranded.
     var showMemoryFiles by remember { mutableStateOf(false) }
     var showWorkingMemory by remember { mutableStateOf(false) }
+    var showMemoryRepoMissing by remember { mutableStateOf(false) }
+    var memorySheetRepoFullName by remember { mutableStateOf<String?>(null) }
     var pendingWorkspaceId by remember { mutableStateOf<String?>(null) }
     var pendingWorkspaceDiff by remember {
         mutableStateOf<com.glassfiles.data.ai.workspace.WorkspaceDiff?>(null)
@@ -430,6 +432,15 @@ fun AiAgentScreen(
     // ─── Helpers ──────────────────────────────────────────────────────────
     fun refreshSessions() {
         sessions = AiChatSessionStore.list(context, AGENT_SESSION_MODE)
+    }
+
+    fun activeMemoryRepoFullName(): String? {
+        selectedRepo?.fullName?.takeIf { it.isNotBlank() }?.let { return it }
+        val sessionRepo = AiChatSessionStore
+            .get(context, AGENT_SESSION_MODE, activeSessionId)
+            ?.repoFullName
+            ?.takeIf { it.isNotBlank() && it != CHAT_ONLY_REPO_KEY }
+        return sessionRepo
     }
 
     fun transcriptMessages(): List<AiChatSessionStore.Message> = transcript.mapNotNull { entry ->
@@ -1756,12 +1767,26 @@ fun AiAgentScreen(
                     com.glassfiles.data.ai.AiWorkingMemoryPrefs.setReminders(context, it)
                 },
                 onViewWorkingMemory = {
-                    showSettings = false
-                    showWorkingMemory = true
+                    val repoFullName = activeMemoryRepoFullName()
+                    if (repoFullName == null) {
+                        showSettings = false
+                        showMemoryRepoMissing = true
+                    } else {
+                        memorySheetRepoFullName = repoFullName
+                        showSettings = false
+                        showWorkingMemory = true
+                    }
                 },
                 onViewMemoryFiles = {
-                    showSettings = false
-                    showMemoryFiles = true
+                    val repoFullName = activeMemoryRepoFullName()
+                    if (repoFullName == null) {
+                        showSettings = false
+                        showMemoryRepoMissing = true
+                    } else {
+                        memorySheetRepoFullName = repoFullName
+                        showSettings = false
+                        showMemoryFiles = true
+                    }
                 },
                 onClearMemory = {
                     com.glassfiles.data.ai.AiAgentMemoryStore.clearAll(context)
@@ -1789,38 +1814,38 @@ fun AiAgentScreen(
                 onDismiss = { showSettings = false },
             )
         }
-        // Memory files dialog (project / preferences / decisions). Only
-        // mounted when a repo is picked because every entry except the
-        // global preferences file lives under the repo's memory dir.
-        val memoryRepo = selectedRepo
-        if (showMemoryFiles && memoryRepo != null) {
-            val memoryFiles = remember(memoryRepo.fullName, showMemoryFiles) {
-                com.glassfiles.data.ai.AiAgentMemoryStore.editableFiles(context, memoryRepo.fullName)
+        val memoryRepoFullName = memorySheetRepoFullName
+        if (showMemoryFiles && memoryRepoFullName != null) {
+            val memoryFiles = remember(memoryRepoFullName, showMemoryFiles) {
+                com.glassfiles.data.ai.AiAgentMemoryStore.editableFiles(context, memoryRepoFullName)
             }
             com.glassfiles.ui.screens.ai.terminal.AgentMemoryFilesDialog(
                 files = memoryFiles,
                 onRebuildIndex = {
                     com.glassfiles.data.ai.AiAgentMemoryStore.rebuildIndex(
                         context,
-                        memoryRepo.fullName,
+                        memoryRepoFullName,
                     )
                 },
                 onSave = { key, content ->
                     com.glassfiles.data.ai.AiAgentMemoryStore.saveEditableFile(
                         context,
-                        memoryRepo.fullName,
+                        memoryRepoFullName,
                         key,
                         content,
                     )
                 },
-                onDismiss = { showMemoryFiles = false },
+                onDismiss = {
+                    showMemoryFiles = false
+                    memorySheetRepoFullName = null
+                },
             )
         }
-        if (showWorkingMemory && memoryRepo != null) {
-            val workingMemory = remember(memoryRepo.fullName, showWorkingMemory) {
+        if (showWorkingMemory && memoryRepoFullName != null) {
+            val workingMemory = remember(memoryRepoFullName, showWorkingMemory) {
                 com.glassfiles.data.ai.AiAgentMemoryStore.readWorkingMemory(
                     context,
-                    memoryRepo.fullName,
+                    memoryRepoFullName,
                 )
             }
             com.glassfiles.ui.screens.ai.terminal.AgentWorkingMemoryDialog(
@@ -1828,17 +1853,25 @@ fun AiAgentScreen(
                 onSave = { content ->
                     com.glassfiles.data.ai.AiAgentMemoryStore.writeWorkingMemory(
                         context,
-                        memoryRepo.fullName,
+                        memoryRepoFullName,
                         content,
                     )
                 },
                 onClear = {
                     com.glassfiles.data.ai.AiAgentMemoryStore.clearWorkingMemory(
                         context,
-                        memoryRepo.fullName,
+                        memoryRepoFullName,
                     )
                 },
-                onDismiss = { showWorkingMemory = false },
+                onDismiss = {
+                    showWorkingMemory = false
+                    memorySheetRepoFullName = null
+                },
+            )
+        }
+        if (showMemoryRepoMissing) {
+            AgentMemoryRepoMissingSheet(
+                onDismiss = { showMemoryRepoMissing = false },
             )
         }
         previewGeneratedFile?.let { file ->
@@ -2357,6 +2390,62 @@ private fun AgentGeneratedFilePreviewSheet(
                     filePath = file.name,
                     context = context,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AgentMemoryRepoMissingSheet(onDismiss: () -> Unit) {
+    val colors = com.glassfiles.ui.screens.ai.terminal.AgentTerminal.colors
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.58f))
+                .padding(top = 48.dp),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+                    .background(colors.background)
+                    .border(
+                        1.dp,
+                        colors.accent,
+                        RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
+                    )
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .navigationBarsPadding()
+                    .padding(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(
+                    Modifier
+                        .width(38.dp)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(colors.border)
+                        .align(Alignment.CenterHorizontally),
+                )
+                Text(
+                    "MEMORY FILES",
+                    color = colors.accent,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                )
+                Text(
+                    "Select a repository in agent settings before opening memory files.",
+                    color = colors.textSecondary,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                )
+                AgentTextButton("[ done ]", colors.textSecondary, true, onDismiss)
             }
         }
     }
