@@ -97,6 +97,7 @@ import com.glassfiles.data.ai.agent.AgentToolRegistry
 import com.glassfiles.data.ai.agent.AgentTools
 import com.glassfiles.data.ai.agent.AiAgentApprovalCategory
 import com.glassfiles.data.ai.agent.AiToolUiKind
+import com.glassfiles.data.ai.agent.AiTool
 import com.glassfiles.data.ai.agent.AiToolCall
 import com.glassfiles.data.ai.agent.AiToolResult
 import com.glassfiles.data.ai.agent.GitHubToolExecutor
@@ -931,6 +932,7 @@ fun AiAgentScreen(
                     addAll(chatOnlyMemoryPrompt(chatScope, text))
                     add(AiMessage("system", CHAT_ONLY_SYSTEM_PROMPT))
                     add(AiMessage("system", AGENT_TODO_SYSTEM_PROMPT))
+                    add(AiMessage("system", AGENT_TOOL_DISCOVERY_SYSTEM_PROMPT))
                     AiSkillStore.catalogPrompt(context).takeIf { it.isNotBlank() }?.let {
                         add(AiMessage("system", it))
                     }
@@ -953,6 +955,7 @@ fun AiAgentScreen(
                 } else {
                     scopedChatTools
                 }
+                val discoveredToolNames = mutableSetOf<String>()
                 var turnIndex = 0
                 while (turnIndex < 8) {
                     if (transcript.lastOrNull() !is AgentEntry.Assistant) {
@@ -963,7 +966,7 @@ fun AiAgentScreen(
                         context = context,
                         modelId = model.id,
                         messages = messages,
-                        tools = chatTools,
+                        tools = toolsForPrompt(chatTools, discoveredToolNames),
                         apiKey = key,
                         onTextDelta = { chunk ->
                             val current = transcript.getOrNull(assistantIndex)
@@ -1003,7 +1006,7 @@ fun AiAgentScreen(
                         val existingFiles = currentChatArtifacts(transcript)
                         val execution = if (call.isTodoTool()) {
                             ChatArtifactExecution(result = executeTodoTool(call, todoItems))
-                        } else if (skillAllowedTools != null && call.name !in skillAllowedTools) {
+                        } else if (skillAllowedTools != null && call.name !in skillAllowedTools && call.name !in taskToolNames) {
                             ChatArtifactExecution(
                                 result = AiToolResult(
                                     callId = call.id,
@@ -1029,6 +1032,7 @@ fun AiAgentScreen(
                             }
                         }
                         transcript += AgentEntry.ToolResult(execution.result)
+                        discoveredToolNames += toolNamesDiscoveredBy(call, execution.result)
                         messages += AiMessage(
                             role = "tool",
                             content = execution.result.output,
@@ -1242,6 +1246,7 @@ fun AiAgentScreen(
             } else ""
             val systemMessages = buildList {
                 add(AiMessage(role = "system", content = AGENT_TODO_SYSTEM_PROMPT))
+                add(AiMessage(role = "system", content = AGENT_TOOL_DISCOVERY_SYSTEM_PROMPT))
                 if (workingMemoryBlock.isNotBlank()) {
                     add(AiMessage(role = "system", content = workingMemoryBlock))
                 }
@@ -4808,6 +4813,7 @@ private suspend fun runAgentLoop(
     // user resumes it.
     estimate?.addInput(seedMessages.sumOf { it.content.length })
     val maxIterations = estimate?.limits?.maxToolCalls ?: MAX_ITERATIONS
+    val discoveredToolNames = mutableSetOf<String>()
     repeat(maxIterations) {
         // Cost-policy backstops. If the user's selected mode says
         // "you've burned enough already" we drop a final assistant
@@ -4857,7 +4863,7 @@ private suspend fun runAgentLoop(
         val turn = try {
             callWithFallback(
                 context = context,
-                tools = tools,
+                tools = toolsForPrompt(tools, discoveredToolNames),
                 messages = messages,
                 streamingIndex = streamingIndex,
                 transcript = transcript,
@@ -4942,7 +4948,7 @@ private suspend fun runAgentLoop(
                 )
                 continue
             }
-            if (allowedSkillTools != null && call.name !in allowedSkillTools) {
+            if (allowedSkillTools != null && call.name !in allowedSkillTools && call.name !in AgentTools.TASK_TOOLS.map { it.name }) {
                 val result = AiToolResult(
                     callId = call.id,
                     name = call.name,
@@ -4985,6 +4991,7 @@ private suspend fun runAgentLoop(
             } else {
                 executor.execute(context, call)
             }
+            discoveredToolNames += toolNamesDiscoveredBy(call, result)
             val localGeneratedFile = if (approved && !result.isError && localSessionId != null) {
                 generatedFileForLocalTool(context, localSessionId, call)
             } else {
@@ -5379,6 +5386,35 @@ private fun activeSkillLabel(skills: List<AiSkill>): String =
         ?.joinToString(", ") { "${it.packId}/${it.id}" }
         ?: "auto"
 
+private fun toolsForPrompt(
+    tools: List<AiTool>,
+    discoveredToolNames: Set<String>,
+): List<AiTool> {
+    if (tools.isEmpty()) return tools
+    val alwaysVisible = AgentTools.TASK_TOOLS.map { it.name }.toSet()
+    return tools.filter { tool ->
+        val metadata = AgentToolRegistry.byName(tool.name)
+        tool.name in alwaysVisible ||
+            tool.name in discoveredToolNames ||
+            metadata?.shouldDefer != true
+    }.ifEmpty { tools.filter { it.name in alwaysVisible }.ifEmpty { tools } }
+}
+
+private fun toolNamesDiscoveredBy(call: AiToolCall, result: AiToolResult): Set<String> {
+    if (call.name != AgentTools.TOOL_SEARCH.name || result.isError) return emptySet()
+    return result.output
+        .lineSequence()
+        .mapNotNull { line ->
+            line.trim()
+                .takeIf { it.startsWith("- ") }
+                ?.removePrefix("- ")
+                ?.substringBefore('|')
+                ?.trim()
+                ?.takeIf { AgentToolRegistry.isKnown(it) }
+        }
+        .toSet()
+}
+
 private fun newAgentSessionId(): String = "agent_${System.currentTimeMillis()}"
 
 private fun stopActiveAgent(
@@ -5455,6 +5491,12 @@ private val AGENT_TODO_SYSTEM_PROMPT: String = """
 For multi-step work, maintain a short task checklist with todo_write and todo_update.
 Use todo_write once you understand the task; keep exactly one item in_progress when actively working; mark items completed as soon as they are done.
 Keep todo titles concise and user-visible. Do not use todos for single-answer questions.
+""".trimIndent()
+
+private val AGENT_TOOL_DISCOVERY_SYSTEM_PROMPT: String = """
+Some specialized tools are hidden from the initial tool list to keep the prompt small.
+When you need a capability that is not visible, call tool_search with a short query such as "archive", "pdf", "ocr", "duplicates", "workspace", or "github public".
+After tool_search returns matching tool names, use the relevant tool on the next turn.
 """.trimIndent()
 
 private val CHAT_ONLY_SYSTEM_PROMPT: String = """

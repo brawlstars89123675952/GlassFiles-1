@@ -97,7 +97,7 @@ class GitHubToolExecutor(
                 AgentTools.TOOL_SEARCH.name -> AgentToolRegistry.searchText(
                     query = args.getString("query"),
                     domain = args.optString("domain").takeIf { it.isNotBlank() },
-                    includeDeferred = args.optBoolean("include_deferred", false),
+                    includeDeferred = args.optBoolean("include_deferred", true),
                     limit = args.optInt("limit", 12),
                 )
                 AgentTools.LIST_DIR.name -> listDir(context, args.optString("path", ""))

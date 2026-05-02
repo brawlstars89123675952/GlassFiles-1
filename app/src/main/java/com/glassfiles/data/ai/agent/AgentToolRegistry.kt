@@ -177,7 +177,7 @@ object AgentToolRegistry {
     fun searchText(
         query: String,
         domain: String? = null,
-        includeDeferred: Boolean = false,
+        includeDeferred: Boolean = true,
         limit: Int = 12,
     ): String {
         val normalizedQuery = query.trim().lowercase(Locale.US)

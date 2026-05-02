@@ -107,7 +107,7 @@ class LocalToolExecutor(
                     AgentTools.TOOL_SEARCH.name -> AgentToolRegistry.searchText(
                         query = args.getString("query"),
                         domain = args.optString("domain").takeIf { it.isNotBlank() },
-                        includeDeferred = args.optBoolean("include_deferred", false),
+                        includeDeferred = args.optBoolean("include_deferred", true),
                         limit = args.optInt("limit", 12),
                     )
                     AgentTools.FILE_PICKER_CURRENT_CONTEXT.name -> currentContext(context)

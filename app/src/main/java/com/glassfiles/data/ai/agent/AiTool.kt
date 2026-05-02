@@ -45,7 +45,7 @@ object AgentTools {
                 })
                 put("include_deferred", obj {
                     put("type", "boolean")
-                    put("description", "Include heavy/deferred tools in the result.")
+                    put("description", "Include heavy/deferred tools in the result. Defaults to true.")
                 })
                 put("limit", obj {
                     put("type", "integer")
