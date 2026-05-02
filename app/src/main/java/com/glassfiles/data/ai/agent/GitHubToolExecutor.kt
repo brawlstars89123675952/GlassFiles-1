@@ -64,6 +64,7 @@ class GitHubToolExecutor(
      * GitHub round-trip cost.
      */
     initialCache: Map<String, String> = emptyMap(),
+    private val localToolExecutor: LocalToolExecutor? = null,
 ) {
     /**
      * In-memory cache of file contents for the current session. Keyed by
@@ -86,6 +87,10 @@ class GitHubToolExecutor(
     fun snapshotCache(): Map<String, String> = fileCache.toMap()
 
     suspend fun execute(context: Context, call: AiToolCall): AiToolResult {
+        if (AgentTools.isLocalOrArchive(call.name)) {
+            return (localToolExecutor ?: LocalToolExecutor(sessionId = "${owner}_${repo}_$branch"))
+                .execute(context, call)
+        }
         val args = runCatching { JSONObject(call.argsJson) }.getOrElse { JSONObject() }
         return try {
             val output = when (call.name) {

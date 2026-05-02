@@ -84,6 +84,7 @@ import com.glassfiles.data.ai.agent.AiToolCall
 import com.glassfiles.data.ai.agent.AiToolResult
 import com.glassfiles.data.ai.agent.GitHubToolExecutor
 import com.glassfiles.data.ai.agent.LineDiff
+import com.glassfiles.data.ai.agent.LocalToolExecutor
 import com.glassfiles.data.ai.models.AiCapability
 import com.glassfiles.data.ai.models.AiMessage
 import com.glassfiles.data.ai.models.AiModel
@@ -623,6 +624,11 @@ fun AiAgentScreen(
             try {
                 val provider = AiProviders.get(model.providerId)
                 val chatScope = chatOnlyScopeFullName()
+                val localExecutor = LocalToolExecutor(
+                    sessionId = activeSessionId,
+                    currentAttachment = file,
+                    allowExternalPaths = false,
+                )
                 val messages = mutableListOf<AiMessage>().apply {
                     addAll(chatOnlyMemoryPrompt(chatScope))
                     add(AiMessage("system", CHAT_ONLY_SYSTEM_PROMPT))
@@ -638,7 +644,7 @@ fun AiAgentScreen(
                         context = context,
                         modelId = model.id,
                         messages = messages,
-                        tools = AgentTools.CHAT_ARTIFACTS,
+                        tools = AgentTools.CHAT_TOOLS,
                         apiKey = key,
                         onTextDelta = { chunk ->
                             val current = transcript.getOrNull(assistantIndex)
@@ -675,7 +681,7 @@ fun AiAgentScreen(
                     for (call in turn.toolCalls) {
                         transcript += AgentEntry.ToolCall(call)
                         val existingFiles = currentChatArtifacts(transcript)
-                        val execution = executeChatArtifactTool(call, existingFiles)
+                        val execution = executeChatOnlyTool(context, call, existingFiles, localExecutor)
                         execution.generatedFile?.let { fileOut ->
                             val current = transcript.getOrNull(assistantIndex) as? AgentEntry.Assistant
                             if (current != null) {
@@ -815,6 +821,13 @@ fun AiAgentScreen(
                 estimate = estimate,
                 virtualFileSystem = workspaceVfs,
                 initialCache = warmCache,
+                localToolExecutor = LocalToolExecutor(
+                    sessionId = activeSessionId,
+                    repoFullName = repo.fullName,
+                    branch = branch,
+                    currentAttachment = file,
+                    allowExternalPaths = true,
+                ),
             )
             val provider = AiProviders.get(model.providerId)
             // Filter destructive tools out of the schema sent to the model
@@ -987,26 +1000,30 @@ fun AiAgentScreen(
                 // file contents — only counters and labels. See
                 // AiUsageRecord kdoc for the privacy contract.
                 runCatching {
-                    val readToolNames = setOf(
-                        com.glassfiles.data.ai.agent.AgentTools.LIST_DIR.name,
-                        com.glassfiles.data.ai.agent.AgentTools.READ_FILE.name,
-                        com.glassfiles.data.ai.agent.AgentTools.READ_FILE_RANGE.name,
-                        com.glassfiles.data.ai.agent.AgentTools.SEARCH_REPO.name,
-                        com.glassfiles.data.ai.agent.AgentTools.LIST_BRANCHES.name,
-                        com.glassfiles.data.ai.agent.AgentTools.COMPARE_REFS.name,
-                        com.glassfiles.data.ai.agent.AgentTools.LIST_PULLS.name,
-                        com.glassfiles.data.ai.agent.AgentTools.READ_PR.name,
-                        com.glassfiles.data.ai.agent.AgentTools.LIST_ISSUES.name,
-                        com.glassfiles.data.ai.agent.AgentTools.READ_ISSUE.name,
-                        com.glassfiles.data.ai.agent.AgentTools.READ_CHECK_RUNS.name,
-                        com.glassfiles.data.ai.agent.AgentTools.READ_WORKFLOW_RUN.name,
-                    )
-                    val writeToolNames = setOf(
-                        com.glassfiles.data.ai.agent.AgentTools.EDIT_FILE.name,
-                        com.glassfiles.data.ai.agent.AgentTools.WRITE_FILE.name,
-                        com.glassfiles.data.ai.agent.AgentTools.COMMIT.name,
-                        com.glassfiles.data.ai.agent.AgentTools.OPEN_PR.name,
-                    )
+                    val readToolNames = buildSet {
+                        add(com.glassfiles.data.ai.agent.AgentTools.LIST_DIR.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.READ_FILE.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.READ_FILE_RANGE.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.SEARCH_REPO.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.LIST_BRANCHES.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.COMPARE_REFS.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.LIST_PULLS.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.READ_PR.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.LIST_ISSUES.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.READ_ISSUE.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.READ_CHECK_RUNS.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.READ_WORKFLOW_RUN.name)
+                        addAll(com.glassfiles.data.ai.agent.AgentTools.LOCAL_TOOLS.filter { it.readOnly }.map { it.name })
+                        addAll(com.glassfiles.data.ai.agent.AgentTools.ARCHIVE_TOOLS.filter { it.readOnly }.map { it.name })
+                    }
+                    val writeToolNames = buildSet {
+                        add(com.glassfiles.data.ai.agent.AgentTools.EDIT_FILE.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.WRITE_FILE.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.COMMIT.name)
+                        add(com.glassfiles.data.ai.agent.AgentTools.OPEN_PR.name)
+                        addAll(com.glassfiles.data.ai.agent.AgentTools.LOCAL_TOOLS.filterNot { it.readOnly }.map { it.name })
+                        addAll(com.glassfiles.data.ai.agent.AgentTools.ARCHIVE_TOOLS.filterNot { it.readOnly }.map { it.name })
+                    }
                     val toolCalls = transcript.filterIsInstance<AgentEntry.ToolCall>()
                     val readCalls = toolCalls.count { it.call.name in readToolNames }
                     val writeCalls = toolCalls.count { it.call.name in writeToolNames }
@@ -4035,11 +4052,13 @@ ${SystemPrompts.DEFAULT}
 
 Chat-only mode is active. Do not assume access to any repository, branch, repo files, or GitHub tools. Use only chat messages, attachments, generated chat files, and any memory/system-prompt context explicitly provided by the app.
 
+You may use local_* and archive_* tools inside the current chat workspace. Call file_picker_current_context when you need the temporary path of an attached file or archive.
+
 When you need to send a file to the user, include it as a fenced block with an explicit file marker:
 ```file:relative/path.ext
 file contents here
 ```
-The app will turn that block into a clickable chat attachment.
+The app will turn that block into a clickable chat attachment. You can also use artifact_write or local_write_file to create a visible chat attachment.
 """.trimIndent()
 
 private data class PendingAgentSend(
@@ -4053,9 +4072,11 @@ private data class ChatArtifactExecution(
     val generatedFile: AiChatSessionStore.GeneratedFile? = null,
 )
 
-private fun executeChatArtifactTool(
+private suspend fun executeChatOnlyTool(
+    context: Context,
     call: AiToolCall,
     existingFiles: List<AiChatSessionStore.GeneratedFile>,
+    localExecutor: LocalToolExecutor,
 ): ChatArtifactExecution {
     val args = runCatching { JSONObject(call.argsJson) }.getOrElse { JSONObject() }
     return runCatching {
@@ -4102,7 +4123,29 @@ private fun executeChatArtifactTool(
                     generatedFile = updated,
                 )
             }
-            else -> error("Unknown chat artifact tool: ${call.name}")
+            else -> {
+                if (!AgentTools.isLocalOrArchive(call.name)) {
+                    error("Unknown chat tool: ${call.name}")
+                }
+                val result = localExecutor.execute(context, call)
+                val generatedFile = if (!result.isError && call.name == AgentTools.LOCAL_WRITE_FILE.name) {
+                    val rawPath = args.optString("path")
+                    val path = cleanGeneratedFileName(
+                        if (rawPath.startsWith("/")) rawPath.substringAfterLast('/') else rawPath,
+                    )
+                    val content = args.optString("content", "")
+                    path?.let {
+                        AiChatSessionStore.GeneratedFile(
+                            name = it,
+                            language = languageForGeneratedFile(it, ""),
+                            content = content,
+                        )
+                    }
+                } else {
+                    null
+                }
+                ChatArtifactExecution(result = result, generatedFile = generatedFile)
+            }
         }
     }.getOrElse { error ->
         ChatArtifactExecution(

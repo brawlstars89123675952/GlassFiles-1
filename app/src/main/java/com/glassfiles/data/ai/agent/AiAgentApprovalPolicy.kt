@@ -41,10 +41,32 @@ data class AiAgentApprovalCheck(
 }
 
 object AiAgentApprovalPolicy {
-    private val editTools = setOf("edit_file")
-    private val writeTools = setOf("write_file", "comment_pr", "comment_issue", "create_issue", "memory_write", "memory_append")
+    private val editTools = setOf("edit_file", "local_replace_in_file", "local_apply_patch")
+    private val writeTools = setOf(
+        "write_file",
+        "comment_pr",
+        "comment_issue",
+        "create_issue",
+        "memory_write",
+        "memory_append",
+        "local_write_file",
+        "local_append_file",
+        "local_mkdir",
+        "local_copy",
+        "local_move",
+        "local_rename",
+        "archive_extract",
+        "archive_create",
+    )
     private val commitTools = setOf("commit", "open_pr", "create_branch", "commit_changes", "create_pull_request")
-    private val destructiveTools = setOf("delete_file", "reset_hard", "force_push", "memory_delete")
+    private val destructiveTools = setOf(
+        "delete_file",
+        "reset_hard",
+        "force_push",
+        "memory_delete",
+        "local_delete_to_trash",
+        "local_delete",
+    )
     // Only actual git-commit tool calls trigger the "commits to main/master require approval"
     // safety stop. write_file / edit_file no longer fall under it — those are governed by
     // the regular WRITE / EDIT auto-approve toggles (and YOLO when enabled).
@@ -122,6 +144,10 @@ object AiAgentApprovalPolicy {
                     val child = value.opt(key)
                     if (key.isPathKey() && child is String) {
                         paths += child
+                    } else if (key.isPathKey() && child is JSONArray) {
+                        for (i in 0 until child.length()) {
+                            child.optString(i).takeIf { it.isNotBlank() }?.let { paths += it }
+                        }
                     } else {
                         collectPaths(child, paths)
                     }
@@ -143,7 +169,12 @@ object AiAgentApprovalPolicy {
             k == "filepath" ||
             k == "file_path" ||
             k == "repo_path" ||
-            k == "target_path"
+            k == "target_path" ||
+            k == "source" ||
+            k == "destination" ||
+            k == "source_path" ||
+            k == "destination_path" ||
+            k == "source_paths"
     }
 
     private fun matchesProtected(path: String, pattern: String): Boolean {

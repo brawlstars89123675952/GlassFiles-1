@@ -641,6 +641,291 @@ object AgentTools {
         readOnly = false,
     )
 
+    val LOCAL_LIST_DIR = AiTool(
+        name = "local_list_dir",
+        description = "List files in the current local file context. Relative paths resolve inside the chat/session local workspace.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+                put("recursive", obj { put("type", "boolean") })
+                put("max_entries", obj { put("type", "integer") })
+            })
+            put("required", arr())
+        },
+        readOnly = true,
+    )
+
+    val LOCAL_READ_FILE = AiTool(
+        name = "local_read_file",
+        description = "Read a UTF-8 local file from the current local file context. For binary data, set base64=true.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+                put("max_chars", obj { put("type", "integer") })
+                put("base64", obj { put("type", "boolean") })
+            })
+            put("required", arr("path"))
+        },
+        readOnly = true,
+    )
+
+    val LOCAL_WRITE_FILE = AiTool(
+        name = "local_write_file",
+        description = "Create or overwrite a UTF-8 local file in the current local file context.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+                put("content", obj { put("type", "string") })
+            })
+            put("required", arr("path", "content"))
+        },
+        readOnly = false,
+    )
+
+    val LOCAL_APPEND_FILE = AiTool(
+        name = "local_append_file",
+        description = "Append UTF-8 text to a local file, creating it if needed.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+                put("content", obj { put("type", "string") })
+            })
+            put("required", arr("path", "content"))
+        },
+        readOnly = false,
+    )
+
+    val LOCAL_MKDIR = AiTool(
+        name = "local_mkdir",
+        description = "Create a local directory and any missing parent directories.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+            })
+            put("required", arr("path"))
+        },
+        readOnly = false,
+    )
+
+    val LOCAL_STAT = AiTool(
+        name = "local_stat",
+        description = "Return metadata for a local file or directory.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+            })
+            put("required", arr("path"))
+        },
+        readOnly = true,
+    )
+
+    val LOCAL_REPLACE_IN_FILE = AiTool(
+        name = "local_replace_in_file",
+        description = "Replace an exact substring inside a local UTF-8 file. By default old_string must appear exactly once.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+                put("old_string", obj { put("type", "string") })
+                put("new_string", obj { put("type", "string") })
+                put("replace_all", obj { put("type", "boolean") })
+            })
+            put("required", arr("path", "old_string", "new_string"))
+        },
+        readOnly = false,
+    )
+
+    val LOCAL_APPLY_PATCH = AiTool(
+        name = "local_apply_patch",
+        description = "Apply a small apply_patch-style text patch to local files. Supports Add File, Delete File and Update File hunks.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("patch", obj {
+                    put("type", "string")
+                    put("description", "Patch text beginning with *** Begin Patch and ending with *** End Patch.")
+                })
+            })
+            put("required", arr("patch"))
+        },
+        readOnly = false,
+    )
+
+    val LOCAL_COPY = AiTool(
+        name = "local_copy",
+        description = "Copy a local file or directory to another local path.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("source", obj { put("type", "string") })
+                put("destination", obj { put("type", "string") })
+                put("overwrite", obj { put("type", "boolean") })
+            })
+            put("required", arr("source", "destination"))
+        },
+        readOnly = false,
+    )
+
+    val LOCAL_MOVE = AiTool(
+        name = "local_move",
+        description = "Move a local file or directory to another local path.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("source", obj { put("type", "string") })
+                put("destination", obj { put("type", "string") })
+                put("overwrite", obj { put("type", "boolean") })
+            })
+            put("required", arr("source", "destination"))
+        },
+        readOnly = false,
+    )
+
+    val LOCAL_RENAME = AiTool(
+        name = "local_rename",
+        description = "Rename a local file or directory within its current parent directory.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+                put("new_name", obj { put("type", "string") })
+            })
+            put("required", arr("path", "new_name"))
+        },
+        readOnly = false,
+    )
+
+    val LOCAL_DELETE_TO_TRASH = AiTool(
+        name = "local_delete_to_trash",
+        description = "Move a local file or directory to the app trash instead of deleting it permanently.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+            })
+            put("required", arr("path"))
+        },
+        readOnly = false,
+    )
+
+    val LOCAL_DELETE = AiTool(
+        name = "local_delete",
+        description = "Permanently delete a local file or directory. Destructive.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+            })
+            put("required", arr("path"))
+        },
+        readOnly = false,
+    )
+
+    val ARCHIVE_LIST = AiTool(
+        name = "archive_list",
+        description = "List entries in a supported local archive: zip, jar, aar, tar, tar.gz, tgz or 7z.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+                put("max_entries", obj { put("type", "integer") })
+            })
+            put("required", arr("path"))
+        },
+        readOnly = true,
+    )
+
+    val ARCHIVE_READ_FILE = AiTool(
+        name = "archive_read_file",
+        description = "Read a UTF-8 text entry from a supported local archive without extracting the whole archive.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+                put("entry", obj { put("type", "string") })
+                put("max_chars", obj { put("type", "integer") })
+            })
+            put("required", arr("path", "entry"))
+        },
+        readOnly = true,
+    )
+
+    val ARCHIVE_EXTRACT = AiTool(
+        name = "archive_extract",
+        description = "Extract a supported local archive to a destination directory.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+                put("destination", obj { put("type", "string") })
+            })
+            put("required", arr("path"))
+        },
+        readOnly = false,
+    )
+
+    val ARCHIVE_CREATE = AiTool(
+        name = "archive_create",
+        description = "Create a local archive from one or more files or directories. Supports zip, tar, tar.gz and 7z.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("source_paths", obj {
+                    put("type", "array")
+                    put("items", obj { put("type", "string") })
+                })
+                put("destination", obj { put("type", "string") })
+                put("format", obj {
+                    put("type", "string")
+                    put("description", "zip, tar, tar.gz, tgz or 7z. Defaults from destination extension.")
+                })
+            })
+            put("required", arr("source_paths", "destination"))
+        },
+        readOnly = false,
+    )
+
+    val ARCHIVE_TEST = AiTool(
+        name = "archive_test",
+        description = "Validate that a supported local archive can be opened and read.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {
+                put("path", obj { put("type", "string") })
+            })
+            put("required", arr("path"))
+        },
+        readOnly = true,
+    )
+
+    val FILE_PICKER_CURRENT_CONTEXT = AiTool(
+        name = "file_picker_current_context",
+        description = "Describe the current local file context: session workspace, attached file path, selected repository, and supported local/archive tool roots.",
+        parameters = obj {
+            put("type", "object")
+            put("properties", obj {})
+            put("required", arr())
+        },
+        readOnly = true,
+    )
+
+    val LOCAL_TOOLS: List<AiTool> = listOf(
+        LOCAL_LIST_DIR, LOCAL_READ_FILE, LOCAL_WRITE_FILE, LOCAL_APPEND_FILE,
+        LOCAL_MKDIR, LOCAL_STAT, LOCAL_REPLACE_IN_FILE, LOCAL_APPLY_PATCH,
+        LOCAL_COPY, LOCAL_MOVE, LOCAL_RENAME, LOCAL_DELETE_TO_TRASH, LOCAL_DELETE,
+        FILE_PICKER_CURRENT_CONTEXT,
+    )
+
+    val ARCHIVE_TOOLS: List<AiTool> = listOf(
+        ARCHIVE_LIST, ARCHIVE_READ_FILE, ARCHIVE_EXTRACT, ARCHIVE_CREATE, ARCHIVE_TEST,
+    )
+
     /** All tools, in canonical order. */
     val ALL: List<AiTool> = listOf(
         LIST_DIR, READ_FILE, READ_FILE_RANGE, SEARCH_REPO,
@@ -652,12 +937,16 @@ object AgentTools {
         EDIT_FILE, WRITE_FILE, CREATE_BRANCH, COMMIT, OPEN_PR,
         COMMENT_PR, COMMENT_ISSUE, CREATE_ISSUE,
         MEMORY_READ, MEMORY_WRITE, MEMORY_APPEND, MEMORY_LIST, MEMORY_SEARCH, MEMORY_DELETE,
-    )
+    ) + LOCAL_TOOLS + ARCHIVE_TOOLS
 
     val CHAT_ARTIFACTS: List<AiTool> = listOf(ARTIFACT_WRITE, ARTIFACT_UPDATE)
+    val CHAT_TOOLS: List<AiTool> = CHAT_ARTIFACTS + LOCAL_TOOLS + ARCHIVE_TOOLS
 
     fun byName(name: String): AiTool? =
         (ALL + CHAT_ARTIFACTS).firstOrNull { it.name == name }
+
+    fun isLocalOrArchive(name: String): Boolean =
+        (LOCAL_TOOLS + ARCHIVE_TOOLS).any { it.name == name }
 }
 
 /** Tiny helpers to keep the JSON-Schema literals readable above. */

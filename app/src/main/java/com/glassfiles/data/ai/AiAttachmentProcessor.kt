@@ -66,7 +66,9 @@ object AiAttachmentProcessor {
         val clipped = text.take(MAX_TEXT_CHARS).let {
             if (text.length > MAX_TEXT_CHARS) "$it\n...[truncated ${text.length - MAX_TEXT_CHARS} chars]" else it
         }
-        val prompt = "Attached file: $name (${formatBytes(file.length())})\n```$ext\n$clipped\n```"
+        val prompt = "Attached file: $name (${formatBytes(file.length())})\n" +
+            "Temporary local tool path: ${file.absolutePath}\n" +
+            "```$ext\n$clipped\n```"
         return AiPreparedAttachment(
             name = name,
             mimeType = mime,
@@ -85,7 +87,9 @@ object AiAttachmentProcessor {
         }
         val outDir = ArchiveHelper.decompress(file)
         if (outDir == null) {
-            val prompt = "Attached archive: $name (${formatBytes(file.length())}). Extraction is not available for .$ext in this build."
+            val prompt = "Attached archive: $name (${formatBytes(file.length())}).\n" +
+                "Temporary local tool path: ${file.absolutePath}\n" +
+                "Extraction is not available for .$ext in this build."
             return AiPreparedAttachment(
                 name = name,
                 mimeType = mime,
@@ -118,6 +122,7 @@ object AiAttachmentProcessor {
         val listing = shown.joinToString("\n") { "- ${it.relativeTo(outDir).path.replace('\\', '/')} (${formatBytes(it.length())})" }
         val prompt = buildString {
             appendLine("Attached archive: $name (${formatBytes(file.length())})")
+            appendLine("Temporary local tool path: ${file.absolutePath}")
             appendLine("Extracted files:")
             appendLine(listing)
             if (more > 0) appendLine("- ... $more more file(s)")
@@ -162,6 +167,7 @@ object AiAttachmentProcessor {
                 }
                 val prompt = buildString {
                     appendLine("Attached archive: $name (${formatBytes(file.length())})")
+                    appendLine("Temporary local tool path: ${file.absolutePath}")
                     appendLine("Extracted files:")
                     if (listing.isNotBlank()) appendLine(listing) else appendLine("- (empty archive)")
                     if (more > 0) appendLine("- ... $more more file(s)")
