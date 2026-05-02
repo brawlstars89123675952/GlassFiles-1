@@ -13,6 +13,46 @@ import java.util.zip.ZipInputStream
 
 object AiSkillStore {
     private const val INDEX_FILE = "index.json"
+    private const val STANDARD_SKILL_FILE = "SKILL.md"
+    private val defaultStandardTools = listOf(
+        "list_dir",
+        "read_file",
+        "read_file_range",
+        "search_repo",
+        "edit_file",
+        "write_file",
+        "file_picker_current_context",
+        "local_list_dir",
+        "local_read_file",
+        "local_write_file",
+        "local_append_file",
+        "local_mkdir",
+        "local_read_file_range",
+        "local_search_files",
+        "local_search_text",
+        "local_stat",
+        "local_replace_in_file",
+        "local_apply_patch",
+        "local_copy",
+        "local_move",
+        "local_rename",
+        "local_diff_files",
+        "local_diff_text",
+        "local_preview_patch",
+        "local_apply_batch_patch",
+        "archive_list",
+        "archive_read_file",
+        "archive_extract",
+        "archive_create",
+        "archive_test",
+        "web_fetch",
+        "web_search",
+        "github_read_public_file",
+        "github_list_public_dir",
+        "skill_read",
+        "artifact_write",
+        "artifact_update",
+    )
     private val dangerousTools = setOf(
         "local_delete",
         "local_trash_empty",
@@ -33,6 +73,22 @@ object AiSkillStore {
         "chmod 777",
         "su",
         "shizuku",
+    )
+    private val toolAliases = mapOf(
+        "read" to listOf("local_read_file", "local_read_file_range", "local_stat"),
+        "ls" to listOf("local_list_dir"),
+        "list" to listOf("local_list_dir"),
+        "glob" to listOf("local_search_files", "local_list_dir"),
+        "grep" to listOf("local_search_text"),
+        "edit" to listOf("local_replace_in_file"),
+        "multiedit" to listOf("local_apply_batch_patch"),
+        "write" to listOf("local_write_file", "local_mkdir"),
+        "bash" to listOf("terminal_run"),
+        "shell" to listOf("terminal_run"),
+        "webfetch" to listOf("web_fetch"),
+        "web_fetch" to listOf("web_fetch"),
+        "websearch" to listOf("web_search"),
+        "web_search" to listOf("web_search"),
     )
 
     fun skillsRoot(context: Context): File =
@@ -58,13 +114,23 @@ object AiSkillStore {
         tempDir.mkdirs()
         unzipSafe(source, tempDir)
         val manifestFile = File(tempDir, "manifest.json")
-        require(manifestFile.isFile) { "manifest.json is required" }
+        return if (manifestFile.isFile) {
+            prepareManifestImport(tempDir, manifestFile)
+        } else {
+            prepareStandardSkillImport(source, tempDir)
+        }
+    }
 
+    private fun prepareManifestImport(tempDir: File, manifestFile: File): AiSkillImportPreview {
         val manifest = JSONObject(manifestFile.readText())
         val warnings = linkedSetOf<String>()
-        val requestedTools = manifest.optStringArray("tools")
+        val requestedTools = normalizeToolList(
+            manifest.optStringArray("tools"),
+            strict = true,
+            warnings = warnings,
+            sourceName = "manifest.json",
+        )
         require(requestedTools.isNotEmpty()) { "manifest tools must not be empty" }
-        validateKnownTools(requestedTools)
 
         val manifestRisk = AiSkillRisk.parse(manifest.optString("risk", "low"))
         val effectivePackRisk = escalateRisk(manifestRisk, requestedTools)
@@ -92,6 +158,10 @@ object AiSkillStore {
             enabled = true,
             trusted = false,
         )
+        manifest
+            .put("tools", JSONArray(requestedTools))
+            .put("risk", effectivePackRisk.name.lowercase(Locale.US))
+        manifestFile.writeText(manifest.toString(2))
 
         val skillsDir = File(tempDir, "skills").canonicalFile
         require(skillsDir.isDirectory) { "skills/ directory is required" }
@@ -99,7 +169,7 @@ object AiSkillStore {
             .filter { it.isFile && it.name.endsWith(".skill.md", ignoreCase = true) }
             .map { file ->
                 warnings += scanSuspicious(file.name, file.readText())
-                parseSkillFile(file, pack)
+                parseSkillFile(file, pack, strictTools = true, standardMode = false, warnings = warnings)
             }
             .toList()
         require(skills.isNotEmpty()) { "At least one .skill.md file is required" }
@@ -110,6 +180,70 @@ object AiSkillStore {
             val missing = skill.tools.filterNot { it in pack.tools }
             require(missing.isEmpty()) { "${skill.id}: tools not declared in manifest: ${missing.joinToString()}" }
         }
+        return AiSkillImportPreview(tempDir.absolutePath, pack, skills, warnings.toList())
+    }
+
+    private fun prepareStandardSkillImport(source: File, tempDir: File): AiSkillImportPreview {
+        val warnings = linkedSetOf<String>()
+        val skillFiles = findStandardSkillFiles(tempDir)
+        val portableInstructionFiles = if (skillFiles.isEmpty()) findPortableInstructionFiles(tempDir) else emptyList()
+        require(skillFiles.isNotEmpty() || portableInstructionFiles.isNotEmpty()) {
+            "manifest.json, SKILL.md, .cursor/rules, .clinerules, AGENTS.md, CONVENTIONS.md, or .prompt.md is required"
+        }
+
+        val packId = source.nameWithoutExtension.toSkillId()
+        val provisionalPack = AiSkillPack(
+            id = packId,
+            name = packId,
+            version = "1.0.0",
+            author = null,
+            description = "Imported Agent Skills pack",
+            source = null,
+            risk = AiSkillRisk.LOW,
+            permissions = emptyList(),
+            tools = emptyList(),
+            minAppVersion = null,
+            installedAt = System.currentTimeMillis(),
+            enabled = true,
+            trusted = false,
+        )
+        val parsedSkills = skillFiles.map { file ->
+            warnings += scanSuspicious(file.relativeTo(tempDir).path, file.readText())
+            parseSkillFile(file, provisionalPack, strictTools = false, standardMode = true, warnings = warnings)
+        }.ifEmpty {
+            portableInstructionFiles.map { file ->
+                warnings += scanSuspicious(file.relativeTo(tempDir).path, file.readText())
+                parsePortableInstructionFile(file, tempDir, provisionalPack, warnings)
+            }
+        }
+        val packTools = parsedSkills.flatMap { it.tools }.distinct().ifEmpty { defaultStandardTools }
+        validateKnownTools(packTools)
+        val effectivePackRisk = escalateRisk(AiSkillRisk.LOW, packTools)
+        if (effectivePackRisk != AiSkillRisk.LOW) {
+            warnings += "risk escalated to ${effectivePackRisk.name.lowercase(Locale.US)} because dangerous tools were requested"
+        }
+        warnings += if (skillFiles.isNotEmpty()) {
+            "standard Agent Skill format detected: manifest.json was generated from SKILL.md metadata"
+        } else {
+            "rules/prompts format detected: manifest.json was generated from portable instruction files"
+        }
+
+        val first = parsedSkills.first()
+        val pack = provisionalPack.copy(
+            name = if (parsedSkills.size == 1) first.name else packId,
+            description = if (parsedSkills.size == 1) first.description else "Imported Agent Skills pack (${parsedSkills.size} skills)",
+            risk = effectivePackRisk,
+            tools = packTools,
+        )
+        val skills = parsedSkills.map { skill ->
+            val tools = skill.tools.ifEmpty { defaultStandardTools }
+            skill.copy(
+                risk = escalateRisk(skill.risk, tools),
+                tools = tools,
+            )
+        }
+        val sourceFiles = if (skillFiles.isNotEmpty()) skillFiles else portableInstructionFiles
+        writeGeneratedManifest(tempDir, pack, sourceFiles.zip(skills))
         return AiSkillImportPreview(tempDir.absolutePath, pack, skills, warnings.toList())
     }
 
@@ -191,6 +325,38 @@ object AiSkillStore {
     fun readSkill(context: Context, skillId: String): AiSkill? =
         listSkills(context).firstOrNull { it.id == skillId || "${it.packId}/${it.id}" == skillId }
 
+    fun listPackFiles(context: Context, packId: String): List<String> {
+        val packDir = File(packsRoot(context), packId).canonicalFile
+        if (!packDir.isDirectory) return emptyList()
+        return packDir.walkTopDown()
+            .filter { it.isFile }
+            .mapNotNull { file ->
+                runCatching { file.relativeTo(packDir).path.replace('\\', '/') }.getOrNull()
+            }
+            .filterNot { it == INDEX_FILE }
+            .sorted()
+            .toList()
+    }
+
+    fun readPackFile(context: Context, skillId: String, path: String, maxChars: Int): String {
+        val skill = readSkill(context, skillId) ?: throw IllegalArgumentException("skill not found: $skillId")
+        val packDir = File(packsRoot(context), skill.packId).canonicalFile
+        val safePath = path.trim().replace('\\', '/')
+        require(safePath.isNotBlank() && !safePath.startsWith("/") && !safePath.contains("..")) {
+            "Invalid skill resource path"
+        }
+        val file = File(packDir, safePath).canonicalFile
+        require(file.path.startsWith(packDir.path + File.separator)) { "Invalid skill resource path" }
+        require(file.isFile) { "skill resource not found: $safePath" }
+        val bytes = file.readBytes()
+        if (bytes.any { it == 0.toByte() }) {
+            return "binary skill resource: $safePath (${bytes.size} bytes)"
+        }
+        val cap = maxChars.coerceIn(1_000, 80_000)
+        val text = bytes.toString(Charsets.UTF_8)
+        return text.take(cap) + if (text.length > cap) "\n[truncated: ${text.length - cap} chars omitted]" else ""
+    }
+
     fun setSkillEnabled(context: Context, packId: String, skillId: String, enabled: Boolean) {
         updateIndex(context) { index ->
             val skills = index.optJSONObject("skills") ?: JSONObject().also { index.put("skills", it) }
@@ -219,18 +385,45 @@ object AiSkillStore {
     fun allowedToolsForSkill(context: Context, skill: AiSkill): Set<String> {
         val pack = listPacks(context).firstOrNull { it.id == skill.packId }
         val allowDangerous = AiSkillPrefs.getAllowUntrustedDangerousTools(context)
-        return skill.tools
+        return (skill.tools + "skill_read")
             .filter { AgentTools.byName(it) != null }
             .filter { tool -> pack?.trusted == true || allowDangerous || tool !in dangerousTools }
             .toSet()
     }
 
+    fun catalogPrompt(context: Context, maxChars: Int = 4_000): String {
+        if (!AiSkillPrefs.getEnableSkills(context)) return ""
+        val skills = listSkills(context).filter { it.enabled }
+        if (skills.isEmpty()) return ""
+        val selected = AiSkillPrefs.getSelectedSkillId(context)
+        val body = buildString {
+            appendLine("Installed AI skills catalog:")
+            appendLine("Use this catalog to decide whether a skill is relevant. If the user manually selects a skill in settings, that skill is injected separately and takes priority. The user can also invoke a skill by typing /skill-id or @skill-id.")
+            selected?.let { appendLine("Currently selected skill: $it") }
+            skills.take(40).forEach { skill ->
+                appendLine()
+                appendLine("- id: ${skill.packId}/${skill.id}")
+                appendLine("  name: ${skill.name}")
+                skill.description?.takeIf { it.isNotBlank() }?.let { appendLine("  description: ${it.take(280)}") }
+                if (skill.triggers.isNotEmpty()) appendLine("  triggers: ${skill.triggers.take(8).joinToString(", ")}")
+                appendLine("  risk: ${skill.risk.name.lowercase(Locale.US)}")
+                appendLine("  tools: ${skill.tools.take(14).joinToString(", ")}")
+            }
+            if (skills.size > 40) appendLine("\n... ${skills.size - 40} more installed skills omitted from catalog")
+            appendLine()
+            appendLine("To inspect a selected skill or bundled references, call skill_read with skill_id and optional path.")
+        }
+        return body.take(maxChars)
+    }
+
     fun promptFor(skill: AiSkill, allowedTools: Set<String>): String = buildString {
         appendLine("Active skill:")
         appendLine("Name: ${skill.name}")
+        appendLine("Pack: ${skill.packId}/${skill.id}")
         appendLine("Risk: ${skill.risk.name.lowercase(Locale.US)}")
         appendLine("Allowed tools:")
         allowedTools.sorted().forEach { appendLine("- $it") }
+        appendLine("Bundled references/assets can be inspected with skill_read using skill_id '${skill.packId}/${skill.id}' and a relative path.")
         appendLine()
         appendLine("Skill instructions:")
         appendLine(skill.instructions)
@@ -239,7 +432,13 @@ object AiSkillStore {
     fun isDangerousTool(toolName: String): Boolean =
         toolName in dangerousTools || toolName.contains("delete", ignoreCase = true)
 
-    private fun parseSkillFile(file: File, pack: AiSkillPack): AiSkill {
+    private fun parseSkillFile(
+        file: File,
+        pack: AiSkillPack,
+        strictTools: Boolean = true,
+        standardMode: Boolean = false,
+        warnings: MutableSet<String> = linkedSetOf(),
+    ): AiSkill {
         val raw = file.readText()
         require(raw.startsWith("---")) { "${file.name}: YAML frontmatter is required" }
         val end = raw.indexOf("\n---", startIndex = 3)
@@ -248,20 +447,158 @@ object AiSkillStore {
         val instructions = raw.substring(end + 4).trim()
         val scalar = parseYamlScalars(yaml)
         val lists = parseYamlLists(yaml)
-        val id = scalar["id"]?.cleanId() ?: error("${file.name}: id is required")
+        val rawName = scalar["name"]?.takeIf { it.isNotBlank() }
+        val id = scalar["id"]?.cleanId()
+            ?: rawName?.toSkillId()
+            ?: file.parentFile?.name?.toSkillId()
+            ?: error("${file.name}: id or name is required")
+        val rawTools = lists["tools"].orEmpty()
+            .ifEmpty { lists["allowed-tools"].orEmpty() }
+            .ifEmpty { scalar["tools"]?.splitToolScalar().orEmpty() }
+            .ifEmpty { scalar["allowed-tools"]?.splitToolScalar().orEmpty() }
+        val normalizedTools = normalizeToolList(
+            rawTools,
+            strict = strictTools,
+            warnings = warnings,
+            sourceName = file.name,
+        )
+        val description = scalar["description"]?.takeIf { it.isNotBlank() }
+        if (standardMode) {
+            if (rawName.isNullOrBlank()) warnings += "${file.name}: standard SKILL.md should define name"
+            if (description.isNullOrBlank()) warnings += "${file.name}: standard SKILL.md should define description"
+            if (rawName != null && rawName.length > 64) warnings += "${file.name}: name is longer than 64 characters"
+            if (description != null && description.length > 1024) warnings += "${file.name}: description is longer than 1024 characters"
+            if ((rawName.orEmpty() + description.orEmpty()).contains("<") || (rawName.orEmpty() + description.orEmpty()).contains(">")) {
+                warnings += "${file.name}: name/description contains XML-like characters"
+            }
+        }
         return AiSkill(
             id = id,
             packId = pack.id,
-            name = scalar["name"]?.takeIf { it.isNotBlank() } ?: id,
-            description = scalar["description"]?.takeIf { it.isNotBlank() },
+            name = rawName ?: id,
+            description = description,
             category = scalar["category"]?.takeIf { it.isNotBlank() } ?: "general",
-            risk = escalateRisk(AiSkillRisk.parse(scalar["risk"]), lists["tools"].orEmpty()),
+            risk = escalateRisk(AiSkillRisk.parse(scalar["risk"]), normalizedTools),
             triggers = lists["triggers"].orEmpty(),
-            tools = lists["tools"].orEmpty().ifEmpty { pack.tools },
+            tools = normalizedTools.ifEmpty { pack.tools },
             permissions = lists["permissions"].orEmpty().ifEmpty { pack.permissions },
             instructions = instructions,
             enabled = true,
         )
+    }
+
+    private fun findStandardSkillFiles(root: File): List<File> =
+        root.walkTopDown()
+            .filter { it.isFile && it.name.equals(STANDARD_SKILL_FILE, ignoreCase = true) }
+            .sortedBy { it.relativeTo(root).path }
+            .toList()
+
+    private fun findPortableInstructionFiles(root: File): List<File> =
+        root.walkTopDown()
+            .filter { it.isFile }
+            .filter { file ->
+                val rel = file.relativeTo(root).path.replace('\\', '/')
+                (rel.startsWith(".cursor/rules/") && file.extension.equals("mdc", ignoreCase = true)) ||
+                    (rel.startsWith(".clinerules/") && file.extension.lowercase(Locale.US) in setOf("md", "txt")) ||
+                    file.name.equals("AGENTS.md", ignoreCase = true) ||
+                    file.name.equals("CONVENTIONS.md", ignoreCase = true) ||
+                    file.name.endsWith(".prompt.md", ignoreCase = true)
+            }
+            .sortedBy { it.relativeTo(root).path }
+            .toList()
+
+    private fun parsePortableInstructionFile(
+        file: File,
+        root: File,
+        pack: AiSkillPack,
+        warnings: MutableSet<String>,
+    ): AiSkill {
+        val raw = file.readText()
+        val (frontmatter, body) = splitOptionalFrontmatter(raw)
+        val scalar = parseYamlScalars(frontmatter)
+        val lists = parseYamlLists(frontmatter)
+        val rel = file.relativeTo(root).path.replace('\\', '/')
+        val id = (scalar["name"] ?: file.nameWithoutExtension).toSkillId()
+        val globs = lists["globs"].orEmpty().ifEmpty { lists["paths"].orEmpty() }
+        if (globs.isNotEmpty()) {
+            warnings += "$rel: path/glob scope imported as description context; runtime path auto-attach is not implemented yet"
+        }
+        val description = scalar["description"]
+            ?.takeIf { it.isNotBlank() }
+            ?: when {
+                rel.startsWith(".cursor/rules/") -> "Cursor rule imported from $rel"
+                rel.startsWith(".clinerules/") -> "Cline rule imported from $rel"
+                file.name.equals("AGENTS.md", ignoreCase = true) -> "AGENTS.md instructions imported from $rel"
+                file.name.equals("CONVENTIONS.md", ignoreCase = true) -> "Aider-style conventions imported from $rel"
+                file.name.endsWith(".prompt.md", ignoreCase = true) -> "Continue prompt imported from $rel"
+                else -> "Imported instructions from $rel"
+            }
+        val instructions = buildString {
+            appendLine("Source: $rel")
+            if (globs.isNotEmpty()) appendLine("Original path scope: ${globs.joinToString(", ")}")
+            appendLine()
+            append(body.trim().ifBlank { raw.trim() })
+        }.trim()
+        return AiSkill(
+            id = id,
+            packId = pack.id,
+            name = scalar["name"]?.takeIf { it.isNotBlank() } ?: id,
+            description = description,
+            category = "rules",
+            risk = AiSkillRisk.LOW,
+            triggers = listOf(id, id.replace('-', ' '), file.nameWithoutExtension.replace('-', ' ')).distinct(),
+            tools = defaultStandardTools,
+            permissions = emptyList(),
+            instructions = instructions,
+            enabled = true,
+        )
+    }
+
+    private fun splitOptionalFrontmatter(raw: String): Pair<String, String> {
+        if (!raw.startsWith("---")) return "" to raw
+        val end = raw.indexOf("\n---", startIndex = 3)
+        if (end <= 0) return "" to raw
+        return raw.substring(3, end).trim() to raw.substring(end + 4).trim()
+    }
+
+    private fun writeGeneratedManifest(dir: File, pack: AiSkillPack, skillFiles: List<Pair<File, AiSkill>>) {
+        File(dir, "manifest.json").writeText(
+            JSONObject()
+                .put("id", pack.id)
+                .put("name", pack.name)
+                .put("version", pack.version)
+                .put("description", pack.description)
+                .put("risk", pack.risk.name.lowercase(Locale.US))
+                .put("permissions", JSONArray(pack.permissions))
+                .put("tools", JSONArray(pack.tools))
+                .put("minAppVersion", pack.minAppVersion ?: 1)
+                .toString(2),
+        )
+        val skillsDir = File(dir, "skills").apply { mkdirs() }
+        skillFiles.forEach { (_, skill) ->
+            File(skillsDir, "${skill.id}.skill.md").writeText(renderSkillFile(skill))
+        }
+    }
+
+    private fun renderSkillFile(skill: AiSkill): String = buildString {
+        appendLine("---")
+        appendLine("id: ${skill.id}")
+        appendLine("name: ${skill.name}")
+        skill.description?.takeIf { it.isNotBlank() }?.let { appendLine("description: ${it.replace('\n', ' ')}") }
+        appendLine("category: ${skill.category}")
+        appendLine("risk: ${skill.risk.name.lowercase(Locale.US)}")
+        appendYamlList("triggers", skill.triggers)
+        appendYamlList("tools", skill.tools)
+        appendYamlList("permissions", skill.permissions)
+        appendLine("---")
+        appendLine()
+        append(skill.instructions)
+    }
+
+    private fun StringBuilder.appendYamlList(key: String, values: List<String>) {
+        if (values.isEmpty()) return
+        appendLine("$key:")
+        values.distinct().forEach { appendLine("  - ${it.replace('\n', ' ')}") }
     }
 
     private fun unzipSafe(source: File, dest: File) {
@@ -289,6 +626,34 @@ object AiSkillStore {
     private fun validateKnownTools(tools: List<String>) {
         val unknown = tools.filterNot { AgentTools.byName(it) != null }
         require(unknown.isEmpty()) { "Unknown requested tools: ${unknown.joinToString()}" }
+    }
+
+    private fun normalizeToolList(
+        tools: List<String>,
+        strict: Boolean,
+        warnings: MutableSet<String>,
+        sourceName: String,
+    ): List<String> {
+        val normalized = linkedSetOf<String>()
+        val unknown = mutableListOf<String>()
+        tools.forEach { tool ->
+            val clean = tool.trim().substringBefore("(").trim()
+            if (clean.isBlank()) return@forEach
+            val direct = AgentTools.byName(clean)?.name
+            when {
+                direct != null -> normalized += direct
+                toolAliases[clean.lowercase(Locale.US)] != null -> normalized += toolAliases.getValue(clean.lowercase(Locale.US))
+                else -> unknown += tool
+            }
+        }
+        if (unknown.isNotEmpty()) {
+            if (strict) {
+                error("Unknown requested tools: ${unknown.joinToString()}")
+            } else {
+                warnings += "$sourceName: ignored unsupported tools: ${unknown.joinToString()}"
+            }
+        }
+        return normalized.filter { AgentTools.byName(it) != null }
     }
 
     private fun escalateRisk(risk: AiSkillRisk, tools: List<String>): AiSkillRisk =
@@ -329,6 +694,27 @@ object AiSkillStore {
         return clean
     }
 
+    private fun String.toSkillId(): String {
+        val slug = trim()
+            .lowercase(Locale.US)
+            .replace(Regex("[^a-z0-9_.-]+"), "-")
+            .trim('-', '.', '_')
+            .take(64)
+            .trim('-', '.', '_')
+        return slug.ifBlank { "skill-${System.currentTimeMillis()}" }
+    }
+
+    private fun String.splitToolScalar(): List<String> =
+        if (contains("(")) {
+            split(',', '\n')
+                .map { it.trim().trim('"', '\'') }
+                .filter { it.isNotBlank() }
+        } else {
+            split(Regex("[,\\s]+"))
+                .map { it.trim().trim('"', '\'') }
+                .filter { it.isNotBlank() }
+        }
+
     private fun parseYamlScalars(yaml: String): Map<String, String> {
         val out = linkedMapOf<String, String>()
         yaml.lineSequence().forEach { raw ->
@@ -336,7 +722,7 @@ object AiSkillStore {
             if (line.isBlank() || line.startsWith("-") || !line.contains(":")) return@forEach
             val key = line.substringBefore(":").trim()
             val value = line.substringAfter(":").trim().trim('"', '\'')
-            if (value.isNotBlank() && !value.startsWith("[") && !value.endsWith("|")) {
+            if (value.isNotBlank() && !value.startsWith("[") && value != "|" && value != ">") {
                 out[key] = value
             }
         }

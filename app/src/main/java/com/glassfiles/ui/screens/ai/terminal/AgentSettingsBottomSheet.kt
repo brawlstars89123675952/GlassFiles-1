@@ -308,6 +308,7 @@ fun AgentSettingsBottomSheet(
                 checked = state.skillsAllowUntrustedDangerous,
                 onChange = onSkillsAllowUntrustedDangerousChange,
             )
+            AgentSheetLabel("selected skill: ${state.selectedSkillLabel}")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 AgentSheetCommand(
                     label = "[ view installed skills: ${state.installedSkillsCount} ]",
@@ -315,7 +316,7 @@ fun AgentSettingsBottomSheet(
                     onClick = onViewSkills,
                 )
                 AgentSheetCommand(
-                    label = "[ import .gskill ]",
+                    label = "[ import skill/rules ]",
                     color = colors.accent,
                     onClick = onImportSkillPack,
                 )
@@ -659,6 +660,7 @@ data class AgentSettingsState(
     val skillsEnabled: Boolean,
     val skillsAutoSuggest: Boolean,
     val skillsAllowUntrustedDangerous: Boolean,
+    val selectedSkillLabel: String,
     val installedSkillsCount: Int,
     val instantRender: Boolean,
 )

@@ -673,17 +673,26 @@ fun AiAgentScreen(
                     currentAttachment = file,
                     allowExternalPaths = false,
                 )
-                val skillMatch = AiSkillRouter().match(
-                    context = context,
-                    userMessage = text,
-                    appContext = AppAgentContext(repoFullName = null, chatOnly = true),
-                )
-                val skillAllowedTools = skillMatch?.let { AiSkillStore.allowedToolsForSkill(context, it.skill) }
+                val selectedSkill = AiSkillPrefs.getSelectedSkillId(context)
+                    ?.let { AiSkillStore.readSkill(context, it) }
+                    ?.takeIf { it.enabled && AiSkillPrefs.getEnableSkills(context) }
+                val skillMatch = if (selectedSkill == null) {
+                    AiSkillRouter().match(
+                        context = context,
+                        userMessage = text,
+                        appContext = AppAgentContext(repoFullName = null, chatOnly = true),
+                    )
+                } else null
+                val activeSkill = selectedSkill ?: skillMatch?.skill
+                val skillAllowedTools = activeSkill?.let { AiSkillStore.allowedToolsForSkill(context, it) }
                 val messages = mutableListOf<AiMessage>().apply {
                     addAll(chatOnlyMemoryPrompt(chatScope))
                     add(AiMessage("system", CHAT_ONLY_SYSTEM_PROMPT))
-                    if (skillMatch != null && skillAllowedTools != null) {
-                        add(AiMessage("system", AiSkillStore.promptFor(skillMatch.skill, skillAllowedTools)))
+                    AiSkillStore.catalogPrompt(context).takeIf { it.isNotBlank() }?.let {
+                        add(AiMessage("system", it))
+                    }
+                    if (activeSkill != null && skillAllowedTools != null) {
+                        add(AiMessage("system", AiSkillStore.promptFor(activeSkill, skillAllowedTools)))
                     }
                     addAll(transcript.dropLast(1).toAiMessages())
                 }
@@ -745,7 +754,7 @@ fun AiAgentScreen(
                                 result = AiToolResult(
                                     callId = call.id,
                                     name = call.name,
-                                    output = "deny: tool not allowed by active skill (${skillMatch?.skill?.id})",
+                                    output = "deny: tool not allowed by active skill (${activeSkill?.id})",
                                     isError = true,
                                 ),
                             )
@@ -909,12 +918,18 @@ fun AiAgentScreen(
             } else {
                 AgentTools.ALL.filter { it.readOnly }
             }
-            val skillMatch = AiSkillRouter().match(
-                context = context,
-                userMessage = displayText,
-                appContext = AppAgentContext(repoFullName = repo.fullName, chatOnly = false),
-            )
-            val skillAllowedTools = skillMatch?.let { AiSkillStore.allowedToolsForSkill(context, it.skill) }
+            val selectedSkill = AiSkillPrefs.getSelectedSkillId(context)
+                ?.let { AiSkillStore.readSkill(context, it) }
+                ?.takeIf { it.enabled && AiSkillPrefs.getEnableSkills(context) }
+            val skillMatch = if (selectedSkill == null) {
+                AiSkillRouter().match(
+                    context = context,
+                    userMessage = displayText,
+                    appContext = AppAgentContext(repoFullName = repo.fullName, chatOnly = false),
+                )
+            } else null
+            val activeSkill = selectedSkill ?: skillMatch?.skill
+            val skillAllowedTools = activeSkill?.let { AiSkillStore.allowedToolsForSkill(context, it) }
             val effectiveTools = if (skillAllowedTools != null) {
                 tools.filter { it.name in skillAllowedTools }
             } else {
@@ -965,8 +980,11 @@ fun AiAgentScreen(
                 if (systemOverride != null) {
                     add(AiMessage(role = "system", content = systemOverride))
                 }
-                if (skillMatch != null && skillAllowedTools != null) {
-                    add(AiMessage(role = "system", content = AiSkillStore.promptFor(skillMatch.skill, skillAllowedTools)))
+                AiSkillStore.catalogPrompt(context).takeIf { it.isNotBlank() }?.let {
+                    add(AiMessage(role = "system", content = it))
+                }
+                if (activeSkill != null && skillAllowedTools != null) {
+                    add(AiMessage(role = "system", content = AiSkillStore.promptFor(activeSkill, skillAllowedTools)))
                 }
                 if (workspaceRecord != null) {
                     add(
@@ -1023,7 +1041,7 @@ fun AiAgentScreen(
                     transcript = transcript,
                     approvals = approvals,
                     approvalSettings = approvalSettings,
-                    activeSkill = skillMatch?.skill,
+                    activeSkill = activeSkill,
                     allowedSkillTools = skillAllowedTools,
                     context = context,
                     fallbackCandidates = fallbacks,
@@ -1767,6 +1785,9 @@ fun AiAgentScreen(
             val protectedPathsText = remember(protectedPaths) { protectedPaths.joinToString("\n") }
             val skillsRefresh = skillsVersion
             val installedSkillsCount = remember(skillsRefresh) { AiSkillStore.listSkills(context).size }
+            val selectedSkillForSettings = remember(skillsRefresh) {
+                AiSkillPrefs.getSelectedSkillId(context)?.let { AiSkillStore.readSkill(context, it) }
+            }
             val state = com.glassfiles.ui.screens.ai.terminal.AgentSettingsState(
                 repoLabel = if (chatOnlyMode) "chat only" else selectedRepo?.fullName ?: "—",
                 branchLabel = if (chatOnlyMode) "—" else selectedBranch ?: "—",
@@ -1795,6 +1816,7 @@ fun AiAgentScreen(
                 skillsEnabled = AiSkillPrefs.getEnableSkills(context),
                 skillsAutoSuggest = AiSkillPrefs.getAutoSuggest(context),
                 skillsAllowUntrustedDangerous = AiSkillPrefs.getAllowUntrustedDangerousTools(context),
+                selectedSkillLabel = selectedSkillForSettings?.let { "${it.packId}/${it.id}" } ?: "auto",
                 installedSkillsCount = installedSkillsCount,
                 instantRender = instantRender,
             )
@@ -2007,20 +2029,34 @@ fun AiAgentScreen(
             AgentSkillsDialog(
                 version = skillsVersion,
                 importError = skillImportError,
+                selectedSkillId = AiSkillPrefs.getSelectedSkillId(context),
                 onImport = {
                     showSkills = false
                     skillPackPicker.launch("*/*")
                 },
+                onSelectSkill = { skill ->
+                    AiSkillPrefs.setSelectedSkillId(context, skill?.let { "${it.packId}/${it.id}" })
+                    skillsVersion += 1
+                },
                 onToggleSkill = { skill, enabled ->
                     AiSkillStore.setSkillEnabled(context, skill.packId, skill.id, enabled)
+                    if (!enabled && AiSkillPrefs.getSelectedSkillId(context) == "${skill.packId}/${skill.id}") {
+                        AiSkillPrefs.setSelectedSkillId(context, null)
+                    }
                     skillsVersion += 1
                 },
                 onTogglePack = { packId, enabled ->
                     AiSkillStore.setPackEnabled(context, packId, enabled)
+                    if (!enabled && AiSkillPrefs.getSelectedSkillId(context)?.startsWith("$packId/") == true) {
+                        AiSkillPrefs.setSelectedSkillId(context, null)
+                    }
                     skillsVersion += 1
                 },
                 onDeletePack = { packId ->
                     AiSkillStore.deletePack(context, packId)
+                    if (AiSkillPrefs.getSelectedSkillId(context)?.startsWith("$packId/") == true) {
+                        AiSkillPrefs.setSelectedSkillId(context, null)
+                    }
                     skillsVersion += 1
                 },
                 onDismiss = {
@@ -2688,7 +2724,9 @@ private fun AgentGeneratedFilePreviewSheet(
 private fun AgentSkillsDialog(
     version: Int,
     importError: String?,
+    selectedSkillId: String?,
     onImport: () -> Unit,
+    onSelectSkill: (AiSkill?) -> Unit,
     onToggleSkill: (AiSkill, Boolean) -> Unit,
     onTogglePack: (String, Boolean) -> Unit,
     onDeletePack: (String) -> Unit,
@@ -2724,9 +2762,16 @@ private fun AgentSkillsDialog(
             ) {
                 AgentTerminalSectionTitle("AI SKILLS")
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    AgentTerminalCommand("[ import .gskill ]", colors.accent, onImport)
+                    AgentTerminalCommand("[ import skill/rules ]", colors.accent, onImport)
+                    AgentTerminalCommand("[ auto skill ]", colors.warning) { onSelectSkill(null) }
                     AgentTerminalCommand("[ done ]", colors.textSecondary, onDismiss)
                 }
+                Text(
+                    "selected: ${selectedSkillId ?: "auto"}",
+                    color = colors.textSecondary,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                )
                 if (!importError.isNullOrBlank()) {
                     Text(
                         "IMPORT ERROR: $importError",
@@ -2785,6 +2830,8 @@ private fun AgentSkillsDialog(
                             AgentTerminalCommand("[ delete ]", colors.error) { onDeletePack(pack.id) }
                         }
                         packSkills.forEach { skill ->
+                            val skillKey = "${skill.packId}/${skill.id}"
+                            val isSelected = selectedSkillId == skillKey || selectedSkillId == skill.id
                             Column(
                                 Modifier
                                     .fillMaxWidth()
@@ -2794,8 +2841,8 @@ private fun AgentSkillsDialog(
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Text(
-                                    "${if (skill.enabled) "[✓]" else "[ ]"} ${skill.id}",
-                                    color = colors.accent,
+                                    "${if (skill.enabled) "[✓]" else "[ ]"} ${if (isSelected) ">" else " "} ${skill.id}",
+                                    color = if (isSelected) colors.warning else colors.accent,
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
@@ -2814,10 +2861,16 @@ private fun AgentSkillsDialog(
                                         fontSize = 10.sp,
                                     )
                                 }
-                                AgentTerminalCommand(
-                                    if (skill.enabled) "[ disable ]" else "[ enable ]",
-                                    colors.warning,
-                                ) { onToggleSkill(skill, !skill.enabled) }
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    AgentTerminalCommand(
+                                        if (isSelected) "[ selected ]" else "[ use ]",
+                                        if (isSelected) colors.warning else colors.accent,
+                                    ) { onSelectSkill(skill) }
+                                    AgentTerminalCommand(
+                                        if (skill.enabled) "[ disable ]" else "[ enable ]",
+                                        colors.warning,
+                                    ) { onToggleSkill(skill, !skill.enabled) }
+                                }
                             }
                         }
                     }

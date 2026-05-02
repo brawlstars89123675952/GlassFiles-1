@@ -268,7 +268,12 @@ class LocalToolExecutor(
                     )
                     AgentTools.SKILL_IMPORT.name -> skillImportPreview(context, args.getString("path"))
                     AgentTools.SKILL_LIST.name -> skillList(context)
-                    AgentTools.SKILL_READ.name -> skillRead(context, args.getString("skill_id"))
+                    AgentTools.SKILL_READ.name -> skillRead(
+                        context,
+                        args.getString("skill_id"),
+                        args.optString("path"),
+                        args.optInt("max_chars", 20_000),
+                    )
                     AgentTools.SKILL_ENABLE.name -> skillEnable(
                         context,
                         args.getString("skill_id"),
@@ -1140,8 +1145,12 @@ class LocalToolExecutor(
         }.trimEnd()
     }
 
-    private fun skillRead(context: Context, skillId: String): String {
+    private fun skillRead(context: Context, skillId: String, path: String = "", maxChars: Int = 20_000): String {
+        if (path.isNotBlank()) {
+            return AiSkillStore.readPackFile(context, skillId, path, maxChars)
+        }
         val skill = AiSkillStore.readSkill(context, skillId) ?: throw IllegalArgumentException("skill not found: $skillId")
+        val files = AiSkillStore.listPackFiles(context, skill.packId)
         return buildString {
             appendLine("skill: ${skill.id}")
             appendLine("pack: ${skill.packId}")
@@ -1150,6 +1159,13 @@ class LocalToolExecutor(
             appendLine("category: ${skill.category}")
             appendLine("triggers: ${skill.triggers.joinToString(", ")}")
             appendLine("tools: ${skill.tools.joinToString(", ")}")
+            if (files.isNotEmpty()) {
+                appendLine()
+                appendLine("bundled files:")
+                files.take(80).forEach { appendLine("- $it") }
+                if (files.size > 80) appendLine("- ... ${files.size - 80} more")
+                appendLine("read a bundled text file with skill_read { skill_id: \"${skill.packId}/${skill.id}\", path: \"references/example.md\" }")
+            }
             appendLine()
             appendLine(skill.instructions)
         }.trimEnd()

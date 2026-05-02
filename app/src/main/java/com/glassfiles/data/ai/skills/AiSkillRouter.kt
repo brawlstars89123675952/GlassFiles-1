@@ -13,6 +13,29 @@ class AiSkillRouter(
         val scored = candidates.mapNotNull { skill ->
             var best = 0f
             var reason = ""
+            val skillName = skill.name.lowercase(Locale.US).replace("-", " ").trim()
+            val skillId = skill.id.lowercase(Locale.US).replace("-", " ").trim()
+            val manualTokens = setOf(
+                "/${skill.id.lowercase(Locale.US)}",
+                "@${skill.id.lowercase(Locale.US)}",
+                "/${skill.packId.lowercase(Locale.US)}/${skill.id.lowercase(Locale.US)}",
+                "@${skill.packId.lowercase(Locale.US)}/${skill.id.lowercase(Locale.US)}",
+            )
+            val firstToken = lower.substringBefore(' ').trim()
+            when {
+                firstToken in manualTokens -> {
+                    best = 1f
+                    reason = "manual invocation: $firstToken"
+                }
+                skillName.isNotBlank() && lower.contains(skillName) -> {
+                    best = 0.85f
+                    reason = "skill name: ${skill.name}"
+                }
+                skillId.isNotBlank() && lower.contains(skillId) -> {
+                    best = 0.8f
+                    reason = "skill id: ${skill.id}"
+                }
+            }
             skill.triggers.forEach { trigger ->
                 val t = trigger.lowercase(Locale.US).trim()
                 if (t.isBlank()) return@forEach
@@ -27,9 +50,25 @@ class AiSkillRouter(
                     }
                 }
             }
-            if (best < 0.5f && skill.category.isNotBlank() && lower.contains(skill.category.lowercase(Locale.US))) {
-                best = 0.5f
+            if (best < 0.56f && skill.category.isNotBlank() && lower.contains(skill.category.lowercase(Locale.US))) {
+                best = 0.56f
                 reason = "category keyword: ${skill.category}"
+            }
+            if (best < 0.62f && !skill.description.isNullOrBlank()) {
+                val descriptionTokens = skill.description
+                    .lowercase(Locale.US)
+                    .split(Regex("[^\\p{L}\\p{N}_-]+"))
+                    .filter { it.length >= 4 }
+                    .toSet()
+                val messageTokens = lower
+                    .split(Regex("[^\\p{L}\\p{N}_-]+"))
+                    .filter { it.length >= 4 }
+                    .toSet()
+                val overlap = messageTokens.intersect(descriptionTokens).size
+                if (overlap >= 2) {
+                    best = 0.62f
+                    reason = "description keyword overlap"
+                }
             }
             if (appContext.chatOnly && skill.tools.any { it.startsWith("github_") }) {
                 best -= 0.1f

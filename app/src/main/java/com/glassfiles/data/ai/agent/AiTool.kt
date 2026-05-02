@@ -942,7 +942,7 @@ object AgentTools {
 
     val SKILL_IMPORT = tool("skill_import", "Validate a local .gskill/.zip skill pack and return an import preview. UI confirmation is still required before installing.", true, arrayOf("path"), "path" to "string")
     val SKILL_LIST = tool("skill_list", "List installed AI skills and packs.", true, arrayOf())
-    val SKILL_READ = tool("skill_read", "Read metadata and instructions for an installed AI skill.", true, arrayOf("skill_id"), "skill_id" to "string")
+    val SKILL_READ = tool("skill_read", "Read metadata, instructions, or a bundled text resource for an installed AI skill.", true, arrayOf("skill_id"), "skill_id" to "string", "path" to "string", "max_chars" to "integer")
     val SKILL_ENABLE = tool("skill_enable", "Enable or disable an installed AI skill.", false, arrayOf("skill_id", "enabled"), "skill_id" to "string", "enabled" to "boolean")
     val SKILL_DELETE = tool("skill_delete", "Delete an installed AI skill pack. Destructive.", false, arrayOf("pack_id"), "pack_id" to "string")
 
