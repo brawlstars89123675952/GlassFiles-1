@@ -96,6 +96,7 @@ import com.glassfiles.data.ai.SystemPrompts
 import com.glassfiles.data.ai.agent.AgentToolRegistry
 import com.glassfiles.data.ai.agent.AgentTools
 import com.glassfiles.data.ai.agent.AiAgentApprovalCategory
+import com.glassfiles.data.ai.agent.AiAgentPermissionLog
 import com.glassfiles.data.ai.agent.AiToolUiKind
 import com.glassfiles.data.ai.agent.AiTool
 import com.glassfiles.data.ai.agent.AiToolCall
@@ -807,6 +808,7 @@ fun AiAgentScreen(
         val toolCalls = transcript.count { it is AgentEntry.ToolCall }
         val toolResults = transcript.count { it is AgentEntry.ToolResult }
         val pendingApprovals = transcript.count { it is AgentEntry.Pending }
+        val permissionLog = AiAgentPermissionLog.recent(context, limit = 8)
         val sections = listOf(
             AgentContextInspectorSection(
                 title = "session",
@@ -853,6 +855,16 @@ fun AiAgentScreen(
                     "write/action schemas" to effectiveTools.count { !AgentToolRegistry.isReadOnly(it.name) }.toString(),
                 ),
                 body = visibleTools.joinToString("\n") { "- ${it.name}" }.take(2400),
+            ),
+            AgentContextInspectorSection(
+                title = "permission log",
+                rows = listOf(
+                    "recent entries" to permissionLog.size.toString(),
+                    "latest decision" to (permissionLog.firstOrNull()?.decision ?: "none"),
+                ),
+                body = permissionLog.joinToString("\n") { entry ->
+                    "- ${entry.decision} ${entry.tool} [${entry.category}] ${entry.reason}"
+                }.take(2400),
             ),
             AgentContextInspectorSection(
                 title = "transcript",
@@ -1454,6 +1466,7 @@ fun AiAgentScreen(
                     activeSkillLabel = activeSkillsLabel,
                     allowedSkillTools = skillAllowedTools,
                     context = context,
+                    repoFullName = repo.fullName,
                     fallbackCandidates = fallbacks,
                     estimate = estimate,
                     workingMemoryRepo = if (workingMemoryEnabled) repo.fullName else "",
@@ -4988,6 +5001,7 @@ private suspend fun runAgentLoop(
     activeSkillLabel: String = "",
     allowedSkillTools: Set<String>? = null,
     context: android.content.Context,
+    repoFullName: String = "",
     fallbackCandidates: List<FallbackCandidate>,
     onFallback: (AiModel) -> Unit,
     /**
@@ -5197,6 +5211,22 @@ private suspend fun runAgentLoop(
                 continue
             }
             if (allowedSkillTools != null && call.name !in allowedSkillTools && call.name !in AgentTools.TASK_TOOLS.map { it.name }) {
+                AiAgentPermissionLog.append(
+                    context,
+                    AiAgentPermissionLog.Entry(
+                        sessionId = localSessionId.orEmpty(),
+                        repoFullName = repoFullName,
+                        tool = call.name,
+                        category = "SKILL",
+                        decision = "denied",
+                        reason = "tool not allowed by active skill",
+                        autoApproved = false,
+                        yoloMode = approvalSettings.yoloMode,
+                        sessionTrust = approvalSettings.sessionTrust,
+                        protectedPattern = null,
+                        activeSkill = activeSkillLabel.ifBlank { "unknown" },
+                    ),
+                )
                 val result = AiToolResult(
                     callId = call.id,
                     name = call.name,
@@ -5234,6 +5264,26 @@ private suspend fun runAgentLoop(
                 approvals.remove(pending)
                 ok
             }
+            AiAgentPermissionLog.append(
+                context,
+                AiAgentPermissionLog.Entry(
+                    sessionId = localSessionId.orEmpty(),
+                    repoFullName = repoFullName,
+                    tool = call.name,
+                    category = policyCheck.category.name,
+                    decision = when {
+                        policyCheck.autoApproved -> "auto_approved"
+                        approved -> "manually_approved"
+                        else -> "rejected"
+                    },
+                    reason = policyCheck.reason,
+                    autoApproved = policyCheck.autoApproved,
+                    yoloMode = approvalSettings.yoloMode,
+                    sessionTrust = approvalSettings.sessionTrust,
+                    protectedPattern = policyCheck.protectedPattern,
+                    activeSkill = activeSkillLabel.ifBlank { "auto" },
+                ),
+            )
             val result = if (!approved) {
                 AiToolResult(callId = call.id, name = call.name, output = Strings.aiAgentRejected, isError = true)
             } else {
