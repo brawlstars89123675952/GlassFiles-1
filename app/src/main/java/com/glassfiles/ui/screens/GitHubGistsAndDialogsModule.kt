@@ -17,7 +17,6 @@ import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.PictureInPictureAlt
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -26,17 +25,11 @@ import com.glassfiles.ui.components.AiModuleCard
 import com.glassfiles.ui.components.AiModuleCheckRow
 import com.glassfiles.ui.components.AiModuleGlyph
 import com.glassfiles.ui.components.AiModuleGlyphAction
+import com.glassfiles.ui.components.AiModuleIcon as Icon
 import com.glassfiles.ui.components.AiModulePillButton
+import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.components.AiModuleTextAction
 import com.glassfiles.ui.components.AiModuleTextField
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -236,8 +229,7 @@ internal fun GistsScreen(
 
 // ---------------------------------------------------------------------------
 // Shared dialogs (used across multiple GitHub screens).
-// Kept on Material3 AlertDialog chrome but themed via AiModuleTheme.colors so
-// they read as part of the GitHub module without rewriting the M3 form fields.
+// Terminal-style dialogs shared by the repository screens.
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -310,7 +302,7 @@ internal fun UploadDialog(repo: GHRepo, curPath: String, branch: String, onDismi
             AiModuleTextField(fn, { fn = it }, label = Strings.ghFilePath, placeholder = "example.txt")
             if (curPath.isNotBlank()) Text("\u2192 $curPath/$fn", fontSize = 10.sp, color = palette.textMuted, fontFamily = JetBrainsMono)
             AiModuleTextField(msg, { msg = it }, label = Strings.ghCommitMsg)
-            if (up) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = palette.accent)
+            if (up) AiModuleSpinner(label = "uploading")
         }
     }
 }
@@ -431,7 +423,7 @@ private fun CreateGistDialog(onDismiss: () -> Unit, onCreated: () -> Unit) {
                 checked = isPublic,
                 onToggle = { isPublic = !isPublic },
             )
-            if (creating) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = palette.accent)
+            if (creating) AiModuleSpinner(label = "creating")
         }
     }
 }
@@ -799,10 +791,7 @@ internal fun DispatchWorkflowDialog(
                     Text("This workflow has no workflow_dispatch trigger", fontSize = 11.sp, color = palette.textMuted, fontFamily = JetBrainsMono)
                 }
                 if (dispatching) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CircularProgressIndicator(Modifier.size(14.dp), color = palette.accent, strokeWidth = 2.dp)
-                        Text(Strings.ghRunning, fontSize = 11.sp, color = palette.accent, fontFamily = JetBrainsMono)
-                    }
+                    AiModuleSpinner(label = Strings.ghRunning)
                 }
         }
     }

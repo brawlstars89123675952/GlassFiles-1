@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,9 +30,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.Strings
-import com.glassfiles.ui.components.AiModulePageBar
+import com.glassfiles.ui.components.AiModuleAlertDialog
 import com.glassfiles.ui.components.AiModuleHairline
+import com.glassfiles.ui.components.AiModuleIcon as Icon
+import com.glassfiles.ui.components.AiModuleIconButton as IconButton
+import com.glassfiles.ui.components.AiModulePageBar
 import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
+import com.glassfiles.ui.components.AiModuleTextAction
+import com.glassfiles.ui.components.AiModuleTextField
 import com.glassfiles.data.github.GHAsset
 import com.glassfiles.data.github.GHRepo
 import com.glassfiles.data.github.GHRelease
@@ -83,7 +88,7 @@ fun ReleasesScreen(
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AiModuleTheme.colors.accent)
+                AiModuleSpinner(label = "loading releases")
             }
             return@GitHubScreenFrame
         }
@@ -137,7 +142,7 @@ private fun ReleaseCard(
     var showDelete by remember { mutableStateOf(false) }
     var deletingAsset by remember { mutableStateOf<GHAsset?>(null) }
     var uploadingAsset by remember { mutableStateOf(false) }
-    val colors = MaterialTheme.colorScheme
+    val colors = AiModuleTheme.colors
     val releaseRepo = remember(repoOwner, repoName, defaultBranch) {
         GHRepo(
             name = repoName,
@@ -181,11 +186,11 @@ private fun ReleaseCard(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(Modifier.size(12.dp).clip(CircleShape).background(if (release.prerelease) GitHubWarningAmber() else GitHubSuccessGreen))
             Column(Modifier.weight(1f)) {
-                Text(release.name.ifBlank { release.tag }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
-                Text(release.tag, fontSize = 12.sp, color = colors.onSurfaceVariant)
+                Text(release.name.ifBlank { release.tag }, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                Text(release.tag, fontSize = 12.sp, color = colors.textMuted)
             }
             if (release.draft) {
-                Text("Draft", fontSize = 10.sp, color = colors.onSurfaceVariant, modifier = Modifier.background(colors.surfaceVariant, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
+                Text("Draft", fontSize = 10.sp, color = colors.textMuted, modifier = Modifier.background(colors.background, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
             }
             if (release.prerelease) {
                 Text("Pre", fontSize = 10.sp, color = GitHubWarningAmber(), modifier = Modifier.background(GitHubWarningAmber().copy(0.1f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
@@ -195,14 +200,14 @@ private fun ReleaseCard(
                     if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                     null,
                     Modifier.size(20.dp),
-                    tint = colors.onSurfaceVariant
+                    tint = colors.textMuted
                 )
             }
         }
 
         if (release.createdAt.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
-            Text(formatDate(release.createdAt), fontSize = 11.sp, color = colors.onSurfaceVariant)
+            Text(formatDate(release.createdAt), fontSize = 11.sp, color = colors.textMuted)
         }
 
         if (release.body.isNotBlank()) {
@@ -213,7 +218,7 @@ private fun ReleaseCard(
         if (expanded) {
             Spacer(Modifier.height(12.dp))
             if (release.assets.isNotEmpty()) {
-                Text("Assets", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface)
+                Text("Assets", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
                 Spacer(Modifier.height(6.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     release.assets.forEach { asset ->
@@ -237,7 +242,8 @@ private fun ReleaseCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (release.draft) {
-                    TextButton(
+                    GitHubTerminalButton(
+                        label = "publish",
                         onClick = {
                             scope.launch {
                                 val published = GitHubManager.publishRelease(context, repoOwner, repoName, release)
@@ -248,12 +254,9 @@ private fun ReleaseCard(
                                     Toast.makeText(context, Strings.error, Toast.LENGTH_SHORT).show()
                                 }
                             }
-                        }
-                    ) {
-                        Icon(Icons.Rounded.Publish, null, Modifier.size(16.dp), tint = GitHubSuccessGreen)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Publish", color = GitHubSuccessGreen, fontSize = 12.sp)
-                    }
+                        },
+                        color = GitHubSuccessGreen,
+                    )
                 }
                 if (canWrite) {
                     ReleaseActionButton(
@@ -290,12 +293,21 @@ private fun ReleaseCard(
     }
 
     if (showDelete) {
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { showDelete = false },
-            title = { Text("Delete Release") },
-            text = { Text("Are you sure you want to delete ${release.tag}? This cannot be undone.") },
+            title = "delete release",
+            content = {
+                Text(
+                    "Are you sure you want to delete ${release.tag}? This cannot be undone.",
+                    color = AiModuleTheme.colors.textPrimary,
+                    fontSize = 13.sp,
+                    fontFamily = JetBrainsMono,
+                )
+            },
             confirmButton = {
-                TextButton(
+                AiModuleTextAction(
+                    label = "delete",
+                    tint = AiModuleTheme.colors.error,
                     onClick = {
                         scope.launch {
                             val success = GitHubManager.deleteRelease(context, repoOwner, repoName, release.tag)
@@ -307,25 +319,32 @@ private fun ReleaseCard(
                             }
                             showDelete = false
                         }
-                    }
-                ) {
-                    Text("Delete", color = AiModuleTheme.colors.error)
-                }
+                    },
+                )
             },
             dismissButton = {
-                TextButton(onClick = { showDelete = false }) { Text("Cancel") }
+                AiModuleTextAction(label = "cancel", onClick = { showDelete = false }, tint = AiModuleTheme.colors.textSecondary)
             }
         )
     }
 
     val targetAsset = deletingAsset
     if (targetAsset != null) {
-        AlertDialog(
+        AiModuleAlertDialog(
             onDismissRequest = { deletingAsset = null },
-            title = { Text("Delete asset") },
-            text = { Text("Delete ${targetAsset.name} from this release?") },
+            title = "delete asset",
+            content = {
+                Text(
+                    "Delete ${targetAsset.name} from this release?",
+                    color = AiModuleTheme.colors.textPrimary,
+                    fontSize = 13.sp,
+                    fontFamily = JetBrainsMono,
+                )
+            },
             confirmButton = {
-                TextButton(
+                AiModuleTextAction(
+                    label = "delete",
+                    tint = AiModuleTheme.colors.error,
                     onClick = {
                         scope.launch {
                             val ok = GitHubManager.deleteReleaseAsset(context, repoOwner, repoName, targetAsset.id)
@@ -337,13 +356,11 @@ private fun ReleaseCard(
                             }
                             deletingAsset = null
                         }
-                    }
-                ) {
-                    Text("Delete", color = AiModuleTheme.colors.error)
-                }
+                    },
+                )
             },
             dismissButton = {
-                TextButton(onClick = { deletingAsset = null }) { Text("Cancel") }
+                AiModuleTextAction(label = "cancel", onClick = { deletingAsset = null }, tint = AiModuleTheme.colors.textSecondary)
             }
         )
     }
@@ -351,22 +368,22 @@ private fun ReleaseCard(
 
 @Composable
 private fun AssetRow(asset: GHAsset, onDownload: () -> Unit, onDelete: (() -> Unit)?) {
-    val colors = MaterialTheme.colorScheme
+    val colors = AiModuleTheme.colors
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-            .background(colors.surfaceVariant).padding(horizontal = 12.dp, vertical = 8.dp),
+            .background(colors.background).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(releaseAssetIcon(asset.name), null, Modifier.size(24.dp), tint = colors.primary.copy(alpha = 0.72f))
+        Icon(releaseAssetIcon(asset.name), null, Modifier.size(24.dp), tint = colors.accent.copy(alpha = 0.72f))
         Column(Modifier.weight(1f)) {
-            Text(asset.name, fontSize = 12.sp, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(releaseAssetKind(asset.name), fontSize = 10.sp, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(asset.name, fontSize = 12.sp, color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(releaseAssetKind(asset.name), fontSize = 10.sp, color = colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(formatBytes(asset.size), fontSize = 11.sp, color = colors.onSurfaceVariant)
-        Text("${formatGitHubNumber(asset.downloadCount)} downloads", fontSize = 11.sp, color = colors.onSurfaceVariant)
+        Text(formatBytes(asset.size), fontSize = 11.sp, color = colors.textMuted)
+        Text("${formatGitHubNumber(asset.downloadCount)} downloads", fontSize = 11.sp, color = colors.textMuted)
         IconButton(onClick = onDownload, modifier = Modifier.size(30.dp)) {
-            Icon(Icons.Rounded.Download, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+            Icon(Icons.Rounded.Download, null, Modifier.size(16.dp), tint = colors.textSecondary)
         }
         if (onDelete != null) {
             IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
@@ -385,11 +402,19 @@ private fun ReleaseActionButton(
     loading: Boolean = false,
     onClick: () -> Unit
 ) {
-    TextButton(enabled = enabled, onClick = onClick) {
-        if (loading) CircularProgressIndicator(Modifier.size(16.dp), color = tint, strokeWidth = 2.dp)
-        else Icon(icon, null, Modifier.size(16.dp), tint = tint)
-        Spacer(Modifier.width(4.dp))
-        Text(label, color = tint, fontSize = 12.sp)
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(2.dp))
+            .border(1.dp, if (enabled) tint else tint.copy(alpha = 0.35f), RoundedCornerShape(2.dp))
+            .let { if (enabled) it.clickable(onClick = onClick) else it }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            if (loading) AiModuleSpinner()
+            else Icon(icon, null, Modifier.size(14.dp), tint = if (enabled) tint else tint.copy(alpha = 0.35f))
+            Text(label.lowercase(Locale.US), color = if (enabled) tint else tint.copy(alpha = 0.35f), fontSize = 12.sp, fontFamily = JetBrainsMono)
+        }
     }
 }
 
@@ -410,18 +435,19 @@ private fun CreateReleaseDialog(
     var loading by remember { mutableStateOf(false) }
     var generating by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Create Release") },
-        text = {
+        title = "create release",
+        content = {
             Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-                OutlinedTextField(tag, { tag = it }, label = { Text("Tag version *") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(tag, { tag = it }, label = "Tag version *", singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(name, { name = it }, label = { Text("Release title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(name, { name = it }, label = "Release title", singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(body, { body = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth().height(120.dp), maxLines = 5)
+                AiModuleTextField(body, { body = it }, label = "Description", modifier = Modifier.fillMaxWidth().height(120.dp), minLines = 4, maxLines = 5)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(
+                    AiModuleTextAction(
+                        label = if (generating) "generating" else "generate changelog",
                         enabled = !generating,
                         onClick = {
                             generating = true
@@ -430,28 +456,21 @@ private fun CreateReleaseDialog(
                                 body = commits.joinToString("\n") { "- ${it.message.lineSequence().firstOrNull().orEmpty()} (${it.sha})" }
                                 generating = false
                             }
-                        }
-                    ) {
-                        if (generating) CircularProgressIndicator(Modifier.size(14.dp), color = AiModuleTheme.colors.accent, strokeWidth = 2.dp)
-                        else Text("Generate changelog", color = AiModuleTheme.colors.accent, fontSize = 12.sp)
-                    }
+                        },
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(draft, { draft = it })
-                    Text("Draft", fontSize = 14.sp)
-                    Spacer(Modifier.width(12.dp))
-                    Checkbox(prerelease, { prerelease = it })
-                    Text("Pre-release", fontSize = 14.sp)
-                }
+                GitHubTerminalCheckbox("draft", draft, onToggle = { draft = !draft })
+                GitHubTerminalCheckbox("pre-release", prerelease, onToggle = { prerelease = !prerelease })
             }
         },
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = if (loading) "creating" else "create",
                 onClick = {
                     if (tag.isBlank()) {
                         Toast.makeText(context, "Tag is required", Toast.LENGTH_SHORT).show()
-                        return@TextButton
+                        return@AiModuleTextAction
                     }
                     loading = true
                     scope.launch {
@@ -467,13 +486,10 @@ private fun CreateReleaseDialog(
                     }
                 },
                 enabled = !loading
-            ) {
-                if (loading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                else Text("Create")
-            }
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            AiModuleTextAction(label = "cancel", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
         }
     )
 }
@@ -494,26 +510,22 @@ private fun EditReleaseDialog(
     var prerelease by remember { mutableStateOf(release.prerelease) }
     var loading by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    AiModuleAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Release") },
-        text = {
+        title = "edit release",
+        content = {
             Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-                OutlinedTextField(name, { name = it }, label = { Text("Release title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AiModuleTextField(name, { name = it }, label = "Release title", singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(body, { body = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth().height(120.dp), maxLines = 5)
+                AiModuleTextField(body, { body = it }, label = "Description", modifier = Modifier.fillMaxWidth().height(120.dp), minLines = 4, maxLines = 5)
                 Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(draft, { draft = it })
-                    Text("Draft", fontSize = 14.sp)
-                    Spacer(Modifier.width(12.dp))
-                    Checkbox(prerelease, { prerelease = it })
-                    Text("Pre-release", fontSize = 14.sp)
-                }
+                GitHubTerminalCheckbox("draft", draft, onToggle = { draft = !draft })
+                GitHubTerminalCheckbox("pre-release", prerelease, onToggle = { prerelease = !prerelease })
             }
         },
         confirmButton = {
-            TextButton(
+            AiModuleTextAction(
+                label = if (loading) "saving" else "save",
                 onClick = {
                     loading = true
                     scope.launch {
@@ -539,13 +551,10 @@ private fun EditReleaseDialog(
                     }
                 },
                 enabled = !loading
-            ) {
-                if (loading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                else Text("Save")
-            }
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            AiModuleTextAction(label = "cancel", onClick = onDismiss, tint = AiModuleTheme.colors.textSecondary)
         }
     )
 }
