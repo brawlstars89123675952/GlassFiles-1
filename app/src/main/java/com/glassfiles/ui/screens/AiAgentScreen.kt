@@ -4302,7 +4302,7 @@ private suspend fun executeChatOnlyTool(
                 )
             }
             else -> {
-                if (!AgentTools.isLocalOrArchive(call.name)) {
+                if (!AgentTools.isChatRuntimeTool(call.name)) {
                     error("Unknown chat tool: ${call.name}")
                 }
                 val result = localExecutor.execute(context, call)

@@ -827,6 +827,23 @@ object AgentTools {
         readOnly = false,
     )
 
+    val LOCAL_SEARCH_FILES = tool("local_search_files", "Search local file names under a directory.", true, arrayOf("query"), "path" to "string", "query" to "string", "max_results" to "integer")
+    val LOCAL_SEARCH_TEXT = tool("local_search_text", "Search UTF-8 text files under a directory and return matching path/line snippets.", true, arrayOf("query"), "path" to "string", "query" to "string", "max_results" to "integer")
+    val LOCAL_READ_FILE_RANGE = tool("local_read_file_range", "Read a 1-based inclusive line range from a local UTF-8 file.", true, arrayOf("path", "start_line", "end_line"), "path" to "string", "start_line" to "integer", "end_line" to "integer")
+    val LOCAL_HASH_FILE = tool("local_hash_file", "Compute a local file hash. Defaults to sha256.", true, arrayOf("path"), "path" to "string", "algorithm" to "string")
+    val LOCAL_FIND_DUPLICATES = tool("local_find_duplicates", "Find duplicate local files by size and sha256 hash.", true, arrayOf(), "path" to "string", "max_results" to "integer")
+    val LOCAL_GET_MIME = tool("local_get_mime", "Guess the MIME type for a local file.", true, arrayOf("path"), "path" to "string")
+    val LOCAL_GET_METADATA = tool("local_get_metadata", "Return local file metadata including stat, MIME and sha256.", true, arrayOf("path"), "path" to "string")
+    val LOCAL_CREATE_TEMP_FILE = tool("local_create_temp_file", "Create a temporary UTF-8 file in the current local workspace.", false, arrayOf(), "prefix" to "string", "suffix" to "string", "content" to "string")
+    val LOCAL_DIFF_FILES = tool("local_diff_files", "Create a line diff between two local UTF-8 files.", true, arrayOf("left_path", "right_path"), "left_path" to "string", "right_path" to "string")
+    val LOCAL_DIFF_TEXT = tool("local_diff_text", "Create a line diff between two text strings.", true, arrayOf("left_text", "right_text"), "left_text" to "string", "right_text" to "string")
+    val LOCAL_PREVIEW_PATCH = tool("local_preview_patch", "Preview an apply_patch-style patch without modifying files.", true, arrayOf("patch"), "patch" to "string")
+    val LOCAL_APPLY_BATCH_PATCH = tool("local_apply_batch_patch", "Apply multiple apply_patch-style patches to local files.", false, arrayOf("patches"), "patches" to "array")
+    val LOCAL_REVERT_FILE = tool("local_revert_file", "Restore the latest backup captured before a local tool modified a file.", false, arrayOf("path"), "path" to "string")
+    val LOCAL_TRASH_LIST = tool("local_trash_list", "List files currently in the app trash.", true, arrayOf())
+    val LOCAL_TRASH_RESTORE = tool("local_trash_restore", "Restore an item from app trash by trash_path or original_path.", false, arrayOf(), "trash_path" to "string", "original_path" to "string")
+    val LOCAL_TRASH_EMPTY = tool("local_trash_empty", "Empty the app trash permanently.", false, arrayOf())
+
     val ARCHIVE_LIST = AiTool(
         name = "archive_list",
         description = "List entries in a supported local archive: zip, jar, aar, tar, tar.gz, tgz or 7z.",
@@ -904,6 +921,25 @@ object AgentTools {
         readOnly = true,
     )
 
+    val ARCHIVE_ADD_ENTRIES = tool("archive_add_entries", "Add local files to a ZIP archive. ZIP archives only.", false, arrayOf("path", "source_paths"), "path" to "string", "source_paths" to "array", "entry_prefix" to "string")
+    val ARCHIVE_DELETE_ENTRIES = tool("archive_delete_entries", "Delete entries from a ZIP archive. ZIP archives only.", false, arrayOf("path", "entries"), "path" to "string", "entries" to "array")
+    val ARCHIVE_UPDATE_ENTRY = tool("archive_update_entry", "Create or replace a UTF-8 text entry in a ZIP archive. ZIP archives only.", false, arrayOf("path", "entry", "content"), "path" to "string", "entry" to "string", "content" to "string")
+    val ARCHIVE_LIST_NESTED = tool("archive_list_nested", "List entries in a nested archive path like outer.zip!inner.zip.", true, arrayOf("path"), "path" to "string", "max_entries" to "integer")
+    val ARCHIVE_EXTRACT_NESTED = tool("archive_extract_nested", "Extract a nested archive path like outer.zip!inner.zip to a destination directory.", false, arrayOf("path"), "path" to "string", "destination" to "string")
+
+    val APK_INSPECT = tool("apk_inspect", "Inspect APK package name, version and requested permissions.", true, arrayOf("path"), "path" to "string")
+    val IMAGE_OCR = tool("image_ocr", "Run OCR on a local image using ML Kit text recognition.", true, arrayOf("path"), "path" to "string")
+    val QR_SCAN_IMAGE = tool("qr_scan_image", "Scan QR/barcodes from a local image using ML Kit barcode scanning.", true, arrayOf("path"), "path" to "string")
+    val EXIF_READ = tool("exif_read", "Read common EXIF tags from a local image.", true, arrayOf("path"), "path" to "string")
+    val EXIF_REMOVE = tool("exif_remove", "Remove common EXIF location/camera tags from a local image.", false, arrayOf("path"), "path" to "string")
+    val PDF_EXTRACT_TEXT = tool("pdf_extract_text", "Best-effort text extraction from a local PDF.", true, arrayOf("path"), "path" to "string", "max_chars" to "integer")
+    val MEDIA_GET_INFO = tool("media_get_info", "Read duration, dimensions and media metadata from a local audio/video file.", true, arrayOf("path"), "path" to "string")
+    val STORAGE_ANALYZE = tool("storage_analyze", "Analyze local storage usage under a directory.", true, arrayOf(), "path" to "string", "max_entries" to "integer")
+    val TERMINAL_RUN = tool("terminal_run", "Run a local command in the current workspace with a short timeout. Write tool: requires approval in agent mode.", false, arrayOf("command"), "command" to "string", "args" to "array", "timeout_ms" to "integer")
+
+    val GITHUB_READ_PUBLIC_FILE = tool("github_read_public_file", "Read a public GitHub file without authentication.", true, arrayOf("owner", "repo", "path"), "owner" to "string", "repo" to "string", "path" to "string", "ref" to "string", "max_chars" to "integer")
+    val GITHUB_LIST_PUBLIC_DIR = tool("github_list_public_dir", "List a public GitHub repository directory without authentication.", true, arrayOf("owner", "repo"), "owner" to "string", "repo" to "string", "path" to "string", "ref" to "string")
+
     val FILE_PICKER_CURRENT_CONTEXT = AiTool(
         name = "file_picker_current_context",
         description = "Describe the current local file context: session workspace, attached file path, selected repository, and supported local/archive tool roots.",
@@ -919,12 +955,22 @@ object AgentTools {
         LOCAL_LIST_DIR, LOCAL_READ_FILE, LOCAL_WRITE_FILE, LOCAL_APPEND_FILE,
         LOCAL_MKDIR, LOCAL_STAT, LOCAL_REPLACE_IN_FILE, LOCAL_APPLY_PATCH,
         LOCAL_COPY, LOCAL_MOVE, LOCAL_RENAME, LOCAL_DELETE_TO_TRASH, LOCAL_DELETE,
+        LOCAL_SEARCH_FILES, LOCAL_SEARCH_TEXT, LOCAL_READ_FILE_RANGE, LOCAL_HASH_FILE,
+        LOCAL_FIND_DUPLICATES, LOCAL_GET_MIME, LOCAL_GET_METADATA, LOCAL_CREATE_TEMP_FILE,
+        LOCAL_DIFF_FILES, LOCAL_DIFF_TEXT, LOCAL_PREVIEW_PATCH, LOCAL_APPLY_BATCH_PATCH,
+        LOCAL_REVERT_FILE, LOCAL_TRASH_LIST, LOCAL_TRASH_RESTORE, LOCAL_TRASH_EMPTY,
+        APK_INSPECT, IMAGE_OCR, QR_SCAN_IMAGE, EXIF_READ, EXIF_REMOVE, PDF_EXTRACT_TEXT,
+        MEDIA_GET_INFO, STORAGE_ANALYZE, TERMINAL_RUN,
         FILE_PICKER_CURRENT_CONTEXT,
     )
 
     val ARCHIVE_TOOLS: List<AiTool> = listOf(
         ARCHIVE_LIST, ARCHIVE_READ_FILE, ARCHIVE_EXTRACT, ARCHIVE_CREATE, ARCHIVE_TEST,
+        ARCHIVE_ADD_ENTRIES, ARCHIVE_DELETE_ENTRIES, ARCHIVE_UPDATE_ENTRY,
+        ARCHIVE_LIST_NESTED, ARCHIVE_EXTRACT_NESTED,
     )
+
+    val PUBLIC_REMOTE_TOOLS: List<AiTool> = listOf(GITHUB_READ_PUBLIC_FILE, GITHUB_LIST_PUBLIC_DIR)
 
     /** All tools, in canonical order. */
     val ALL: List<AiTool> = listOf(
@@ -937,19 +983,46 @@ object AgentTools {
         EDIT_FILE, WRITE_FILE, CREATE_BRANCH, COMMIT, OPEN_PR,
         COMMENT_PR, COMMENT_ISSUE, CREATE_ISSUE,
         MEMORY_READ, MEMORY_WRITE, MEMORY_APPEND, MEMORY_LIST, MEMORY_SEARCH, MEMORY_DELETE,
-    ) + LOCAL_TOOLS + ARCHIVE_TOOLS
+    ) + LOCAL_TOOLS + ARCHIVE_TOOLS + PUBLIC_REMOTE_TOOLS
 
     val CHAT_ARTIFACTS: List<AiTool> = listOf(ARTIFACT_WRITE, ARTIFACT_UPDATE)
-    val CHAT_TOOLS: List<AiTool> = CHAT_ARTIFACTS + LOCAL_TOOLS + ARCHIVE_TOOLS
+    val CHAT_TOOLS: List<AiTool> = CHAT_ARTIFACTS + listOf(WEB_SEARCH, WEB_FETCH) + LOCAL_TOOLS + ARCHIVE_TOOLS + PUBLIC_REMOTE_TOOLS
 
     fun byName(name: String): AiTool? =
         (ALL + CHAT_ARTIFACTS).firstOrNull { it.name == name }
 
     fun isLocalOrArchive(name: String): Boolean =
-        (LOCAL_TOOLS + ARCHIVE_TOOLS).any { it.name == name }
+        (LOCAL_TOOLS + ARCHIVE_TOOLS + PUBLIC_REMOTE_TOOLS).any { it.name == name }
+
+    fun isChatRuntimeTool(name: String): Boolean =
+        isLocalOrArchive(name) || name == WEB_SEARCH.name || name == WEB_FETCH.name
 }
 
 /** Tiny helpers to keep the JSON-Schema literals readable above. */
 private fun obj(block: JSONObject.() -> Unit): JSONObject = JSONObject().apply(block)
 private fun arr(vararg items: String): org.json.JSONArray =
     org.json.JSONArray().apply { items.forEach { put(it) } }
+
+private fun tool(
+    name: String,
+    description: String,
+    readOnly: Boolean,
+    required: Array<String>,
+    vararg properties: Pair<String, String>,
+): AiTool = AiTool(
+    name = name,
+    description = description,
+    parameters = obj {
+        put("type", "object")
+        put("properties", obj {
+            properties.forEach { (key, type) ->
+                put(key, obj {
+                    put("type", type)
+                    if (type == "array") put("items", obj { put("type", "string") })
+                })
+            }
+        })
+        put("required", org.json.JSONArray().apply { required.forEach { put(it) } })
+    },
+    readOnly = readOnly,
+)

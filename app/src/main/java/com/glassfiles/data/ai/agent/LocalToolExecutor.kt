@@ -1,22 +1,46 @@
 package com.glassfiles.data.ai.agent
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
+import android.media.ExifInterface
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import android.os.Environment
 import android.util.Base64
+import android.webkit.MimeTypeMap
 import com.glassfiles.data.ArchiveHelper
 import com.glassfiles.data.TrashManager
 import com.glassfiles.data.ai.AiPreparedAttachment
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.tasks.await
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.Reader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLDecoder
+import java.net.URLEncoder
+import java.nio.charset.Charset
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 /**
  * Executes app-local file and archive tools for the AI agent.
@@ -90,6 +114,64 @@ class LocalToolExecutor(
                     )
                     AgentTools.LOCAL_DELETE_TO_TRASH.name -> deleteToTrash(context, args.getString("path"))
                     AgentTools.LOCAL_DELETE.name -> delete(context, args.getString("path"))
+                    AgentTools.LOCAL_SEARCH_FILES.name -> searchFiles(
+                        context,
+                        args.optString("path", ""),
+                        args.getString("query"),
+                        args.optInt("max_results", 80),
+                    )
+                    AgentTools.LOCAL_SEARCH_TEXT.name -> searchText(
+                        context,
+                        args.optString("path", ""),
+                        args.getString("query"),
+                        args.optInt("max_results", 80),
+                    )
+                    AgentTools.LOCAL_READ_FILE_RANGE.name -> readFileRange(
+                        context,
+                        args.getString("path"),
+                        args.getInt("start_line"),
+                        args.getInt("end_line"),
+                    )
+                    AgentTools.LOCAL_HASH_FILE.name -> hashFile(
+                        context,
+                        args.getString("path"),
+                        args.optString("algorithm", "SHA-256"),
+                    )
+                    AgentTools.LOCAL_FIND_DUPLICATES.name -> findDuplicates(
+                        context,
+                        args.optString("path", ""),
+                        args.optInt("max_results", 50),
+                    )
+                    AgentTools.LOCAL_GET_MIME.name -> getMime(context, args.getString("path"))
+                    AgentTools.LOCAL_GET_METADATA.name -> getMetadata(context, args.getString("path"))
+                    AgentTools.LOCAL_CREATE_TEMP_FILE.name -> createTempFile(
+                        context,
+                        args.optString("prefix", "agent_"),
+                        args.optString("suffix", ".tmp"),
+                        args.optString("content", ""),
+                    )
+                    AgentTools.LOCAL_DIFF_FILES.name -> diffFiles(
+                        context,
+                        args.getString("left_path"),
+                        args.getString("right_path"),
+                    )
+                    AgentTools.LOCAL_DIFF_TEXT.name -> diffText(
+                        args.getString("left_text"),
+                        args.getString("right_text"),
+                    )
+                    AgentTools.LOCAL_PREVIEW_PATCH.name -> previewPatch(args.getString("patch"))
+                    AgentTools.LOCAL_APPLY_BATCH_PATCH.name -> applyBatchPatch(
+                        context,
+                        args.optJSONArray("patches") ?: JSONArray(),
+                    )
+                    AgentTools.LOCAL_REVERT_FILE.name -> revertFile(context, args.getString("path"))
+                    AgentTools.LOCAL_TRASH_LIST.name -> trashList(context)
+                    AgentTools.LOCAL_TRASH_RESTORE.name -> trashRestore(
+                        context,
+                        args.optString("trash_path", ""),
+                        args.optString("original_path", ""),
+                    )
+                    AgentTools.LOCAL_TRASH_EMPTY.name -> trashEmpty(context)
                     AgentTools.ARCHIVE_LIST.name -> archiveList(
                         context,
                         args.getString("path"),
@@ -113,6 +195,76 @@ class LocalToolExecutor(
                         args.optString("format", ""),
                     )
                     AgentTools.ARCHIVE_TEST.name -> archiveTest(context, args.getString("path"))
+                    AgentTools.ARCHIVE_ADD_ENTRIES.name -> archiveAddEntries(
+                        context,
+                        args.getString("path"),
+                        args.optJSONArray("source_paths") ?: JSONArray(),
+                        args.optString("entry_prefix", ""),
+                    )
+                    AgentTools.ARCHIVE_DELETE_ENTRIES.name -> archiveDeleteEntries(
+                        context,
+                        args.getString("path"),
+                        args.optJSONArray("entries") ?: JSONArray(),
+                    )
+                    AgentTools.ARCHIVE_UPDATE_ENTRY.name -> archiveUpdateEntry(
+                        context,
+                        args.getString("path"),
+                        args.getString("entry"),
+                        args.getString("content"),
+                    )
+                    AgentTools.ARCHIVE_LIST_NESTED.name -> archiveListNested(
+                        context,
+                        args.getString("path"),
+                        args.optInt("max_entries", 200),
+                    )
+                    AgentTools.ARCHIVE_EXTRACT_NESTED.name -> archiveExtractNested(
+                        context,
+                        args.getString("path"),
+                        args.optString("destination", ""),
+                    )
+                    AgentTools.APK_INSPECT.name -> apkInspect(context, args.getString("path"))
+                    AgentTools.IMAGE_OCR.name -> imageOcr(context, args.getString("path"))
+                    AgentTools.QR_SCAN_IMAGE.name -> qrScanImage(context, args.getString("path"))
+                    AgentTools.EXIF_READ.name -> exifRead(context, args.getString("path"))
+                    AgentTools.EXIF_REMOVE.name -> exifRemove(context, args.getString("path"))
+                    AgentTools.PDF_EXTRACT_TEXT.name -> pdfExtractText(
+                        context,
+                        args.getString("path"),
+                        args.optInt("max_chars", 12_000),
+                    )
+                    AgentTools.MEDIA_GET_INFO.name -> mediaGetInfo(context, args.getString("path"))
+                    AgentTools.STORAGE_ANALYZE.name -> storageAnalyze(
+                        context,
+                        args.optString("path", ""),
+                        args.optInt("max_entries", 40),
+                    )
+                    AgentTools.TERMINAL_RUN.name -> terminalRun(
+                        context,
+                        args.getString("command"),
+                        args.optJSONArray("args"),
+                        args.optInt("timeout_ms", 10_000),
+                    )
+                    AgentTools.WEB_FETCH.name -> webFetch(
+                        args.getString("url"),
+                        args.optInt("maxChars", 8_000),
+                    )
+                    AgentTools.WEB_SEARCH.name -> webSearch(
+                        args.getString("query"),
+                        args.optInt("limit", 5),
+                    )
+                    AgentTools.GITHUB_READ_PUBLIC_FILE.name -> githubReadPublicFile(
+                        args.getString("owner"),
+                        args.getString("repo"),
+                        args.getString("path"),
+                        args.optString("ref", ""),
+                        args.optInt("max_chars", 12_000),
+                    )
+                    AgentTools.GITHUB_LIST_PUBLIC_DIR.name -> githubListPublicDir(
+                        args.getString("owner"),
+                        args.getString("repo"),
+                        args.optString("path", ""),
+                        args.optString("ref", ""),
+                    )
                     else -> "Unknown local tool: ${call.name}"
                 }
             }
@@ -194,6 +346,7 @@ class LocalToolExecutor(
     private fun writeFile(context: Context, path: String, content: String): String {
         val file = resolve(context, path, mustExist = false)
         file.parentFile?.mkdirs()
+        backupBeforeChange(context, file)
         file.writeText(content)
         return "Wrote ${displayPath(context, file)} (${formatBytes(file.length())}, ${content.lineCount()} lines)."
     }
@@ -201,6 +354,7 @@ class LocalToolExecutor(
     private fun appendFile(context: Context, path: String, content: String): String {
         val file = resolve(context, path, mustExist = false)
         file.parentFile?.mkdirs()
+        backupBeforeChange(context, file)
         file.appendText(content)
         return "Appended ${content.length} chars to ${displayPath(context, file)} (${formatBytes(file.length())})."
     }
@@ -242,6 +396,7 @@ class LocalToolExecutor(
             throw IllegalArgumentException("local_replace_in_file: old_string appears $count times; add more context or set replace_all=true")
         }
         val updated = if (replaceAll) current.replace(oldString, newString) else current.replaceFirst(oldString, newString)
+        backupBeforeChange(context, file)
         file.writeText(updated)
         return "Updated ${displayPath(context, file)} ($count match${if (count == 1) "" else "es"}${if (replaceAll) "" else ", first only"})."
     }
@@ -266,6 +421,7 @@ class LocalToolExecutor(
                     }
                     val file = resolve(context, path, mustExist = false)
                     file.parentFile?.mkdirs()
+                    backupBeforeChange(context, file)
                     file.writeText(body.joinToString("\n"))
                     changed += "added $path"
                     continue
@@ -273,6 +429,7 @@ class LocalToolExecutor(
                 line.startsWith("*** Delete File: ") -> {
                     val path = line.removePrefix("*** Delete File: ").trim()
                     val file = resolve(context, path, mustExist = true)
+                    backupBeforeChange(context, file)
                     file.deleteRecursively()
                     changed += "deleted $path"
                 }
@@ -311,6 +468,7 @@ class LocalToolExecutor(
                             throw IllegalArgumentException("local_apply_patch: hunk not found in $path")
                         }
                     }
+                    backupBeforeChange(context, file)
                     file.writeText(text)
                     changed += "updated $path"
                     continue
@@ -329,6 +487,7 @@ class LocalToolExecutor(
         if (dst.exists() && !overwrite) throw IllegalArgumentException("local_copy: destination exists: ${dst.absolutePath}")
         if (src.isDirectory) src.copyRecursively(dst, overwrite) else {
             dst.parentFile?.mkdirs()
+            backupBeforeChange(context, dst)
             src.copyTo(dst, overwrite)
         }
         return "Copied ${displayPath(context, src)} -> ${displayPath(context, dst)}."
@@ -339,9 +498,11 @@ class LocalToolExecutor(
         val dst = destinationFor(context, destination, src)
         if (dst.exists()) {
             if (!overwrite) throw IllegalArgumentException("local_move: destination exists: ${dst.absolutePath}")
+            backupBeforeChange(context, dst)
             dst.deleteRecursively()
         }
         dst.parentFile?.mkdirs()
+        backupBeforeChange(context, src)
         if (!src.renameTo(dst)) {
             if (src.isDirectory) src.copyRecursively(dst, true) else src.copyTo(dst, true)
             src.deleteRecursively()
@@ -355,6 +516,7 @@ class LocalToolExecutor(
         val dst = File(src.parentFile, newName).canonicalFile
         ensureAllowed(context, dst)
         if (dst.exists()) throw IllegalArgumentException("local_rename: destination exists")
+        backupBeforeChange(context, src)
         if (!src.renameTo(dst)) throw IllegalStateException("local_rename: rename failed")
         return "Renamed ${displayPath(context, src)} -> ${displayPath(context, dst)}."
     }
@@ -368,9 +530,195 @@ class LocalToolExecutor(
 
     private fun delete(context: Context, path: String): String {
         val file = resolve(context, path, mustExist = true)
+        backupBeforeChange(context, file)
         val ok = file.deleteRecursively()
         if (!ok) throw IllegalStateException("local_delete: delete failed")
         return "Deleted permanently: ${displayPath(context, file)}."
+    }
+
+    private fun searchFiles(context: Context, path: String, query: String, maxResults: Int): String {
+        val root = resolve(context, path.ifBlank { "." }, mustExist = true)
+        if (!root.isDirectory) throw IllegalArgumentException("local_search_files: path is not a directory")
+        val needle = query.trim()
+        if (needle.isBlank()) throw IllegalArgumentException("local_search_files: query must not be blank")
+        val cap = if (maxResults <= 0) 80 else maxResults.coerceIn(1, 1_000)
+        val matches = root.walkTopDown()
+            .filter { it.name.contains(needle, ignoreCase = true) || it.path.contains(needle, ignoreCase = true) }
+            .take(cap + 1)
+            .toList()
+        return buildString {
+            appendLine("\$ local_search_files \"$needle\" in ${displayPath(context, root)}")
+            matches.take(cap).forEach { file ->
+                appendLine("${if (file.isDirectory) "[dir] " else "      "}${file.relativeTo(root).path.replace('\\', '/')}")
+            }
+            if (matches.size > cap) appendLine("[truncated: more matches omitted]")
+            if (matches.isEmpty()) appendLine("No matches.")
+        }.trimEnd()
+    }
+
+    private fun searchText(context: Context, path: String, query: String, maxResults: Int): String {
+        val root = resolve(context, path.ifBlank { "." }, mustExist = true)
+        val needle = query.trim()
+        if (needle.isBlank()) throw IllegalArgumentException("local_search_text: query must not be blank")
+        val cap = if (maxResults <= 0) 80 else maxResults.coerceIn(1, 500)
+        val files = if (root.isFile) sequenceOf(root) else root.walkTopDown().filter { it.isFile }
+        val hits = mutableListOf<String>()
+        files.forEach { file ->
+            if (hits.size > cap || file.length() > 2_000_000) return@forEach
+            runCatching {
+                file.useLines(Charsets.UTF_8) { lines ->
+                    lines.forEachIndexed { index, line ->
+                        if (line.contains(needle, ignoreCase = true)) {
+                            val rel = runCatching { file.relativeTo(if (root.isDirectory) root else root.parentFile).path }.getOrDefault(file.name)
+                            hits += "$rel:${index + 1}: ${line.trim().take(220)}"
+                        }
+                        if (hits.size > cap) return@useLines
+                    }
+                }
+            }
+        }
+        return if (hits.isEmpty()) "No matches." else hits.take(cap).joinToString("\n") +
+            if (hits.size > cap) "\n[truncated: more matches omitted]" else ""
+    }
+
+    private fun readFileRange(context: Context, path: String, startLine: Int, endLine: Int): String {
+        if (startLine < 1 || endLine < startLine) throw IllegalArgumentException("invalid line range")
+        val file = resolve(context, path, mustExist = true)
+        val lines = file.readLines(Charsets.UTF_8)
+        val from = (startLine - 1).coerceIn(0, lines.size)
+        val to = endLine.coerceIn(from, lines.size)
+        if (from >= lines.size) return "(file has ${lines.size} line(s); requested range is past the end)"
+        val width = to.toString().length
+        return lines.subList(from, to).mapIndexed { i, line ->
+            "${(from + i + 1).toString().padStart(width)}: $line"
+        }.joinToString("\n")
+    }
+
+    private fun hashFile(context: Context, path: String, algorithm: String): String {
+        val file = resolve(context, path, mustExist = true)
+        if (!file.isFile) throw IllegalArgumentException("local_hash_file: not a file")
+        val algo = when (algorithm.replace("-", "").lowercase(Locale.US)) {
+            "md5" -> "MD5"
+            "sha1" -> "SHA-1"
+            "sha512" -> "SHA-512"
+            else -> "SHA-256"
+        }
+        val digest = MessageDigest.getInstance(algo)
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(64 * 1024)
+            var read = input.read(buffer)
+            while (read > 0) {
+                digest.update(buffer, 0, read)
+                read = input.read(buffer)
+            }
+        }
+        return "$algo ${displayPath(context, file)}\n${digest.digest().joinToString("") { "%02x".format(it) }}"
+    }
+
+    private fun findDuplicates(context: Context, path: String, maxResults: Int): String {
+        val root = resolve(context, path.ifBlank { "." }, mustExist = true)
+        val cap = if (maxResults <= 0) 50 else maxResults.coerceIn(1, 500)
+        val files = (if (root.isFile) sequenceOf(root) else root.walkTopDown().filter { it.isFile }).toList()
+        val candidates = files.groupBy { it.length() }.filterKeys { it > 0 }.values.filter { it.size > 1 }
+        val duplicates = mutableListOf<List<File>>()
+        candidates.forEach { group ->
+            group.groupBy { sha256(it) }.values.filter { it.size > 1 }.forEach { duplicates += it }
+        }
+        if (duplicates.isEmpty()) return "No duplicates found."
+        return buildString {
+            duplicates.take(cap).forEachIndexed { index, group ->
+                appendLine("duplicate group ${index + 1}: ${formatBytes(group.first().length())}")
+                group.forEach { appendLine("  ${displayPath(context, it)}") }
+            }
+            if (duplicates.size > cap) appendLine("[truncated: ${duplicates.size - cap} groups omitted]")
+        }.trimEnd()
+    }
+
+    private fun getMime(context: Context, path: String): String {
+        val file = resolve(context, path, mustExist = true)
+        return "${displayPath(context, file)}\n${mimeFor(file)}"
+    }
+
+    private fun getMetadata(context: Context, path: String): String {
+        val file = resolve(context, path, mustExist = true)
+        return buildString {
+            appendLine(stat(context, path))
+            appendLine("mime: ${mimeFor(file)}")
+            if (file.isFile) appendLine("sha256: ${sha256(file)}")
+            if (file.isFile) {
+                BitmapFactory.Options().also { options ->
+                    options.inJustDecodeBounds = true
+                    BitmapFactory.decodeFile(file.absolutePath, options)
+                    if (options.outWidth > 0 && options.outHeight > 0) {
+                        appendLine("image: ${options.outWidth}x${options.outHeight}")
+                    }
+                }
+            }
+        }.trimEnd()
+    }
+
+    private fun createTempFile(context: Context, prefix: String, suffix: String, content: String): String {
+        val file = File.createTempFile(
+            prefix.ifBlank { "agent_" },
+            suffix.ifBlank { ".tmp" },
+            workspaceRoot(context).apply { mkdirs() },
+        )
+        file.writeText(content)
+        return "Created temp file ${displayPath(context, file)} (${formatBytes(file.length())})."
+    }
+
+    private fun diffFiles(context: Context, leftPath: String, rightPath: String): String {
+        val left = resolve(context, leftPath, mustExist = true).readText(Charsets.UTF_8)
+        val right = resolve(context, rightPath, mustExist = true).readText(Charsets.UTF_8)
+        return renderDiff(left, right)
+    }
+
+    private fun diffText(left: String, right: String): String =
+        renderDiff(left, right)
+
+    private fun previewPatch(patch: String): String =
+        parsePatchSummary(patch).ifEmpty { listOf("Patch has no recognized file changes.") }.joinToString("\n")
+
+    private fun applyBatchPatch(context: Context, patches: JSONArray): String {
+        if (patches.length() == 0) throw IllegalArgumentException("local_apply_batch_patch: patches is empty")
+        val results = mutableListOf<String>()
+        for (i in 0 until patches.length()) {
+            results += "patch ${i + 1}:\n${applyPatch(context, patches.getString(i))}"
+        }
+        return results.joinToString("\n\n")
+    }
+
+    private fun revertFile(context: Context, path: String): String {
+        val target = resolve(context, path, mustExist = false)
+        val backup = latestBackup(context, target)
+            ?: throw IllegalArgumentException("local_revert_file: no backup found for ${displayPath(context, target)}")
+        target.parentFile?.mkdirs()
+        backup.copyTo(target, overwrite = true)
+        return "Reverted ${displayPath(context, target)} from ${backup.name}."
+    }
+
+    private fun trashList(context: Context): String {
+        val items = TrashManager(context).getTrashItems()
+        if (items.isEmpty()) return "(trash empty)"
+        return items.joinToString("\n") {
+            "${it.trashPath}  ${if (it.isDirectory) "[dir]" else "[file]"}  ${formatBytes(it.size)}  ${it.originalPath}"
+        }
+    }
+
+    private fun trashRestore(context: Context, trashPath: String, originalPath: String): String {
+        val manager = TrashManager(context)
+        val item = manager.getTrashItems().firstOrNull {
+            (trashPath.isNotBlank() && it.trashPath == trashPath) ||
+                (originalPath.isNotBlank() && it.originalPath == originalPath)
+        } ?: throw IllegalArgumentException("local_trash_restore: item not found")
+        val ok = kotlinx.coroutines.runBlocking { manager.restore(item) }
+        if (!ok) throw IllegalStateException("local_trash_restore: restore failed")
+        return "Restored ${item.originalPath}."
+    }
+
+    private fun trashEmpty(context: Context): String {
+        kotlinx.coroutines.runBlocking { TrashManager(context).emptyTrash() }
+        return "Trash emptied."
     }
 
     private fun archiveList(context: Context, path: String, maxEntries: Int): String {
@@ -456,6 +804,573 @@ class LocalToolExecutor(
         ensureSupportedArchive(archive)
         val entries = ArchiveHelper.listContents(archive)
         return "Archive OK: ${displayPath(context, archive)} (${entries.size} entries)."
+    }
+
+    private fun archiveAddEntries(context: Context, path: String, sourcePaths: JSONArray, entryPrefix: String): String {
+        if (sourcePaths.length() == 0) throw IllegalArgumentException("archive_add_entries: source_paths must not be empty")
+        val archive = resolveZipArchive(context, path)
+        val entries = readZipBytes(archive).toMutableMap()
+        val prefix = entryPrefix.trim('/').takeIf { it.isNotBlank() }?.plus("/").orEmpty()
+        for (i in 0 until sourcePaths.length()) {
+            val src = resolve(context, sourcePaths.getString(i), mustExist = true)
+            val files = if (src.isDirectory) src.walkTopDown().filter { it.isFile }.toList() else listOf(src)
+            files.forEach { file ->
+                val rel = if (src.isDirectory) file.relativeTo(src).path else file.name
+                entries[prefix + rel.replace('\\', '/')] = file.readBytes()
+            }
+        }
+        backupBeforeChange(context, archive)
+        writeZipBytes(archive, entries)
+        return "Updated ${displayPath(context, archive)} with ${sourcePaths.length()} source path(s)."
+    }
+
+    private fun archiveDeleteEntries(context: Context, path: String, entriesToDelete: JSONArray): String {
+        if (entriesToDelete.length() == 0) throw IllegalArgumentException("archive_delete_entries: entries must not be empty")
+        val archive = resolveZipArchive(context, path)
+        val entries = readZipBytes(archive).toMutableMap()
+        var removed = 0
+        for (i in 0 until entriesToDelete.length()) {
+            if (entries.remove(entriesToDelete.getString(i).trimStart('/')) != null) removed += 1
+        }
+        backupBeforeChange(context, archive)
+        writeZipBytes(archive, entries)
+        return "Deleted $removed entr${if (removed == 1) "y" else "ies"} from ${displayPath(context, archive)}."
+    }
+
+    private fun archiveUpdateEntry(context: Context, path: String, entry: String, content: String): String {
+        val archive = resolveZipArchive(context, path)
+        val cleanEntry = entry.trim().trimStart('/')
+        if (cleanEntry.isBlank() || cleanEntry.endsWith('/')) throw IllegalArgumentException("archive_update_entry: invalid entry")
+        val entries = readZipBytes(archive).toMutableMap()
+        entries[cleanEntry] = content.toByteArray(Charsets.UTF_8)
+        backupBeforeChange(context, archive)
+        writeZipBytes(archive, entries)
+        return "Updated $cleanEntry in ${displayPath(context, archive)} (${content.length} chars)."
+    }
+
+    private fun archiveListNested(context: Context, path: String, maxEntries: Int): String {
+        val archive = materializeNestedArchive(context, path)
+        return archiveList(context, archive.absolutePath, maxEntries)
+    }
+
+    private fun archiveExtractNested(context: Context, path: String, destination: String): String {
+        val archive = materializeNestedArchive(context, path)
+        val finalDestination = destination.ifBlank { "nested_extract_${System.currentTimeMillis()}" }
+        return archiveExtract(context, archive.absolutePath, finalDestination)
+    }
+
+    private fun apkInspect(context: Context, path: String): String {
+        val file = resolve(context, path, mustExist = true)
+        val info = context.packageManager.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_PERMISSIONS)
+            ?: throw IllegalArgumentException("apk_inspect: unable to parse APK")
+        val permissions = info.requestedPermissions?.toList().orEmpty()
+        return buildString {
+            appendLine("package: ${info.packageName}")
+            appendLine("versionName: ${info.versionName.orEmpty()}")
+            appendLine("versionCode: ${if (android.os.Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()}")
+            appendLine("permissions: ${permissions.size}")
+            permissions.forEach { appendLine("  $it") }
+        }.trimEnd()
+    }
+
+    private suspend fun imageOcr(context: Context, path: String): String {
+        val file = resolve(context, path, mustExist = true)
+        val image = InputImage.fromFilePath(context, Uri.fromFile(file))
+        val result = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(image).await()
+        return result.text.ifBlank { "(no text detected)" }
+    }
+
+    private suspend fun qrScanImage(context: Context, path: String): String {
+        val file = resolve(context, path, mustExist = true)
+        val image = InputImage.fromFilePath(context, Uri.fromFile(file))
+        val codes = BarcodeScanning.getClient().process(image).await()
+        if (codes.isEmpty()) return "(no QR/barcodes detected)"
+        return codes.joinToString("\n") { code ->
+            "${code.format}: ${code.rawValue.orEmpty()}"
+        }
+    }
+
+    private fun exifRead(context: Context, path: String): String {
+        val file = resolve(context, path, mustExist = true)
+        val exif = ExifInterface(file.absolutePath)
+        val tags = listOf(
+            ExifInterface.TAG_MAKE,
+            ExifInterface.TAG_MODEL,
+            ExifInterface.TAG_DATETIME,
+            ExifInterface.TAG_GPS_LATITUDE,
+            ExifInterface.TAG_GPS_LONGITUDE,
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.TAG_IMAGE_WIDTH,
+            ExifInterface.TAG_IMAGE_LENGTH,
+            ExifInterface.TAG_FOCAL_LENGTH,
+        )
+        val lines = tags.mapNotNull { tag -> exif.getAttribute(tag)?.let { "$tag: $it" } }
+        return if (lines.isEmpty()) "(no common EXIF tags found)" else lines.joinToString("\n")
+    }
+
+    private fun exifRemove(context: Context, path: String): String {
+        val file = resolve(context, path, mustExist = true)
+        backupBeforeChange(context, file)
+        val exif = ExifInterface(file.absolutePath)
+        val tags = listOf(
+            ExifInterface.TAG_MAKE,
+            ExifInterface.TAG_MODEL,
+            ExifInterface.TAG_DATETIME,
+            ExifInterface.TAG_GPS_LATITUDE,
+            ExifInterface.TAG_GPS_LATITUDE_REF,
+            ExifInterface.TAG_GPS_LONGITUDE,
+            ExifInterface.TAG_GPS_LONGITUDE_REF,
+            ExifInterface.TAG_GPS_ALTITUDE,
+            ExifInterface.TAG_GPS_ALTITUDE_REF,
+            ExifInterface.TAG_GPS_TIMESTAMP,
+        )
+        tags.forEach { exif.setAttribute(it, null) }
+        exif.saveAttributes()
+        return "Removed common EXIF tags from ${displayPath(context, file)}."
+    }
+
+    private fun pdfExtractText(context: Context, path: String, maxChars: Int): String {
+        val file = resolve(context, path, mustExist = true)
+        val cap = if (maxChars <= 0) 12_000 else maxChars.coerceIn(1_000, 60_000)
+        val raw = file.readBytes().toString(Charsets.ISO_8859_1)
+        val text = Regex("""\(([^()]{1,500})\)""").findAll(raw)
+            .map { unescapePdfString(it.groupValues[1]) }
+            .filter { it.any { ch -> ch.isLetterOrDigit() } }
+            .joinToString("\n")
+            .ifBlank { "(no embedded text found; scanned PDFs may need OCR)" }
+        return text.take(cap) + if (text.length > cap) "\n[truncated: ${text.length - cap} chars omitted]" else ""
+    }
+
+    private fun mediaGetInfo(context: Context, path: String): String {
+        val file = resolve(context, path, mustExist = true)
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            val keys = listOf(
+                "duration_ms" to MediaMetadataRetriever.METADATA_KEY_DURATION,
+                "mime" to MediaMetadataRetriever.METADATA_KEY_MIMETYPE,
+                "width" to MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH,
+                "height" to MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT,
+                "bitrate" to MediaMetadataRetriever.METADATA_KEY_BITRATE,
+                "title" to MediaMetadataRetriever.METADATA_KEY_TITLE,
+                "artist" to MediaMetadataRetriever.METADATA_KEY_ARTIST,
+            )
+            buildString {
+                appendLine("path: ${displayPath(context, file)}")
+                keys.forEach { (label, key) ->
+                    retriever.extractMetadata(key)?.takeIf { it.isNotBlank() }?.let { appendLine("$label: $it") }
+                }
+            }.trimEnd()
+        } finally {
+            retriever.release()
+        }
+    }
+
+    private fun storageAnalyze(context: Context, path: String, maxEntries: Int): String {
+        val root = resolve(context, path.ifBlank { "." }, mustExist = true)
+        val files = (if (root.isFile) sequenceOf(root) else root.walkTopDown().filter { it.isFile }).toList()
+        val cap = if (maxEntries <= 0) 40 else maxEntries.coerceIn(1, 200)
+        val byDir = files.groupBy { it.parentFile ?: root }.mapValues { it.value.sumOf { file -> file.length() } }
+            .toList().sortedByDescending { it.second }
+        return buildString {
+            appendLine("root: ${displayPath(context, root)}")
+            appendLine("files: ${files.size}")
+            appendLine("size: ${formatBytes(files.sumOf { file -> file.length() })}")
+            appendLine()
+            appendLine("largest files:")
+            files.sortedByDescending { it.length() }.take(cap).forEach {
+                appendLine("  ${formatBytes(it.length()).padStart(9)}  ${displayPath(context, it)}")
+            }
+            appendLine()
+            appendLine("largest directories:")
+            byDir.take(cap).forEach { (dir, size) ->
+                appendLine("  ${formatBytes(size).padStart(9)}  ${displayPath(context, dir)}")
+            }
+        }.trimEnd()
+    }
+
+    private fun terminalRun(context: Context, command: String, args: JSONArray?, timeoutMs: Int): String {
+        val cmd = buildList {
+            if (args == null || args.length() == 0) {
+                addAll(command.trim().split(Regex("\\s+")).filter { it.isNotBlank() })
+            } else {
+                add(command)
+                for (i in 0 until args.length()) add(args.getString(i))
+            }
+        }
+        if (cmd.firstOrNull().isNullOrBlank()) throw IllegalArgumentException("terminal_run: command must not be blank")
+        val timeout = timeoutMs.coerceIn(1_000, 30_000).toLong()
+        val workDir = workspaceRoot(context).apply { mkdirs() }
+        val stdoutFile = File.createTempFile("terminal_stdout_", ".log", workDir)
+        val stderrFile = File.createTempFile("terminal_stderr_", ".log", workDir)
+        val process = ProcessBuilder(cmd)
+            .directory(workDir)
+            .redirectOutput(stdoutFile)
+            .redirectError(stderrFile)
+            .start()
+        try {
+            val finished = process.waitFor(timeout, TimeUnit.MILLISECONDS)
+            if (!finished) {
+                process.destroyForcibly()
+                throw IllegalStateException("terminal_run: timed out after ${timeout}ms")
+            }
+            val stdout = stdoutFile.bufferedReader().use { readLimited(it, 8_000) }
+            val stderr = stderrFile.bufferedReader().use { readLimited(it, 4_000) }
+            return buildString {
+                appendLine("$ ${cmd.joinToString(" ")}")
+                appendLine("exit: ${process.exitValue()}")
+                if (stdout.isNotBlank()) {
+                    appendLine()
+                    appendLine("stdout:")
+                    appendLine(stdout.trimEnd())
+                }
+                if (stderr.isNotBlank()) {
+                    appendLine()
+                    appendLine("stderr:")
+                    appendLine(stderr.trimEnd())
+                }
+            }.trimEnd()
+        } finally {
+            stdoutFile.delete()
+            stderrFile.delete()
+        }
+    }
+
+    private fun webFetch(url: String, maxChars: Int): String {
+        val cleanUrl = url.trim()
+        if (cleanUrl.isBlank()) throw IllegalArgumentException("web_fetch: url must not be blank")
+        val parsed = URL(cleanUrl)
+        val protocol = parsed.protocol.lowercase(Locale.US)
+        if (protocol != "http" && protocol != "https") throw IllegalArgumentException("web_fetch: only http and https URLs are allowed")
+        if (isBlockedWebHost(parsed.host)) throw IllegalArgumentException("web_fetch: local/private network hosts are not allowed")
+        val cap = if (maxChars <= 0) 8_000 else maxChars.coerceIn(1_000, 20_000)
+        val response = httpGet(cleanUrl, cap + 20_000)
+        val readable = if (response.contentType.contains("html", ignoreCase = true)) htmlToText(response.text) else response.text
+        return buildString {
+            appendLine("$ web_fetch $cleanUrl")
+            if (response.finalUrl != cleanUrl) appendLine("final url: ${response.finalUrl}")
+            appendLine()
+            append(readable.trim().take(cap).ifBlank { "(empty response)" })
+        }
+    }
+
+    private fun webSearch(query: String, limit: Int): String {
+        val needle = query.trim()
+        if (needle.isBlank()) throw IllegalArgumentException("web_search: query must not be blank")
+        val maxResults = if (limit <= 0) 5 else limit.coerceIn(1, 10)
+        val response = httpGet("https://duckduckgo.com/html/?q=${URLEncoder.encode(needle, "UTF-8")}", 160_000)
+        val results = parseDuckDuckGoResults(response.text).take(maxResults)
+        if (results.isEmpty()) return "No results."
+        return buildString {
+            appendLine("$ web_search \"$needle\"")
+            results.forEachIndexed { index, result ->
+                appendLine()
+                appendLine("${index + 1}. ${result.title}")
+                appendLine(result.url)
+                if (result.snippet.isNotBlank()) appendLine(result.snippet)
+            }
+        }.trimEnd()
+    }
+
+    private fun githubReadPublicFile(owner: String, repo: String, path: String, ref: String, maxChars: Int): String {
+        val url = githubContentsUrl(owner, repo, path, ref)
+        val json = JSONObject(httpGet(url, 80_000).text)
+        val download = json.optString("download_url")
+        if (download.isBlank()) throw IllegalArgumentException("github_read_public_file: not a file or no download_url")
+        val cap = if (maxChars <= 0) 12_000 else maxChars.coerceIn(1_000, 60_000)
+        val text = httpGet(download, cap + 1_000).text
+        return text.take(cap) + if (text.length > cap) "\n[truncated: ${text.length - cap} chars omitted]" else ""
+    }
+
+    private fun githubListPublicDir(owner: String, repo: String, path: String, ref: String): String {
+        val json = JSONArray(httpGet(githubContentsUrl(owner, repo, path, ref), 80_000).text)
+        if (json.length() == 0) return "(empty directory)"
+        return buildString {
+            for (i in 0 until json.length()) {
+                val item = json.getJSONObject(i)
+                appendLine("${if (item.optString("type") == "dir") "[dir] " else "      "}${item.optString("path")} ${formatBytes(item.optLong("size", 0))}")
+            }
+        }.trimEnd()
+    }
+
+    private fun resolveZipArchive(context: Context, path: String): File {
+        val archive = resolve(context, path, mustExist = true)
+        if (ArchiveHelper.detectFormat(archive) != ArchiveHelper.ArchiveFormat.ZIP) {
+            throw IllegalArgumentException("ZIP archive required for this operation")
+        }
+        return archive
+    }
+
+    private fun readZipBytes(archive: File): Map<String, ByteArray> {
+        val entries = linkedMapOf<String, ByteArray>()
+        ZipFile(archive).use { zip ->
+            val enumeration = zip.entries()
+            while (enumeration.hasMoreElements()) {
+                val entry = enumeration.nextElement()
+                if (!entry.isDirectory) {
+                    zip.getInputStream(entry).use { entries[entry.name] = it.readBytes() }
+                }
+            }
+        }
+        return entries
+    }
+
+    private fun writeZipBytes(archive: File, entries: Map<String, ByteArray>) {
+        val temp = File(archive.parentFile, "${archive.name}.tmp_${System.currentTimeMillis()}")
+        ZipOutputStream(BufferedOutputStream(FileOutputStream(temp))).use { output ->
+            entries.toSortedMap().forEach { (name, bytes) ->
+                output.putNextEntry(ZipEntry(name.trimStart('/')))
+                output.write(bytes)
+                output.closeEntry()
+            }
+        }
+        if (archive.exists() && !archive.delete()) throw IllegalStateException("unable to replace archive")
+        if (!temp.renameTo(archive)) {
+            temp.copyTo(archive, overwrite = true)
+            temp.delete()
+        }
+    }
+
+    private fun materializeNestedArchive(context: Context, path: String): File {
+        val parts = path.split('!').map { it.trim().trimStart('/') }.filter { it.isNotBlank() }
+        if (parts.size < 2) throw IllegalArgumentException("nested archive path must look like outer.zip!inner.zip")
+        var current = resolve(context, parts.first(), mustExist = true)
+        for (i in 1 until parts.size) {
+            if (ArchiveHelper.detectFormat(current) != ArchiveHelper.ArchiveFormat.ZIP) {
+                throw IllegalArgumentException("nested archive traversal currently supports ZIP containers only")
+            }
+            val entryName = parts[i]
+            val bytes = ZipFile(current).use { zip ->
+                val entry = zip.getEntry(entryName) ?: throw IllegalArgumentException("nested entry not found: $entryName")
+                zip.getInputStream(entry).use { it.readBytes() }
+            }
+            val out = File(context.cacheDir, "nested_${System.currentTimeMillis()}_${i}_${File(entryName).name}").canonicalFile
+            out.parentFile?.mkdirs()
+            out.writeBytes(bytes)
+            current = out
+        }
+        ensureSupportedArchive(current)
+        return current
+    }
+
+    private fun renderDiff(left: String, right: String): String {
+        val lines = LineDiff.compact(LineDiff.diff(left, right), contextLines = 3)
+        if (lines.all { it is LineDiff.Line.Same }) return "(no differences)"
+        return lines.joinToString("\n") { line ->
+            when (line) {
+                null -> "@@"
+                is LineDiff.Line.Add -> "+ ${line.text}"
+                is LineDiff.Line.Del -> "- ${line.text}"
+                is LineDiff.Line.Same -> "  ${line.text}"
+            }
+        }
+    }
+
+    private fun parsePatchSummary(patch: String): List<String> {
+        val lines = patch.replace("\r\n", "\n").lines()
+        if (lines.firstOrNull()?.trim() != "*** Begin Patch" || lines.lastOrNull()?.trim() != "*** End Patch") {
+            throw IllegalArgumentException("local_preview_patch: patch must start with *** Begin Patch and end with *** End Patch")
+        }
+        return lines.mapNotNull { line ->
+            when {
+                line.startsWith("*** Add File: ") -> "create: ${line.removePrefix("*** Add File: ").trim()}"
+                line.startsWith("*** Delete File: ") -> "delete: ${line.removePrefix("*** Delete File: ").trim()}"
+                line.startsWith("*** Update File: ") -> "modify: ${line.removePrefix("*** Update File: ").trim()}"
+                else -> null
+            }
+        }
+    }
+
+    private fun backupBeforeChange(context: Context, file: File) {
+        if (!file.exists() || !file.isFile) return
+        val dir = backupDirFor(context, file).apply { mkdirs() }
+        val backup = File(dir, "${System.currentTimeMillis()}__${file.name}")
+        file.copyTo(backup, overwrite = true)
+    }
+
+    private fun latestBackup(context: Context, file: File): File? =
+        backupDirFor(context, file)
+            .listFiles()
+            ?.filter { it.isFile }
+            ?.maxByOrNull { it.name.substringBefore("__").toLongOrNull() ?: it.lastModified() }
+
+    private fun backupDirFor(context: Context, file: File): File {
+        val key = sha256Hex(file.canonicalPath.toByteArray(Charsets.UTF_8)).take(32)
+        return File(workspaceRoot(context), ".backups/$key").canonicalFile
+    }
+
+    private fun sha256(file: File): String =
+        hashBytes(file, "SHA-256")
+
+    private fun hashBytes(file: File, algorithm: String): String {
+        val digest = MessageDigest.getInstance(algorithm)
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(64 * 1024)
+            var read = input.read(buffer)
+            while (read > 0) {
+                digest.update(buffer, 0, read)
+                read = input.read(buffer)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    private fun mimeFor(file: File): String {
+        val byExtension = file.extension.takeIf { it.isNotBlank() }?.let { ext ->
+            MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.lowercase(Locale.US))
+        }
+        return byExtension
+            ?: java.net.URLConnection.guessContentTypeFromName(file.name)
+            ?: if (file.isDirectory) "inode/directory" else "application/octet-stream"
+    }
+
+    private fun unescapePdfString(value: String): String =
+        value.replace("\\(", "(")
+            .replace("\\)", ")")
+            .replace("\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\t", "\t")
+            .replace("\\\\", "\\")
+
+    private data class WebResponse(
+        val text: String,
+        val contentType: String,
+        val finalUrl: String,
+    )
+
+    private data class WebSearchResult(
+        val title: String,
+        val url: String,
+        val snippet: String,
+    )
+
+    private fun httpGet(url: String, maxChars: Int): WebResponse {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 20_000
+            instanceFollowRedirects = true
+            setRequestProperty("User-Agent", "GlassFiles-AIAgent/1.0")
+            setRequestProperty("Accept", "text/html,text/plain,application/json;q=0.9,*/*;q=0.5")
+        }
+        return try {
+            val code = connection.responseCode
+            val stream = if (code >= 400) connection.errorStream ?: connection.inputStream else connection.inputStream
+            val charset = charsetFromContentType(connection.contentType)
+            val text = stream.bufferedReader(charset).use { readLimited(it, maxChars) }
+            if (code !in 200..299) throw IllegalStateException("HTTP $code from $url")
+            WebResponse(text, connection.contentType.orEmpty(), connection.url.toString())
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun readLimited(reader: Reader, maxChars: Int): String {
+        val out = StringBuilder()
+        val buffer = CharArray(4096)
+        while (out.length < maxChars) {
+            val read = reader.read(buffer, 0, minOf(buffer.size, maxChars - out.length))
+            if (read < 0) break
+            out.append(buffer, 0, read)
+        }
+        return out.toString()
+    }
+
+    private fun charsetFromContentType(contentType: String?): Charset {
+        val charset = contentType
+            ?.split(';')
+            ?.map { it.trim() }
+            ?.firstOrNull { it.startsWith("charset=", ignoreCase = true) }
+            ?.substringAfter('=')
+            ?.trim()
+            ?.trim('"')
+        return runCatching { if (charset.isNullOrBlank()) Charsets.UTF_8 else Charset.forName(charset) }
+            .getOrDefault(Charsets.UTF_8)
+    }
+
+    private fun parseDuckDuckGoResults(html: String): List<WebSearchResult> {
+        val anchorRegex = Regex(
+            """<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>""",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+        )
+        val snippetRegex = Regex(
+            """<a[^>]+class="result__snippet"[^>]*>(.*?)</a>""",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+        )
+        return anchorRegex.findAll(html).mapNotNull { match ->
+            val title = htmlToInlineText(match.groupValues[2]).ifBlank { return@mapNotNull null }
+            val href = cleanSearchUrl(match.groupValues[1])
+            if (href.isBlank()) return@mapNotNull null
+            val windowEnd = minOf(html.length, match.range.last + 2_000)
+            val window = html.substring(match.range.last + 1, windowEnd)
+            WebSearchResult(
+                title = title.take(160),
+                url = href,
+                snippet = snippetRegex.find(window)?.groupValues?.getOrNull(1)?.let { htmlToInlineText(it) }.orEmpty().take(260),
+            )
+        }.distinctBy { it.url }.toList()
+    }
+
+    private fun cleanSearchUrl(raw: String): String {
+        val decoded = htmlDecode(raw)
+        val absolute = when {
+            decoded.startsWith("//") -> "https:$decoded"
+            decoded.startsWith("/") -> "https://duckduckgo.com$decoded"
+            else -> decoded
+        }
+        val uddg = absolute.substringAfter("uddg=", missingDelimiterValue = "")
+            .substringBefore('&')
+            .takeIf { it.isNotBlank() }
+        return runCatching {
+            if (uddg != null) URLDecoder.decode(uddg, "UTF-8") else absolute
+        }.getOrDefault(absolute)
+    }
+
+    private fun htmlToText(html: String): String {
+        val withoutScripts = html
+            .replace(Regex("(?is)<script[^>]*>.*?</script>"), " ")
+            .replace(Regex("(?is)<style[^>]*>.*?</style>"), " ")
+            .replace(Regex("(?i)<br\\s*/?>"), "\n")
+            .replace(Regex("(?i)</(p|div|li|h[1-6]|tr|section|article)>"), "\n")
+            .replace(Regex("<[^>]+>"), " ")
+        return htmlDecode(withoutScripts)
+            .lineSequence()
+            .map { it.replace(Regex("\\s+"), " ").trim() }
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+    }
+
+    private fun htmlToInlineText(html: String): String =
+        htmlDecode(html.replace(Regex("<[^>]+>"), " "))
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    private fun htmlDecode(text: String): String =
+        text.replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&nbsp;", " ")
+
+    private fun isBlockedWebHost(host: String?): Boolean {
+        val h = host.orEmpty().trim().lowercase(Locale.US).removePrefix("[").removeSuffix("]")
+        if (h.isBlank()) return true
+        if (h == "localhost" || h.endsWith(".localhost")) return true
+        if (h == "::1" || h == "0.0.0.0") return true
+        if (h.startsWith("127.") || h.startsWith("10.") || h.startsWith("192.168.") || h.startsWith("169.254.")) return true
+        return Regex("""^172\.(1[6-9]|2[0-9]|3[0-1])\.""").containsMatchIn(h)
+    }
+
+    private fun githubContentsUrl(owner: String, repo: String, path: String, ref: String): String {
+        val cleanPath = path.trim().trim('/')
+            .split('/')
+            .filter { it.isNotBlank() }
+            .joinToString("/") { URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+        val refQuery = ref.trim().takeIf { it.isNotBlank() }?.let { "?ref=${URLEncoder.encode(it, "UTF-8")}" }.orEmpty()
+        return "https://api.github.com/repos/${owner.trim()}/${repo.trim()}/contents/$cleanPath$refQuery"
     }
 
     private fun resolve(context: Context, rawPath: String, mustExist: Boolean): File {

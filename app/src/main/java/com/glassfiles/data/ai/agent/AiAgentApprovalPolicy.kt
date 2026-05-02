@@ -41,7 +41,7 @@ data class AiAgentApprovalCheck(
 }
 
 object AiAgentApprovalPolicy {
-    private val editTools = setOf("edit_file", "local_replace_in_file", "local_apply_patch")
+    private val editTools = setOf("edit_file", "local_replace_in_file", "local_apply_patch", "local_apply_batch_patch")
     private val writeTools = setOf(
         "write_file",
         "comment_pr",
@@ -57,6 +57,14 @@ object AiAgentApprovalPolicy {
         "local_rename",
         "archive_extract",
         "archive_create",
+        "local_create_temp_file",
+        "local_revert_file",
+        "local_trash_restore",
+        "archive_add_entries",
+        "archive_update_entry",
+        "archive_extract_nested",
+        "exif_remove",
+        "terminal_run",
     )
     private val commitTools = setOf("commit", "open_pr", "create_branch", "commit_changes", "create_pull_request")
     private val destructiveTools = setOf(
@@ -66,6 +74,8 @@ object AiAgentApprovalPolicy {
         "memory_delete",
         "local_delete_to_trash",
         "local_delete",
+        "local_trash_empty",
+        "archive_delete_entries",
     )
     // Only actual git-commit tool calls trigger the "commits to main/master require approval"
     // safety stop. write_file / edit_file no longer fall under it — those are governed by
@@ -170,6 +180,10 @@ object AiAgentApprovalPolicy {
             k == "file_path" ||
             k == "repo_path" ||
             k == "target_path" ||
+            k == "left_path" ||
+            k == "right_path" ||
+            k == "original_path" ||
+            k == "trash_path" ||
             k == "source" ||
             k == "destination" ||
             k == "source_path" ||
