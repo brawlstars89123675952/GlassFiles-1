@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.glassfiles.BuildConfig
 import com.glassfiles.data.*
 import com.glassfiles.data.ai.GeminiKeyStore
 import com.glassfiles.ui.theme.*
@@ -173,7 +174,11 @@ fun SettingsScreen(settings: AppSettings, onBack: () -> Unit) {
             SettingsSection(Strings.aboutApp, Icons.Rounded.Info) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(Strings.version, color = TextPrimary, fontSize = 15.sp)
-                    Text("2.0-pre1", color = TextSecondary, fontSize = 15.sp)
+                    Text("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", color = TextSecondary, fontSize = 15.sp)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Build", color = TextPrimary, fontSize = 15.sp)
+                    Text("${BuildConfig.GIT_SHA} #${BuildConfig.BUILD_RUN}", color = TextSecondary, fontSize = 15.sp)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Developer", color = TextPrimary, fontSize = 15.sp)

@@ -50,6 +50,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Export build metadata
+        run: echo "SHORT_SHA=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+
       - name: Install NDK and CMake
         run: |
           sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
@@ -73,7 +76,7 @@ jobs:
           fi
 
       - name: Build Debug APK
-        run: chmod +x gradlew && ./gradlew assembleDebug --stacktrace
+        run: chmod +x gradlew && ./gradlew clean assembleDebug --stacktrace
 
       # Release build is gated behind workflow_dispatch — Proguard
       # makes assembleRelease slow, and on PR/push CI we only need
@@ -86,7 +89,7 @@ jobs:
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: GlassFiles-debug
+          name: GlassFiles-debug-${{ github.run_number }}-${{ env.SHORT_SHA }}
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 30
 
@@ -94,6 +97,6 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: GlassFiles-release
+          name: GlassFiles-release-${{ github.run_number }}-${{ env.SHORT_SHA }}
           path: app/build/outputs/apk/release/*.apk
           retention-days: 30

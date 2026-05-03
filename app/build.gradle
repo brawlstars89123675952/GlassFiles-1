@@ -4,6 +4,25 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
+def resolveGitSha = {
+    def envSha = System.getenv("GITHUB_SHA")?.trim()
+    if (envSha) return envSha.length() > 12 ? envSha.substring(0, 12) : envSha
+    try {
+        def proc = ["git", "rev-parse", "--short=12", "HEAD"].execute(null, rootDir)
+        proc.waitFor()
+        def localSha = proc.in.text.trim()
+        if (localSha) return localSha
+    } catch (ignored) {
+        // Keep local configuration resilient when git is unavailable.
+    }
+    return "unknown"
+}
+
+def glassFilesGitSha = resolveGitSha()
+def glassFilesRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.trim() ?: "local"
+def glassFilesVersionCode = 3
+def glassFilesVersionName = "2.0-pre2"
+
 android {
     namespace 'com.glassfiles'
     compileSdk 36
@@ -21,8 +40,10 @@ android {
         applicationId "com.glassfiles"
         minSdk 28
         targetSdk 28
-        versionCode 2
-        versionName "2.0-pre1"
+        versionCode glassFilesVersionCode
+        versionName glassFilesVersionName
+        buildConfigField "String", "GIT_SHA", "\"${glassFilesGitSha}\""
+        buildConfigField "String", "BUILD_RUN", "\"${glassFilesRunNumber}\""
 
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a'

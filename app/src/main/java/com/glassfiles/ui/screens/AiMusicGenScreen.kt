@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
+import com.glassfiles.BuildConfig
 import com.glassfiles.data.Strings
 import com.glassfiles.data.ai.AiAssetHistoryStore
 import com.glassfiles.data.ai.AiGallerySaver
@@ -317,7 +318,7 @@ fun AiMusicGenScreen(onBack: () -> Unit) {
     TerminalScreenScaffold(
         title = "> ai/music",
         onBack = onBack,
-        subtitle = "ACEMusic · api.acemusic.ai",
+        subtitle = "ACEMusic · api.acemusic.ai · build ${BuildConfig.GIT_SHA}",
         trailing = {
             TerminalPillButton(
                 label = "history",
@@ -339,6 +340,8 @@ fun AiMusicGenScreen(onBack: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TerminalSectionLabel("> provider")
                             Spacer(Modifier.weight(1f))
+                            TerminalChip("build ${BuildConfig.GIT_SHA}", color = colors.textSecondary)
+                            Spacer(Modifier.width(6.dp))
                             TerminalChip("ACEMUSIC", color = colors.accent)
                         }
                         if (AiKeyStore.getKey(context, providerId).isBlank()) {
