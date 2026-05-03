@@ -1294,7 +1294,7 @@ private fun ChatView(
 
     if (showSettings) {
         TerminalKeysDialog(
-            initialKeys = chatKeyProviders.associateWith { AiKeyStore.getKey(context, it) },
+            initialKeys = AiProviderId.entries.associateWith { AiKeyStore.getKey(context, it) },
             initialProxy = AiKeyStore.getGeminiProxy(context),
             initialRegion = AiKeyStore.getQwenRegion(context),
             onSave = { keys, proxyUrl, region ->
@@ -2151,7 +2151,7 @@ private fun TerminalKeysDialog(
     val colors = AiModuleTheme.colors
     val keys = remember {
         mutableStateMapOf<AiProviderId, String>().apply {
-            chatKeyProviders.forEach { put(it, initialKeys[it].orEmpty()) }
+            AiProviderId.entries.forEach { put(it, initialKeys[it].orEmpty()) }
         }
     }
     var pU by remember { mutableStateOf(initialProxy) }
@@ -2170,7 +2170,7 @@ private fun TerminalKeysDialog(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                chatKeyProviders.forEach { provider ->
+                AiProviderId.entries.forEach { provider ->
                     AiModuleSectionLabel("> ${provider.displayName.lowercase()}")
                     TerminalMonoField(
                         value = keys[provider].orEmpty(),
