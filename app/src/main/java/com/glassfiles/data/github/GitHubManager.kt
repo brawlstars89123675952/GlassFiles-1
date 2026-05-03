@@ -502,6 +502,116 @@ object GitHubManager {
     suspend fun deleteBranch(context: Context, owner: String, repo: String, branch: String): Boolean =
         request(context, "/repos/$owner/$repo/git/refs/heads/$branch", "DELETE").success
 
+    suspend fun getGitRef(context: Context, owner: String, repo: String, ref: String): GHGitRef? {
+        val cleanRef = ref.trim().removePrefix("refs/").trim('/')
+        if (cleanRef.isBlank()) return null
+        val r = request(context, "/repos/$owner/$repo/git/ref/$cleanRef")
+        if (!r.success) return null
+        return try { parseGitRef(JSONObject(r.body)) } catch (e: Exception) { null }
+    }
+
+    suspend fun getMatchingGitRefs(context: Context, owner: String, repo: String, refPrefix: String): List<GHGitRef> {
+        val cleanRef = refPrefix.trim().removePrefix("refs/").trim('/')
+        if (cleanRef.isBlank()) return emptyList()
+        val r = request(context, "/repos/$owner/$repo/git/matching-refs/$cleanRef")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i -> parseGitRef(arr.getJSONObject(i)) }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getGitTree(context: Context, owner: String, repo: String, treeSha: String, recursive: Boolean = true): GHGitTree? {
+        val cleanSha = treeSha.trim()
+        if (cleanSha.isBlank()) return null
+        val recursiveFlag = if (recursive) "?recursive=1" else ""
+        val r = request(context, "/repos/$owner/$repo/git/trees/$cleanSha$recursiveFlag")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            val tree = j.optJSONArray("tree") ?: JSONArray()
+            GHGitTree(
+                sha = j.optString("sha", ""),
+                truncated = j.optBoolean("truncated", false),
+                items = (0 until tree.length()).map { i ->
+                    val item = tree.getJSONObject(i)
+                    GHGitTreeItem(
+                        path = item.optString("path", ""),
+                        mode = item.optString("mode", ""),
+                        type = item.optString("type", ""),
+                        sha = item.optString("sha", ""),
+                        size = item.optLong("size", 0L),
+                        url = item.optString("url", "")
+                    )
+                }
+            )
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun getGitBlob(context: Context, owner: String, repo: String, fileSha: String): GHGitBlob? {
+        val cleanSha = fileSha.trim()
+        if (cleanSha.isBlank()) return null
+        val r = request(context, "/repos/$owner/$repo/git/blobs/$cleanSha")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            GHGitBlob(
+                sha = j.optString("sha", ""),
+                size = j.optLong("size", 0L),
+                encoding = j.optString("encoding", ""),
+                content = j.optString("content", ""),
+                url = j.optString("url", "")
+            )
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun getGitTag(context: Context, owner: String, repo: String, tagSha: String): GHGitTagDetail? {
+        val cleanSha = tagSha.trim()
+        if (cleanSha.isBlank()) return null
+        val r = request(context, "/repos/$owner/$repo/git/tags/$cleanSha")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            val tagger = j.optJSONObject("tagger")
+            val obj = j.optJSONObject("object")
+            GHGitTagDetail(
+                sha = j.optString("sha", ""),
+                tag = j.optString("tag", ""),
+                message = j.optString("message", ""),
+                taggerName = tagger?.optString("name", "") ?: "",
+                taggerEmail = tagger?.optString("email", "") ?: "",
+                date = tagger?.optString("date", "") ?: "",
+                objectSha = obj?.optString("sha", "") ?: "",
+                objectType = obj?.optString("type", "") ?: ""
+            )
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun getGitCommit(context: Context, owner: String, repo: String, commitSha: String): GHGitCommit? {
+        val cleanSha = commitSha.trim()
+        if (cleanSha.isBlank()) return null
+        val r = request(context, "/repos/$owner/$repo/git/commits/$cleanSha")
+        if (!r.success) return null
+        return try {
+            val j = JSONObject(r.body)
+            val author = j.optJSONObject("author")
+            val committer = j.optJSONObject("committer")
+            val parents = j.optJSONArray("parents") ?: JSONArray()
+            GHGitCommit(
+                sha = j.optString("sha", ""),
+                message = j.optString("message", ""),
+                treeSha = j.optJSONObject("tree")?.optString("sha", "") ?: "",
+                parentShas = (0 until parents.length()).mapNotNull { i -> parents.optJSONObject(i)?.optString("sha")?.takeIf { it.isNotBlank() } },
+                authorName = author?.optString("name", "") ?: "",
+                authorEmail = author?.optString("email", "") ?: "",
+                authorDate = author?.optString("date", "") ?: "",
+                committerName = committer?.optString("name", "") ?: "",
+                committerEmail = committer?.optString("email", "") ?: "",
+                committerDate = committer?.optString("date", "") ?: ""
+            )
+        } catch (e: Exception) { null }
+    }
+
     suspend fun getPullRequests(context: Context, owner: String, repo: String, state: String = "open", page: Int = 1): List<GHPullRequest> {
         val r = request(context, "/repos/$owner/$repo/pulls?state=$state&per_page=30&page=$page")
         if (!r.success) return emptyList()
@@ -655,6 +765,16 @@ object GitHubManager {
             createdAt = j.optString("created_at", ""),
             updatedAt = j.optString("updated_at", "")
         )
+
+    private fun parseGitRef(j: JSONObject): GHGitRef {
+        val obj = j.optJSONObject("object")
+        return GHGitRef(
+            ref = j.optString("ref", ""),
+            nodeSha = obj?.optString("sha", "") ?: "",
+            nodeType = obj?.optString("type", "") ?: "",
+            url = j.optString("url", "")
+        )
+    }
 
     private fun parseTrafficSeries(j: JSONObject, itemKey: String): GHTrafficSeries {
         val items = j.optJSONArray(itemKey) ?: JSONArray()
@@ -4959,6 +5079,60 @@ data class GHContent(val name: String, val path: String, val type: String, val s
     val downloadUrl: String, val sha: String)
 
 data class GHFileSaveResult(val success: Boolean, val sha: String, val error: String)
+
+data class GHGitRef(
+    val ref: String,
+    val nodeSha: String,
+    val nodeType: String,
+    val url: String
+)
+
+data class GHGitTree(
+    val sha: String,
+    val truncated: Boolean,
+    val items: List<GHGitTreeItem>
+)
+
+data class GHGitTreeItem(
+    val path: String,
+    val mode: String,
+    val type: String,
+    val sha: String,
+    val size: Long,
+    val url: String
+)
+
+data class GHGitBlob(
+    val sha: String,
+    val size: Long,
+    val encoding: String,
+    val content: String,
+    val url: String
+)
+
+data class GHGitTagDetail(
+    val sha: String,
+    val tag: String,
+    val message: String,
+    val taggerName: String,
+    val taggerEmail: String,
+    val date: String,
+    val objectSha: String,
+    val objectType: String
+)
+
+data class GHGitCommit(
+    val sha: String,
+    val message: String,
+    val treeSha: String,
+    val parentShas: List<String>,
+    val authorName: String,
+    val authorEmail: String,
+    val authorDate: String,
+    val committerName: String,
+    val committerEmail: String,
+    val committerDate: String
+)
 
 data class GHPullRequest(val number: Int, val title: String, val state: String, val author: String,
     val createdAt: String, val head: String, val base: String, val comments: Int,

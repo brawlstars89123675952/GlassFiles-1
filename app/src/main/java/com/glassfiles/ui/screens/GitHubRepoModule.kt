@@ -137,6 +137,7 @@ internal fun RepoDetailScreen(
     var isWatching by remember { mutableStateOf(false) }
     var showRepoOverflow by remember { mutableStateOf(false) }
     var showRepoInsights by remember { mutableStateOf(false) }
+    var showGitDataTools by remember { mutableStateOf(false) }
     var repoReloadNonce by remember { mutableIntStateOf(0) }
     var selectedBranch by rememberSaveable(repo.fullName) { mutableStateOf(repo.defaultBranch) }
     val childCache = remember(repo.fullName, selectedBranch) { mutableStateMapOf<String, List<GHContent>>() }
@@ -214,6 +215,7 @@ internal fun RepoDetailScreen(
             showDispatch -> showDispatch = false
             showRepoOverflow -> showRepoOverflow = false
             showRepoInsights -> showRepoInsights = false
+            showGitDataTools -> showGitDataTools = false
             deleteTarget != null -> deleteTarget = null
             editingFile != null -> {
                 editingFile = null
@@ -356,6 +358,7 @@ internal fun RepoDetailScreen(
         return
     }
     if (showRepoInsights) { RepoInsightsScreen(repo) { showRepoInsights = false }; return }
+    if (showGitDataTools) { GitDataToolsScreen(repo) { showGitDataTools = false }; return }
     if (selectedIssue != null) { IssueDetailScreen(repo, selectedIssue!!.number) { selectedIssue = null }; return }
     if (selectedCommitSha != null) { 
         CommitDiffScreen(repo.owner, repo.name, selectedCommitSha!!) { selectedCommitSha = null }; 
@@ -663,6 +666,10 @@ internal fun RepoDetailScreen(
                         showRepoOverflow = false
                         showRepoInsights = true
                     }, color = palette.accent)
+                    GitHubTerminalButton("git data", {
+                        showRepoOverflow = false
+                        showGitDataTools = true
+                    }, color = palette.textSecondary)
                     if (onClose != null) {
                         GitHubTerminalButton("\u00D7 close repo", {
                             showRepoOverflow = false
@@ -1657,6 +1664,389 @@ private fun TerminalEmptyLine(text: String) {
 
 private fun repoEventLabel(type: String): String =
     type.removeSuffix("Event").replace(Regex("([a-z])([A-Z])"), "$1 $2").lowercase()
+
+private enum class GitDataTab { REFS, TREE, BLOB, TAG, COMMIT }
+
+@Composable
+private fun GitDataToolsScreen(repo: GHRepo, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val palette = AiModuleTheme.colors
+    var selectedTab by remember { mutableStateOf(GitDataTab.REFS) }
+    var loading by remember { mutableStateOf(false) }
+    var refQuery by rememberSaveable(repo.fullName, "git-ref") { mutableStateOf("heads/${repo.defaultBranch}") }
+    var matchingPrefix by rememberSaveable(repo.fullName, "git-matching") { mutableStateOf("heads/") }
+    var treeSha by rememberSaveable(repo.fullName, "git-tree") { mutableStateOf("") }
+    var blobSha by rememberSaveable(repo.fullName, "git-blob") { mutableStateOf("") }
+    var tagSha by rememberSaveable(repo.fullName, "git-tag") { mutableStateOf("") }
+    var commitSha by rememberSaveable(repo.fullName, "git-commit") { mutableStateOf("") }
+    var recursiveTree by rememberSaveable(repo.fullName, "git-tree-recursive") { mutableStateOf(true) }
+    var refResult by remember { mutableStateOf<GHGitRef?>(null) }
+    var matchingRefs by remember { mutableStateOf<List<GHGitRef>>(emptyList()) }
+    var treeResult by remember { mutableStateOf<GHGitTree?>(null) }
+    var blobResult by remember { mutableStateOf<GHGitBlob?>(null) }
+    var tagResult by remember { mutableStateOf<GHGitTagDetail?>(null) }
+    var commitResult by remember { mutableStateOf<GHGitCommit?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    suspend fun loadRefData() {
+        loading = true
+        error = null
+        refResult = GitHubManager.getGitRef(context, repo.owner, repo.name, refQuery)
+        matchingRefs = GitHubManager.getMatchingGitRefs(context, repo.owner, repo.name, matchingPrefix)
+        refResult?.takeIf { it.nodeType == "commit" && commitSha.isBlank() }?.let { commitSha = it.nodeSha }
+        if (refResult == null && matchingRefs.isEmpty()) error = "no refs found"
+        loading = false
+    }
+
+    suspend fun loadTreeData() {
+        loading = true
+        error = null
+        treeResult = GitHubManager.getGitTree(context, repo.owner, repo.name, treeSha, recursive = recursiveTree)
+        if (treeResult == null) error = "tree not found"
+        loading = false
+    }
+
+    suspend fun loadBlobData() {
+        loading = true
+        error = null
+        blobResult = GitHubManager.getGitBlob(context, repo.owner, repo.name, blobSha)
+        if (blobResult == null) error = "blob not found"
+        loading = false
+    }
+
+    suspend fun loadTagData() {
+        loading = true
+        error = null
+        tagResult = GitHubManager.getGitTag(context, repo.owner, repo.name, tagSha)
+        if (tagResult == null) error = "tag object not found"
+        loading = false
+    }
+
+    suspend fun loadCommitData() {
+        loading = true
+        error = null
+        commitResult = GitHubManager.getGitCommit(context, repo.owner, repo.name, commitSha)
+        commitResult?.takeIf { it.treeSha.isNotBlank() && treeSha.isBlank() }?.let { treeSha = it.treeSha }
+        if (commitResult == null) error = "git commit not found"
+        loading = false
+    }
+
+    LaunchedEffect(repo.fullName) {
+        loadRefData()
+    }
+
+    AiModuleSurface {
+        Column(Modifier.fillMaxSize().background(palette.background)) {
+            GitHubPageBar(
+                title = "> git data",
+                subtitle = repo.fullName,
+                onBack = onBack,
+                trailing = {
+                    GitHubTopBarAction(
+                        glyph = GhGlyphs.REFRESH,
+                        onClick = {
+                            scope.launch {
+                                when (selectedTab) {
+                                    GitDataTab.REFS -> loadRefData()
+                                    GitDataTab.TREE -> loadTreeData()
+                                    GitDataTab.BLOB -> loadBlobData()
+                                    GitDataTab.TAG -> loadTagData()
+                                    GitDataTab.COMMIT -> loadCommitData()
+                                }
+                            }
+                        },
+                        tint = palette.accent,
+                        enabled = !loading,
+                        contentDescription = "refresh git data",
+                    )
+                },
+            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                GitDataTab.entries.forEach { tab ->
+                    GitHubTerminalTab(tab.name.lowercase(), selectedTab == tab) { selectedTab = tab }
+                }
+            }
+            if (error != null) {
+                Text(
+                    "! ${error.orEmpty()}",
+                    color = palette.warning,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
+            if (loading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    AiModuleSpinner(label = "loading git data…")
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    when (selectedTab) {
+                        GitDataTab.REFS -> {
+                            item {
+                                GitDataInputCard(
+                                    title = "refs",
+                                    fields = listOf(
+                                        "exact ref" to refQuery,
+                                        "matching prefix" to matchingPrefix
+                                    ),
+                                    onFieldChange = { index, value ->
+                                        if (index == 0) refQuery = value else matchingPrefix = value
+                                    },
+                                    action = "load refs",
+                                    onAction = { scope.launch { loadRefData() } },
+                                )
+                            }
+                            refResult?.let { ref ->
+                                item {
+                                    GitRefCard(
+                                        ref = ref,
+                                        onCommit = {
+                                            commitSha = ref.nodeSha
+                                            selectedTab = GitDataTab.COMMIT
+                                            scope.launch { loadCommitData() }
+                                        },
+                                    )
+                                }
+                            }
+                            item { GitRefListCard(matchingRefs, onSelect = { refQuery = it.ref.removePrefix("refs/"); refResult = it }) }
+                        }
+                        GitDataTab.TREE -> {
+                            item {
+                                GitDataInputCard(
+                                    title = "tree",
+                                    fields = listOf("tree sha" to treeSha),
+                                    onFieldChange = { _, value -> treeSha = value },
+                                    action = "load tree",
+                                    onAction = { scope.launch { loadTreeData() } },
+                                    trailing = {
+                                        GitHubTerminalCheckbox("recursive", recursiveTree, { recursiveTree = !recursiveTree })
+                                    },
+                                )
+                            }
+                            treeResult?.let { tree -> item { GitTreeCard(tree, onBlob = { blobSha = it; selectedTab = GitDataTab.BLOB; scope.launch { loadBlobData() } }) } }
+                        }
+                        GitDataTab.BLOB -> {
+                            item {
+                                GitDataInputCard(
+                                    title = "blob",
+                                    fields = listOf("blob sha" to blobSha),
+                                    onFieldChange = { _, value -> blobSha = value },
+                                    action = "load blob",
+                                    onAction = { scope.launch { loadBlobData() } },
+                                )
+                            }
+                            blobResult?.let { blob -> item { GitBlobCard(blob) } }
+                        }
+                        GitDataTab.TAG -> {
+                            item {
+                                GitDataInputCard(
+                                    title = "tag",
+                                    fields = listOf("tag sha" to tagSha),
+                                    onFieldChange = { _, value -> tagSha = value },
+                                    action = "load tag",
+                                    onAction = { scope.launch { loadTagData() } },
+                                )
+                            }
+                            tagResult?.let { tag -> item { GitTagCard(tag) } }
+                        }
+                        GitDataTab.COMMIT -> {
+                            item {
+                                GitDataInputCard(
+                                    title = "commit",
+                                    fields = listOf("commit sha" to commitSha),
+                                    onFieldChange = { _, value -> commitSha = value },
+                                    action = "load commit",
+                                    onAction = { scope.launch { loadCommitData() } },
+                                )
+                            }
+                            commitResult?.let { commit ->
+                                item {
+                                    GitCommitCard(
+                                        commit = commit,
+                                        onTree = {
+                                            treeSha = commit.treeSha
+                                            selectedTab = GitDataTab.TREE
+                                            scope.launch { loadTreeData() }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GitDataInputCard(
+    title: String,
+    fields: List<Pair<String, String>>,
+    onFieldChange: (Int, String) -> Unit,
+    action: String,
+    onAction: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    TerminalInsightCard(title) {
+        fields.forEachIndexed { index, field ->
+            Text(field.first, color = AiModuleTheme.colors.textMuted, fontFamily = JetBrainsMono, fontSize = 11.sp)
+            GitHubTerminalTextField(
+                value = field.second,
+                onValueChange = { onFieldChange(index, it) },
+                placeholder = field.first,
+                singleLine = true,
+                minHeight = 38.dp,
+            )
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            GitHubTerminalButton(action, onClick = onAction, color = AiModuleTheme.colors.accent)
+            trailing?.invoke()
+        }
+    }
+}
+
+@Composable
+private fun GitRefCard(ref: GHGitRef, onCommit: () -> Unit) {
+    TerminalInsightCard("ref result") {
+        GitDataKv("ref", ref.ref)
+        GitDataKv("type", ref.nodeType)
+        GitDataKv("sha", ref.nodeSha)
+        if (ref.nodeType == "commit") {
+            GitHubTerminalButton("open commit", onClick = onCommit, color = AiModuleTheme.colors.accent)
+        }
+    }
+}
+
+@Composable
+private fun GitRefListCard(refs: List<GHGitRef>, onSelect: (GHGitRef) -> Unit) {
+    TerminalInsightCard("matching refs") {
+        if (refs.isEmpty()) {
+            TerminalEmptyLine("// no matching refs")
+        } else {
+            refs.take(60).forEach { ref ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(ref.ref.removePrefix("refs/"), color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(ref.nodeType, color = AiModuleTheme.colors.textMuted, fontFamily = JetBrainsMono, fontSize = 10.sp)
+                    GitHubTerminalButton("use", onClick = { onSelect(ref) }, color = AiModuleTheme.colors.textSecondary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GitTreeCard(tree: GHGitTree, onBlob: (String) -> Unit) {
+    TerminalInsightCard("tree ${tree.sha.take(12)}") {
+        GitDataKv("items", tree.items.size.toString())
+        GitDataKv("truncated", tree.truncated.toString())
+        tree.items.take(120).forEach { item ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(item.type, color = gitObjectColor(item.type), fontFamily = JetBrainsMono, fontSize = 10.sp, modifier = Modifier.width(38.dp))
+                Text(item.path, color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(item.mode, color = AiModuleTheme.colors.textMuted, fontFamily = JetBrainsMono, fontSize = 10.sp)
+                if (item.type == "blob") {
+                    GitHubTerminalButton("blob", onClick = { onBlob(item.sha) }, color = AiModuleTheme.colors.textSecondary)
+                }
+            }
+        }
+        if (tree.items.size > 120) TerminalEmptyLine("// ${tree.items.size - 120} more items hidden")
+    }
+}
+
+@Composable
+private fun GitBlobCard(blob: GHGitBlob) {
+    TerminalInsightCard("blob ${blob.sha.take(12)}") {
+        GitDataKv("size", ghFmtSize(blob.size))
+        GitDataKv("encoding", blob.encoding)
+        val decoded = remember(blob.content, blob.encoding) { decodeGitBlobPreview(blob) }
+        Text(
+            decoded.ifBlank { "// empty or binary blob" },
+            color = AiModuleTheme.colors.textPrimary,
+            fontFamily = JetBrainsMono,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 260.dp)
+                .verticalScroll(rememberScrollState())
+                .border(1.dp, AiModuleTheme.colors.border, RoundedCornerShape(2.dp))
+                .padding(8.dp),
+        )
+    }
+}
+
+@Composable
+private fun GitTagCard(tag: GHGitTagDetail) {
+    TerminalInsightCard("tag ${tag.tag.ifBlank { tag.sha.take(12) }}") {
+        GitDataKv("sha", tag.sha)
+        GitDataKv("object", "${tag.objectType}:${tag.objectSha}")
+        GitDataKv("tagger", listOf(tag.taggerName, tag.taggerEmail).filter { it.isNotBlank() }.joinToString(" "))
+        GitDataKv("date", tag.date)
+        if (tag.message.isNotBlank()) {
+            Text(tag.message, color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono, fontSize = 11.sp, lineHeight = 15.sp)
+        }
+    }
+}
+
+@Composable
+private fun GitCommitCard(commit: GHGitCommit, onTree: () -> Unit) {
+    TerminalInsightCard("git commit ${commit.sha.take(12)}") {
+        GitDataKv("tree", commit.treeSha)
+        GitDataKv("parents", commit.parentShas.joinToString(", ") { it.take(12) })
+        GitDataKv("author", listOf(commit.authorName, commit.authorEmail).filter { it.isNotBlank() }.joinToString(" "))
+        GitDataKv("author date", commit.authorDate)
+        GitDataKv("committer", listOf(commit.committerName, commit.committerEmail).filter { it.isNotBlank() }.joinToString(" "))
+        GitDataKv("commit date", commit.committerDate)
+        Text(commit.message.ifBlank { "(no message)" }, color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono, fontSize = 11.sp, lineHeight = 15.sp)
+        if (commit.treeSha.isNotBlank()) GitHubTerminalButton("open tree", onClick = onTree, color = AiModuleTheme.colors.accent)
+    }
+}
+
+@Composable
+private fun GitDataKv(label: String, value: String) {
+    if (value.isBlank()) return
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, color = AiModuleTheme.colors.textMuted, fontFamily = JetBrainsMono, fontSize = 10.sp, modifier = Modifier.width(72.dp))
+        Text(value, color = AiModuleTheme.colors.textSecondary, fontFamily = JetBrainsMono, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun gitObjectColor(type: String): Color =
+    when (type) {
+        "tree" -> AiModuleTheme.colors.accent
+        "blob" -> AiModuleTheme.colors.textSecondary
+        "commit" -> GitHubSuccessGreen
+        "tag" -> GitHubMergedPurple
+        else -> AiModuleTheme.colors.textMuted
+    }
+
+private fun decodeGitBlobPreview(blob: GHGitBlob): String {
+    if (blob.content.isBlank()) return ""
+    return try {
+        val raw = if (blob.encoding == "base64") {
+            android.util.Base64.decode(blob.content.replace("\n", ""), android.util.Base64.DEFAULT)
+        } else {
+            blob.content.toByteArray()
+        }
+        String(raw).take(6000)
+    } catch (_: Exception) {
+        ""
+    }
+}
 
 @Composable
 internal fun PullsTab(

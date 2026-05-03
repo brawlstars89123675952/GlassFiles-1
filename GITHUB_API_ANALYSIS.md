@@ -72,6 +72,16 @@ items.
 | View commit details | `/repos/{owner}/{repo}/commits/{sha}` | ✅ | ✅ | Files, stats, patches |
 | Compare commits | `/repos/{owner}/{repo}/compare/{base}...{head}` | ✅ | ✅ | Branch compare, commits, changed files, diff viewer, PR creation |
 
+### Git Data
+| Feature | API Endpoint | Backend | UI | Notes |
+|---------|-------------|---------|-----|-------|
+| Get single tree | `/repos/{owner}/{repo}/git/trees/{tree_sha}` | ✅ | ✅ | Git data tools tree viewer |
+| Get single blob | `/repos/{owner}/{repo}/git/blobs/{file_sha}` | ✅ | ✅ | Git data tools blob preview |
+| Get single tag | `/repos/{owner}/{repo}/git/tags/{tag_sha}` | ✅ | ✅ | Git data tools tag viewer |
+| Get single ref | `/repos/{owner}/{repo}/git/ref/{ref}` | ✅ | ✅ | Git data tools ref viewer |
+| List matching refs | `/repos/{owner}/{repo}/git/matching-refs/{ref}` | ✅ | ✅ | Git data tools refs tab |
+| Get git commit | `/repos/{owner}/{repo}/git/commits/{commit_sha}` | ✅ | ✅ | Git data tools commit viewer |
+
 ### Issues
 | Feature | API Endpoint | Backend | UI | Notes |
 |---------|-------------|---------|-----|-------|
@@ -349,17 +359,11 @@ None currently tracked.
 ### Git Data (Advanced)
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
-| Get single tree | `/repos/{owner}/{repo}/git/trees/{tree_sha}` | Low | |
 | Create tree | `/repos/{owner}/{repo}/git/trees` (POST) | Low | Already used internally |
-| Get single blob | `/repos/{owner}/{repo}/git/blobs/{file_sha}` | Low | |
 | Create blob | `/repos/{owner}/{repo}/git/blobs` (POST) | Low | Already used internally |
-| Get single tag | `/repos/{owner}/{repo}/git/tags/{tag_sha}` | Low | |
 | Create tag | `/repos/{owner}/{repo}/git/tags` (POST) | Low | Annotated tags |
-| Get single ref | `/repos/{owner}/{repo}/git/ref/{ref}` | Low | |
 | Delete ref | `/repos/{owner}/{repo}/git/refs/{ref}` (DELETE) | Low | Already have branch delete |
 | Update ref | `/repos/{owner}/{repo}/git/refs/{ref}` (PATCH) | Low | Force push, etc |
-| List matching refs | `/repos/{owner}/{repo}/git/matching-refs/{ref}` | Low | |
-| Get commit | `/repos/{owner}/{repo}/git/commits/{commit_sha}` | Low | Already used internally |
 | Create commit | `/repos/{owner}/{repo}/git/commits` (POST) | Low | Already used internally |
 
 ### GitHub Actions (Advanced)
@@ -394,7 +398,7 @@ None currently tracked.
 | Authentication & User | ✅ Complete | None tracked |
 | Repositories / Files | ✅ Complete for core mobile flows | Merge branch, transfer/rename/default-branch admin, repo invites |
 | Branches | ✅ Complete for list/create/delete/switch | Required signatures and other advanced protection sub-resources |
-| Commits / Compare | ✅ Complete for current UI | Low-level Git Data endpoints remain mostly internal or unsurfaced |
+| Commits / Compare / Git Data | ✅ Complete for current read-only UI | Low-level Git Data write endpoints remain internal or unsurfaced |
 | Issues | ✅ Complete for main issue flow | Deeper timeline event actions |
 | Pull Requests | ✅ Complete for PR detail/reviews/comments/merge methods/check runs/check suites | None tracked |
 | Releases | ✅ Complete | None tracked |
@@ -442,13 +446,13 @@ None currently tracked.
 - None currently tracked.
 
 **Not Implemented / Early Coverage — Major Gaps:**
-- ⚠️ Git Data standalone UI/API surface.
 - ⚠️ Repository admin extras: transfer, default branch rename, invitations.
+- ⚠️ Git Data write tools remain internal or intentionally unsurfaced.
 - ⚠️ Deeper issue timeline event actions.
 - ⚠️ GitHub Apps/OAuth and Enterprise-only APIs.
 
 ### Recommendations for Next Implementation
 
 **Low Priority (nice to have):**
-1. **Standalone Git Data tools** — tree/blob/tag/ref viewers only if a concrete workflow needs them.
-2. **Repository admin extras** — transfer, branch rename and invitations.
+1. **Repository admin extras** — transfer, branch rename and invitations.
+2. **Git Data write tools** — tree/blob/tag/ref mutation UI only if a concrete workflow needs it.

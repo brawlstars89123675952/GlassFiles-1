@@ -1297,3 +1297,23 @@
 - Проверка:
   - локальная Android сборка не запускалась по прямой просьбе пользователя;
   - выполнена только статическая проверка `git diff --check`.
+
+### GitHub git data tools: read-only tree/blob/tag/ref viewers
+- Закрыт read-only Git Data standalone gap из `GITHUB_API_ANALYSIS.md`.
+- `GitHubManager.kt`:
+  - добавлены `getGitRef(...)`, `getMatchingGitRefs(...)`, `getGitTree(...)`, `getGitBlob(...)`, `getGitTag(...)`, `getGitCommit(...)`;
+  - добавлены модели `GHGitRef`, `GHGitTree`, `GHGitTreeItem`, `GHGitBlob`, `GHGitTagDetail`, `GHGitCommit`.
+- `GitHubRepoModule.kt`:
+  - в repo overflow добавлен terminal action `git data`;
+  - добавлен `GitDataToolsScreen` с tabs `refs / tree / blob / tag / commit`;
+  - ref tab умеет exact ref и matching refs;
+  - tree tab показывает tree entries и позволяет открыть blob;
+  - blob tab показывает metadata и safe text preview;
+  - tag и commit tabs показывают низкоуровневые Git object details;
+  - UI выполнен через terminal controls, mono text и border/surface cards без добавления Material UI.
+- `GITHUB_API_ANALYSIS.md`:
+  - read-only Git Data endpoints перенесены в implemented;
+  - remaining Git Data gaps сужены до write/mutation tools, которые остаются internal или intentionally unsurfaced.
+- Проверка:
+  - локальная Android сборка не запускалась по прямой просьбе пользователя;
+  - выполнена только статическая проверка `git diff --check`.
