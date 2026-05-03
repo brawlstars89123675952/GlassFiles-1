@@ -136,6 +136,7 @@ internal fun RepoDetailScreen(
     var cloneProgress by remember { mutableStateOf<String?>(null) }; var isStarred by remember { mutableStateOf(false) }
     var isWatching by remember { mutableStateOf(false) }
     var showRepoOverflow by remember { mutableStateOf(false) }
+    var showRepoInsights by remember { mutableStateOf(false) }
     var repoReloadNonce by remember { mutableIntStateOf(0) }
     var selectedBranch by rememberSaveable(repo.fullName) { mutableStateOf(repo.defaultBranch) }
     val childCache = remember(repo.fullName, selectedBranch) { mutableStateMapOf<String, List<GHContent>>() }
@@ -212,6 +213,7 @@ internal fun RepoDetailScreen(
             showBranchPicker -> showBranchPicker = false
             showDispatch -> showDispatch = false
             showRepoOverflow -> showRepoOverflow = false
+            showRepoInsights -> showRepoInsights = false
             deleteTarget != null -> deleteTarget = null
             editingFile != null -> {
                 editingFile = null
@@ -353,6 +355,7 @@ internal fun RepoDetailScreen(
         )
         return
     }
+    if (showRepoInsights) { RepoInsightsScreen(repo) { showRepoInsights = false }; return }
     if (selectedIssue != null) { IssueDetailScreen(repo, selectedIssue!!.number) { selectedIssue = null }; return }
     if (selectedCommitSha != null) { 
         CommitDiffScreen(repo.owner, repo.name, selectedCommitSha!!) { selectedCommitSha = null }; 
@@ -655,6 +658,10 @@ internal fun RepoDetailScreen(
                     GitHubTerminalButton("compare", {
                         showRepoOverflow = false
                         showCompare = true
+                    }, color = palette.accent)
+                    GitHubTerminalButton("insights", {
+                        showRepoOverflow = false
+                        showRepoInsights = true
                     }, color = palette.accent)
                     if (onClose != null) {
                         GitHubTerminalButton("\u00D7 close repo", {
@@ -1424,6 +1431,232 @@ private fun issueEventColor(event: String, palette: AiModuleColors): Color =
         "referenced", "cross-referenced", "connected", "disconnected" -> palette.accent
         else -> palette.textSecondary
     }
+
+private enum class RepoInsightsTab { TRAFFIC, PEOPLE, EVENTS }
+
+@Composable
+private fun RepoInsightsScreen(repo: GHRepo, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val palette = AiModuleTheme.colors
+    var selectedTab by remember { mutableStateOf(RepoInsightsTab.TRAFFIC) }
+    var loading by remember { mutableStateOf(true) }
+    var trafficViews by remember { mutableStateOf<GHTrafficSeries?>(null) }
+    var trafficClones by remember { mutableStateOf<GHTrafficSeries?>(null) }
+    var referrers by remember { mutableStateOf<List<GHTrafficReferrer>>(emptyList()) }
+    var paths by remember { mutableStateOf<List<GHTrafficPath>>(emptyList()) }
+    var stargazers by remember { mutableStateOf<List<GHRepoPerson>>(emptyList()) }
+    var watchers by remember { mutableStateOf<List<GHRepoPerson>>(emptyList()) }
+    var events by remember { mutableStateOf<List<GHRepoEvent>>(emptyList()) }
+    var reloadNonce by remember { mutableIntStateOf(0) }
+
+    suspend fun loadInsights() {
+        loading = true
+        trafficViews = GitHubManager.getRepoTrafficViews(context, repo.owner, repo.name)
+        trafficClones = GitHubManager.getRepoTrafficClones(context, repo.owner, repo.name)
+        referrers = GitHubManager.getRepoTrafficReferrers(context, repo.owner, repo.name)
+        paths = GitHubManager.getRepoTrafficPaths(context, repo.owner, repo.name)
+        stargazers = GitHubManager.getRepoStargazers(context, repo.owner, repo.name)
+        watchers = GitHubManager.getRepoWatchers(context, repo.owner, repo.name)
+        events = GitHubManager.getRepoEvents(context, repo.owner, repo.name)
+        loading = false
+    }
+
+    LaunchedEffect(repo.fullName, reloadNonce) {
+        loadInsights()
+    }
+
+    AiModuleSurface {
+        Column(Modifier.fillMaxSize().background(palette.background)) {
+            GitHubPageBar(
+                title = "> repo insights",
+                subtitle = repo.fullName,
+                onBack = onBack,
+                trailing = {
+                    GitHubTopBarAction(
+                        glyph = GhGlyphs.REFRESH,
+                        onClick = { reloadNonce++ },
+                        tint = palette.accent,
+                        enabled = !loading,
+                        contentDescription = "refresh insights",
+                    )
+                },
+            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                GitHubTerminalTab("traffic", selectedTab == RepoInsightsTab.TRAFFIC) { selectedTab = RepoInsightsTab.TRAFFIC }
+                GitHubTerminalTab("people", selectedTab == RepoInsightsTab.PEOPLE) { selectedTab = RepoInsightsTab.PEOPLE }
+                GitHubTerminalTab("events", selectedTab == RepoInsightsTab.EVENTS) { selectedTab = RepoInsightsTab.EVENTS }
+            }
+            if (loading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    AiModuleSpinner(label = "loading insights…")
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    when (selectedTab) {
+                        RepoInsightsTab.TRAFFIC -> {
+                            item { TrafficSummaryRow(trafficViews, trafficClones) }
+                            item { TrafficSeriesCard("views", trafficViews) }
+                            item { TrafficSeriesCard("clones", trafficClones) }
+                            item { TrafficRankedCard("referrers", referrers.map { it.referrer to "${it.count}/${it.uniques}" }) }
+                            item { TrafficRankedCard("paths", paths.map { it.path to "${it.count}/${it.uniques}" }) }
+                        }
+                        RepoInsightsTab.PEOPLE -> {
+                            item { RepoPeopleSection("stargazers", stargazers) }
+                            item { RepoPeopleSection("watchers", watchers) }
+                        }
+                        RepoInsightsTab.EVENTS -> {
+                            if (events.isEmpty()) {
+                                item { TerminalEmptyLine("// no repository events") }
+                            } else {
+                                items(events) { event -> RepoEventRow(event) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrafficSummaryRow(views: GHTrafficSeries?, clones: GHTrafficSeries?) {
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        RepoInsightMetric("views", views?.count ?: 0, views?.uniques ?: 0)
+        RepoInsightMetric("clones", clones?.count ?: 0, clones?.uniques ?: 0)
+    }
+}
+
+@Composable
+private fun RepoInsightMetric(label: String, count: Int, uniques: Int) {
+    val palette = AiModuleTheme.colors
+    Column(
+        Modifier
+            .widthIn(min = 118.dp)
+            .border(1.dp, palette.border, RoundedCornerShape(3.dp))
+            .background(palette.surface)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(count.toString(), color = palette.accent, fontFamily = JetBrainsMono, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Text("$label / $uniques unique", color = palette.textMuted, fontFamily = JetBrainsMono, fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun TrafficSeriesCard(title: String, series: GHTrafficSeries?) {
+    TerminalInsightCard(title) {
+        if (series == null || series.items.isEmpty()) {
+            TerminalEmptyLine("// no $title data or no permission")
+        } else {
+            val maxCount = series.items.maxOfOrNull { it.count }?.coerceAtLeast(1) ?: 1
+            series.items.takeLast(14).forEach { point ->
+                val barWidth = ((point.count * 96) / maxCount).coerceAtLeast(2).dp
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(point.timestamp.take(10), color = AiModuleTheme.colors.textMuted, fontFamily = JetBrainsMono, fontSize = 10.sp, modifier = Modifier.width(74.dp))
+                    Box(Modifier.width(barWidth).height(7.dp).background(AiModuleTheme.colors.accent.copy(alpha = 0.58f)))
+                    Spacer(Modifier.weight(1f))
+                    Text("${point.count}/${point.uniques}", color = AiModuleTheme.colors.textSecondary, fontFamily = JetBrainsMono, fontSize = 10.sp, modifier = Modifier.width(54.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrafficRankedCard(title: String, rows: List<Pair<String, String>>) {
+    TerminalInsightCard(title) {
+        if (rows.isEmpty()) {
+            TerminalEmptyLine("// no $title data or no permission")
+        } else {
+            rows.take(10).forEachIndexed { index, row ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${index + 1}".padStart(2, '0'), color = AiModuleTheme.colors.textMuted, fontFamily = JetBrainsMono, fontSize = 10.sp)
+                    Text(row.first.ifBlank { "(unknown)" }, color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(row.second, color = AiModuleTheme.colors.accent, fontFamily = JetBrainsMono, fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RepoPeopleSection(title: String, people: List<GHRepoPerson>) {
+    TerminalInsightCard(title) {
+        if (people.isEmpty()) {
+            TerminalEmptyLine("// no $title loaded")
+        } else {
+            people.take(50).forEach { person ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("@", color = AiModuleTheme.colors.accent, fontFamily = JetBrainsMono, fontSize = 12.sp)
+                    Text(person.login, color = AiModuleTheme.colors.textPrimary, fontFamily = JetBrainsMono, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    if (person.starredAt.isNotBlank()) {
+                        Text(person.starredAt.take(10), color = AiModuleTheme.colors.textMuted, fontFamily = JetBrainsMono, fontSize = 10.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RepoEventRow(event: GHRepoEvent) {
+    val palette = AiModuleTheme.colors
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .border(1.dp, palette.border, RoundedCornerShape(3.dp))
+            .background(palette.surface)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(repoEventLabel(event.type), color = palette.accent, fontFamily = JetBrainsMono, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.widthIn(min = 92.dp, max = 148.dp))
+            Text(event.actor.ifBlank { "github" }, color = palette.textPrimary, fontFamily = JetBrainsMono, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text(event.createdAt.take(10), color = palette.textMuted, fontFamily = JetBrainsMono, fontSize = 10.sp)
+        }
+        val detail = listOf(event.action, event.refType, event.ref, if (event.size > 0) "${event.size} items" else "")
+            .filter { it.isNotBlank() }
+            .joinToString(" · ")
+        if (detail.isNotBlank()) {
+            Text(detail, color = palette.textSecondary, fontFamily = JetBrainsMono, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun TerminalInsightCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+    val palette = AiModuleTheme.colors
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .border(1.dp, palette.border, RoundedCornerShape(3.dp))
+            .background(palette.surface)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(title, color = palette.textSecondary, fontFamily = JetBrainsMono, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        content()
+    }
+}
+
+@Composable
+private fun TerminalEmptyLine(text: String) {
+    Text(text, color = AiModuleTheme.colors.textMuted, fontFamily = JetBrainsMono, fontSize = 12.sp)
+}
+
+private fun repoEventLabel(type: String): String =
+    type.removeSuffix("Event").replace(Regex("([a-z])([A-Z])"), "$1 $2").lowercase()
 
 @Composable
 internal fun PullsTab(

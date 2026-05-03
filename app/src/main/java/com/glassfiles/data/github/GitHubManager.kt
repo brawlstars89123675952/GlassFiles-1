@@ -644,6 +644,34 @@ object GitHubManager {
         }
     }
 
+    private fun parseTrafficSeries(j: JSONObject, itemKey: String): GHTrafficSeries {
+        val items = j.optJSONArray(itemKey) ?: JSONArray()
+        return GHTrafficSeries(
+            count = j.optInt("count", 0),
+            uniques = j.optInt("uniques", 0),
+            items = (0 until items.length()).map { i ->
+                val item = items.getJSONObject(i)
+                GHTrafficPoint(
+                    timestamp = item.optString("timestamp", ""),
+                    count = item.optInt("count", 0),
+                    uniques = item.optInt("uniques", 0)
+                )
+            }
+        )
+    }
+
+    private fun parseRepoPerson(j: JSONObject, starred: Boolean): GHRepoPerson? {
+        val user = if (starred && j.has("user")) j.optJSONObject("user") else j
+        val login = user?.optString("login", "").orEmpty()
+        if (login.isBlank()) return null
+        return GHRepoPerson(
+            login = login,
+            avatarUrl = user?.optString("avatar_url", "").orEmpty(),
+            htmlUrl = user?.optString("html_url", "").orEmpty(),
+            starredAt = if (starred) j.optString("starred_at", "") else ""
+        )
+    }
+
     private fun parsePullReview(j: JSONObject): GHPullReview =
         GHPullReview(
             id = j.optLong("id"),
@@ -796,6 +824,95 @@ object GitHubManager {
             (0 until arr.length()).map { i ->
                 val j = arr.getJSONObject(i)
                 GHContributor(j.optString("login"), j.optString("avatar_url", ""), j.optInt("contributions", 0))
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getRepoTrafficViews(context: Context, owner: String, repo: String): GHTrafficSeries? {
+        val r = request(context, "/repos/$owner/$repo/traffic/views?per=day")
+        if (!r.success) return null
+        return try { parseTrafficSeries(JSONObject(r.body), "views") } catch (e: Exception) { null }
+    }
+
+    suspend fun getRepoTrafficClones(context: Context, owner: String, repo: String): GHTrafficSeries? {
+        val r = request(context, "/repos/$owner/$repo/traffic/clones?per=day")
+        if (!r.success) return null
+        return try { parseTrafficSeries(JSONObject(r.body), "clones") } catch (e: Exception) { null }
+    }
+
+    suspend fun getRepoTrafficReferrers(context: Context, owner: String, repo: String): List<GHTrafficReferrer> {
+        val r = request(context, "/repos/$owner/$repo/traffic/popular/referrers")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHTrafficReferrer(
+                    referrer = j.optString("referrer", ""),
+                    count = j.optInt("count", 0),
+                    uniques = j.optInt("uniques", 0)
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getRepoTrafficPaths(context: Context, owner: String, repo: String): List<GHTrafficPath> {
+        val r = request(context, "/repos/$owner/$repo/traffic/popular/paths")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHTrafficPath(
+                    path = j.optString("path", ""),
+                    title = j.optString("title", ""),
+                    count = j.optInt("count", 0),
+                    uniques = j.optInt("uniques", 0)
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getRepoStargazers(context: Context, owner: String, repo: String, page: Int = 1): List<GHRepoPerson> {
+        val r = request(
+            context,
+            "/repos/$owner/$repo/stargazers?per_page=50&page=$page",
+            extraHeaders = mapOf("Accept" to "application/vnd.github.star+json")
+        )
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).mapNotNull { i -> parseRepoPerson(arr.getJSONObject(i), starred = true) }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getRepoWatchers(context: Context, owner: String, repo: String, page: Int = 1): List<GHRepoPerson> {
+        val r = request(context, "/repos/$owner/$repo/subscribers?per_page=50&page=$page")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).mapNotNull { i -> parseRepoPerson(arr.getJSONObject(i), starred = false) }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getRepoEvents(context: Context, owner: String, repo: String, page: Int = 1): List<GHRepoEvent> {
+        val r = request(context, "/repos/$owner/$repo/events?per_page=50&page=$page")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                val payload = j.optJSONObject("payload")
+                GHRepoEvent(
+                    id = j.optString("id", ""),
+                    type = j.optString("type", ""),
+                    actor = j.optJSONObject("actor")?.optString("login") ?: "",
+                    createdAt = j.optString("created_at", ""),
+                    action = payload?.optString("action", "") ?: "",
+                    ref = payload?.optString("ref", "") ?: "",
+                    refType = payload?.optString("ref_type", "") ?: "",
+                    size = payload?.optInt("size", 0) ?: 0
+                )
             }
         } catch (e: Exception) { emptyList() }
     }
@@ -4860,6 +4977,49 @@ data class GHPullReview(
 data class GHComment(val id: Long, val body: String, val author: String, val avatarUrl: String, val createdAt: String)
 
 data class GHContributor(val login: String, val avatarUrl: String, val contributions: Int)
+
+data class GHTrafficSeries(
+    val count: Int,
+    val uniques: Int,
+    val items: List<GHTrafficPoint>
+)
+
+data class GHTrafficPoint(
+    val timestamp: String,
+    val count: Int,
+    val uniques: Int
+)
+
+data class GHTrafficReferrer(
+    val referrer: String,
+    val count: Int,
+    val uniques: Int
+)
+
+data class GHTrafficPath(
+    val path: String,
+    val title: String,
+    val count: Int,
+    val uniques: Int
+)
+
+data class GHRepoPerson(
+    val login: String,
+    val avatarUrl: String,
+    val htmlUrl: String,
+    val starredAt: String = ""
+)
+
+data class GHRepoEvent(
+    val id: String,
+    val type: String,
+    val actor: String,
+    val createdAt: String,
+    val action: String,
+    val ref: String,
+    val refType: String,
+    val size: Int
+)
 
 data class GHRelease(
     val tag: String,

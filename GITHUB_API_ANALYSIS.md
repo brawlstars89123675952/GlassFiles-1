@@ -40,6 +40,13 @@ items.
 | List starred repos | `/user/starred` | ✅ | ✅ | StarredScreen |
 | Get README | `/repos/{owner}/{repo}/readme` | ✅ | ✅ | README tab |
 | Get languages | `/repos/{owner}/{repo}/languages` | ✅ | ✅ | README tab |
+| Repo traffic views | `/repos/{owner}/{repo}/traffic/views` | ✅ | ✅ | Repo insights traffic tab |
+| Repo traffic clones | `/repos/{owner}/{repo}/traffic/clones` | ✅ | ✅ | Repo insights traffic tab |
+| Repo referrers | `/repos/{owner}/{repo}/traffic/popular/referrers` | ✅ | ✅ | Repo insights traffic tab |
+| Repo paths | `/repos/{owner}/{repo}/traffic/popular/paths` | ✅ | ✅ | Repo insights traffic tab |
+| Repo stargazers | `/repos/{owner}/{repo}/stargazers` | ✅ | ✅ | Repo insights people tab |
+| Repo watchers | `/repos/{owner}/{repo}/subscribers` | ✅ | ✅ | Repo insights people tab |
+| Repo events | `/repos/{owner}/{repo}/events` | ✅ | ✅ | Repo insights events tab |
 | Get contributors | `/repos/{owner}/{repo}/contributors` | ✅ | ✅ | README tab |
 | Search code | `/search/code` | ✅ | ✅ | CodeSearchTab |
 | Update repo settings | `/repos/{owner}/{repo}` (PATCH) | ✅ | ✅ | Description, homepage, features, merge settings, archive |
@@ -332,13 +339,6 @@ None currently tracked.
 | Rename default branch | `/repos/{owner}/{repo}/branches/{branch}/rename` (POST) | Low | |
 | Required signatures | `/repos/{owner}/{repo}/branches/{branch}/protection/required_signatures` | Low | |
 | Repo invites | `/repos/{owner}/{repo}/invitations` | Low | |
-| Repo traffic | `/repos/{owner}/{repo}/traffic/views` | Low | Analytics |
-| Repo clones | `/repos/{owner}/{repo}/traffic/clones` | Low | Analytics |
-| Repo referrers | `/repos/{owner}/{repo}/traffic/popular/referrers` | Low | Analytics |
-| Repo paths | `/repos/{owner}/{repo}/traffic/popular/paths` | Low | Analytics |
-| Repo stargazers | `/repos/{owner}/{repo}/stargazers` | Low | List who starred |
-| Repo watchers | `/repos/{owner}/{repo}/subscribers` | Low | List who watches |
-| Repo events | `/repos/{owner}/{repo}/events` | Low | Activity feed |
 
 ### Issues (Advanced)
 | Feature | API Endpoint | Priority | Notes |
@@ -392,7 +392,7 @@ None currently tracked.
 | Area | Status | Remaining gaps |
 |------|--------|----------------|
 | Authentication & User | ✅ Complete | None tracked |
-| Repositories / Files | ✅ Complete for core mobile flows | Merge branch, transfer/rename/default-branch admin, repo invites, traffic analytics, stargazers/watchers/events |
+| Repositories / Files | ✅ Complete for core mobile flows | Merge branch, transfer/rename/default-branch admin, repo invites |
 | Branches | ✅ Complete for list/create/delete/switch | Required signatures and other advanced protection sub-resources |
 | Commits / Compare | ✅ Complete for current UI | Low-level Git Data endpoints remain mostly internal or unsurfaced |
 | Issues | ✅ Complete for main issue flow | Deeper timeline event actions |
@@ -443,13 +443,13 @@ None currently tracked.
 
 **Not Implemented / Early Coverage — Major Gaps:**
 - ⚠️ Git Data standalone UI/API surface.
-- ⚠️ Repository analytics/admin extras: traffic, stargazers/watchers/events, transfer, branch rename, invitations.
+- ⚠️ Repository admin extras: transfer, default branch rename, invitations.
 - ⚠️ Deeper issue timeline event actions.
 - ⚠️ GitHub Apps/OAuth and Enterprise-only APIs.
 
 ### Recommendations for Next Implementation
 
 **Low Priority (nice to have):**
-1. **Repository analytics/admin extras** — traffic, stargazers/watchers/events, transfer and branch rename.
-2. **Standalone Git Data tools** — tree/blob/tag/ref viewers only if a concrete workflow needs them.
-3. **Single workflow detail** — wire `/actions/workflows/{id}` only if the workflow overview needs a separate detail screen.
+1. **Standalone Git Data tools** — tree/blob/tag/ref viewers only if a concrete workflow needs them.
+2. **Single workflow detail** — wire `/actions/workflows/{id}` only if the workflow overview needs a separate detail screen.
+3. **Repository admin extras** — transfer, branch rename and invitations.

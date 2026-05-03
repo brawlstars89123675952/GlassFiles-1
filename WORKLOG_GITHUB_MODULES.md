@@ -1260,3 +1260,23 @@
 - Проверка:
   - локальная Android сборка не запускалась по прямой просьбе пользователя;
   - выполнена только статическая проверка `git diff --check`.
+
+### GitHub repository insights: traffic, people, events
+- Закрыт следующий repository analytics/activity gap из `GITHUB_API_ANALYSIS.md`.
+- `GitHubManager.kt`:
+  - добавлены traffic endpoints: views, clones, popular referrers, popular paths;
+  - добавлены people/activity endpoints: stargazers, subscribers/watchers, repository events;
+  - добавлены модели `GHTrafficSeries`, `GHTrafficPoint`, `GHTrafficReferrer`, `GHTrafficPath`, `GHRepoPerson`, `GHRepoEvent`.
+- `GitHubRepoModule.kt`:
+  - в repo overflow добавлен terminal action `insights`;
+  - добавлен `RepoInsightsScreen` с tabs `traffic / people / events`;
+  - traffic tab показывает totals, day bars, referrers и paths;
+  - people tab показывает stargazers и watchers;
+  - events tab показывает repository activity feed;
+  - UI выполнен через terminal controls, border/surface cards и mono text без добавления Material UI.
+- `GITHUB_API_ANALYSIS.md`:
+  - traffic/stargazers/watchers/events перенесены из backlog в implemented;
+  - remaining repository gaps сужены до admin extras: transfer, branch rename, invitations.
+- Проверка:
+  - локальная Android сборка не запускалась по прямой просьбе пользователя;
+  - выполнена только статическая проверка `git diff --check`.
