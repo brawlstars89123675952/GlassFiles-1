@@ -28,6 +28,10 @@ object AceMusicProvider : AiProvider {
         "acemusic/acestep-v15-turbo",
         "acemusic/acestep-v15-turbo-shift3",
     )
+    private val fallbackModelNames = mapOf(
+        "acemusic/acestep-v15-turbo" to "ACE-Step v1.5 Turbo",
+        "acemusic/acestep-v15-turbo-shift3" to "ACE-Step v1.5 Turbo Shift3",
+    )
 
     override suspend fun listModels(context: Context, apiKey: String): List<AiModel> = withContext(Dispatchers.IO) {
         runCatching {
@@ -155,16 +159,19 @@ object AceMusicProvider : AiProvider {
         val defaultModel = (data as? JSONObject)?.optString("default_model", "").orEmpty()
         return (0 until models.length()).mapNotNull { i ->
             val item = models.opt(i)
-            val name = when (item) {
-                is JSONObject -> item.optString("name", item.optString("id", ""))
+            val rawId = when (item) {
+                is JSONObject -> firstPresentString(item, "id", "model", "name")
                 is String -> item
                 else -> ""
             }
-            if (name.isBlank()) return@mapNotNull null
+            val modelId = normalizeModelId(rawId)
+            if (modelId.isBlank()) return@mapNotNull null
+            val label = (item as? JSONObject)?.let { firstPresentString(it, "name", "display_name", "label") }.orEmpty()
+            val isDefault = item is JSONObject && item.optBoolean("is_default", false) || modelId == normalizeModelId(defaultModel)
             AiModel(
                 providerId = id,
-                id = name,
-                displayName = if (name == defaultModel) "$name · default" else name,
+                id = modelId,
+                displayName = displayNameForModel(modelId, label, isDefault),
                 capabilities = setOf(AiCapability.MUSIC_GEN),
             )
         }
@@ -280,14 +287,35 @@ object AceMusicProvider : AiProvider {
         AiModel(
             providerId = id,
             id = name,
-            displayName = name,
+            displayName = displayNameForModel(name, fallbackModelNames[name].orEmpty(), isDefault = name == fallbackModels.first()),
             capabilities = setOf(AiCapability.MUSIC_GEN),
         )
     }
 
     private fun completionModelId(modelId: String): String {
-        val clean = modelId.trim().ifBlank { fallbackModels.first() }
+        val clean = normalizeModelId(modelId).ifBlank { fallbackModels.first() }
         return if ('/' in clean) clean else "acemusic/$clean"
+    }
+
+    private fun normalizeModelId(raw: String): String {
+        val clean = raw.trim()
+        if (clean.isBlank()) return clean
+        if (clean.equals("ACE Step", ignoreCase = true) || clean.equals("ACE Steps", ignoreCase = true)) {
+            return fallbackModels.first()
+        }
+        return if (clean.any(Char::isWhitespace) && '/' !in clean) fallbackModels.first() else clean
+    }
+
+    private fun displayNameForModel(modelId: String, label: String, isDefault: Boolean): String {
+        val shortId = modelId.substringAfterLast('/')
+        val cleanLabel = label.trim()
+        val base = when {
+            cleanLabel.isBlank() -> fallbackModelNames[modelId] ?: shortId
+            cleanLabel == modelId || cleanLabel == shortId -> shortId
+            shortId in cleanLabel -> cleanLabel
+            else -> "$cleanLabel · $shortId"
+        }
+        return if (isDefault && "default" !in base.lowercase()) "$base · default" else base
     }
 
     private fun completionPrompt(request: AiMusicRequest): String {

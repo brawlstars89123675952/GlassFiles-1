@@ -118,10 +118,11 @@ object ModelRegistry {
                 val caps = (0 until capsArr.length())
                     .mapNotNull { runCatching { AiCapability.valueOf(capsArr.getString(it)) }.getOrNull() }
                     .toSet()
+                val id = normalizeCachedId(provider, o.getString("id"))
                 AiModel(
                     providerId = provider,
-                    id = o.getString("id"),
-                    displayName = o.optString("name", o.getString("id")),
+                    id = id,
+                    displayName = normalizeCachedDisplayName(provider, id, o.optString("name", id)),
                     capabilities = caps,
                     contextWindow = o.optInt("ctx").takeIf { it > 0 },
                     deprecated = o.optBoolean("dep", false),
@@ -130,6 +131,22 @@ object ModelRegistry {
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    private fun normalizeCachedId(provider: AiProviderId, rawId: String): String {
+        val clean = rawId.trim()
+        if (provider != AiProviderId.ACEMUSIC) return clean
+        if (clean.equals("ACE Step", ignoreCase = true) || clean.equals("ACE Steps", ignoreCase = true)) {
+            return "acemusic/acestep-v15-turbo"
+        }
+        return if (clean.any(Char::isWhitespace) && '/' !in clean) "acemusic/acestep-v15-turbo" else clean
+    }
+
+    private fun normalizeCachedDisplayName(provider: AiProviderId, id: String, rawName: String): String {
+        val clean = rawName.trim().ifBlank { id }
+        if (provider != AiProviderId.ACEMUSIC) return clean
+        val shortId = id.substringAfterLast('/')
+        return if (shortId !in clean) "$clean · $shortId" else clean
     }
 
     private fun writeCache(context: Context, provider: AiProviderId, models: List<AiModel>) {
