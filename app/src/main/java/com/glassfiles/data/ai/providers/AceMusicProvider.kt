@@ -113,6 +113,9 @@ object AceMusicProvider : AiProvider {
             throw RuntimeException(
                 buildString {
                     append(e.message ?: "${id.displayName} HTTP ${e.statusCode}")
+                    if (e.statusCode == 404 && auth.baseUrl == DEFAULT_BASE_URL) {
+                        append("\n${id.displayName}: api.acemusic.ai does not expose the documented ACE-Step /release_task endpoint. Ask support for the ACE-Step API server base URL and save it as https://host|key in API Keys.")
+                    }
                     append("\nendpoint=/release_task")
                     append("\nbase_url=")
                     append(auth.baseUrl)
@@ -377,7 +380,11 @@ object AceMusicProvider : AiProvider {
         if (clean.equals("acestep/ACE-Step-v1.5", ignoreCase = true)) {
             return NATIVE_DEFAULT_MODEL
         }
-        return clean.substringAfterLast('/')
+        return when (val short = clean.substringAfterLast('/')) {
+            "acestep-v1.5-turbo" -> "acestep-v15-turbo"
+            "acestep-v1.5-turbo-shift3" -> "acestep-v15-turbo-shift3"
+            else -> short
+        }
     }
 
     private fun displayNameForModel(modelId: String, label: String, isDefault: Boolean): String {

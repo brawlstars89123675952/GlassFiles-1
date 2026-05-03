@@ -133,7 +133,15 @@ object ModelRegistry {
         }
     }
 
-    private fun normalizeCachedId(_provider: AiProviderId, rawId: String): String = rawId.trim()
+    private fun normalizeCachedId(provider: AiProviderId, rawId: String): String {
+        val clean = rawId.trim()
+        if (provider != AiProviderId.ACEMUSIC) return clean
+        return when (clean.substringAfterLast('/').lowercase()) {
+            "acestep-v1.5-turbo" -> "acestep-v15-turbo"
+            "acestep-v1.5-turbo-shift3" -> "acestep-v15-turbo-shift3"
+            else -> clean
+        }
+    }
 
     private fun normalizeCachedDisplayName(provider: AiProviderId, id: String, rawName: String): String {
         val clean = rawName.trim().ifBlank { id }
