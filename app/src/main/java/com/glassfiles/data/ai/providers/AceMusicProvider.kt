@@ -10,9 +10,11 @@ import com.glassfiles.data.ai.providers.acemusic.AceMusicChatMessage
 import com.glassfiles.data.ai.providers.acemusic.AceMusicCompletionAudioConfig
 import com.glassfiles.data.ai.providers.acemusic.AceMusicCompletionRequest
 import com.glassfiles.data.ai.providers.acemusic.AceMusicGenerationRequest
+import com.glassfiles.data.ai.providers.acemusic.AceMusicHttpDebugException
 import com.glassfiles.data.ai.providers.acemusic.AceMusicNetwork
 import com.glassfiles.data.ai.providers.acemusic.AceMusicRepository
 import com.glassfiles.data.ai.providers.acemusic.AceMusicTaskRecord
+import com.google.gson.Gson
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,16 +38,17 @@ object AceMusicProvider : AiProvider {
 
     private const val DEFAULT_BASE_URL = "https://api.acemusic.ai"
     private const val MODEL_ALIAS = "ACE Steps"
+    private const val CLOUD_REFERENCE_MODEL = "acestep/ACE-Step-v1.5"
+    private const val NATIVE_DEFAULT_MODEL = "acestep-v15-turbo"
     private const val POLL_INTERVAL_MS = 3_000L
     private const val GENERATION_TIMEOUT_MS = 11 * 60_000L
     private val fallbackModels = listOf(
-        "acestep-v15-turbo",
-        "acestep-v15-turbo-shift3",
+        MODEL_ALIAS,
     )
     private val fallbackModelNames = mapOf(
-        "acestep-v15-turbo" to "ACE-Step v1.5 Turbo",
-        "acestep-v15-turbo-shift3" to "ACE-Step v1.5 Turbo Shift3",
+        MODEL_ALIAS to MODEL_ALIAS,
     )
+    private val completionDebugGson = Gson()
 
     override suspend fun listModels(context: Context, apiKey: String): List<AiModel> = withContext(Dispatchers.IO) {
         runCatching {
@@ -108,7 +111,9 @@ object AceMusicProvider : AiProvider {
         val repo = repository(auth)
         if (auth.apiMode == AceMusicApiMode.COMPLETION) {
             onProgress("generating:completion")
-            return postCompletion(repo, modelId, request)
+            val resolvedModelId = resolveCompletionModelId(repo, modelId)
+            onProgress("model:$resolvedModelId")
+            return postCompletion(repo, resolvedModelId, request)
         }
         val release = repo.releaseTaskOrThrow(generationRequest(modelId, request))
         val taskId = release.taskId.orEmpty()
@@ -122,8 +127,33 @@ object AceMusicProvider : AiProvider {
         modelId: String,
         request: AiMusicRequest,
     ): JSONObject {
-        val raw = repo.createCompletionRawOrThrow(completionRequest(modelId, request))
+        val body = completionRequest(modelId, request)
+        val debugJson = completionDebugGson.toJson(body)
+        val raw = try {
+            repo.createCompletionRawOrThrow(body)
+        } catch (e: AceMusicHttpDebugException) {
+            throw RuntimeException(
+                buildString {
+                    append(e.message ?: "${id.displayName} HTTP ${e.statusCode}")
+                    append("\nendpoint=/v1/chat/completions")
+                    append("\nrequest=")
+                    append(debugJson.take(4_000))
+                },
+                e,
+            )
+        }
         return JSONObject(raw).also { ensureCompletionOk(it) }
+    }
+
+    private suspend fun resolveCompletionModelId(repo: AceMusicRepository, selectedModelId: String): String {
+        val selected = selectedModelId.trim()
+        if (selected.shouldRefreshCompletionModel()) {
+            val liveModel = runCatching {
+                parseFirstLiveModelId(repo.listModelsRawOrThrow())
+            }.getOrNull().orEmpty()
+            if (liveModel.isNotBlank()) return liveModel
+        }
+        return completionFallbackModelId(selected)
     }
 
     private suspend fun pollTaskResult(
@@ -200,9 +230,10 @@ object AceMusicProvider : AiProvider {
             .ifBlank { record.result.orEmpty() }
             .ifBlank { "unknown error" }
 
-    private fun completionRequest(modelId: String, request: AiMusicRequest): AceMusicCompletionRequest =
-        AceMusicCompletionRequest(
-            model = completionModelId(modelId),
+    private fun completionRequest(modelId: String, request: AiMusicRequest): AceMusicCompletionRequest {
+        val simpleMode = completionSimpleMode(request)
+        return AceMusicCompletionRequest(
+            model = modelId.trim().ifBlank { MODEL_ALIAS },
             messages = listOf(
                 AceMusicChatMessage(
                     role = "user",
@@ -211,23 +242,23 @@ object AceMusicProvider : AiProvider {
             ),
             stream = false,
             thinking = request.thinking,
-            useFormat = request.useFormat,
-            sampleMode = request.sampleMode,
-            useCotCaption = request.useCotCaption,
-            useCotLanguage = request.useCotLanguage,
-            audioConfig = AceMusicCompletionAudioConfig(
-                format = request.audioFormat,
-                vocalLanguage = request.vocalLanguage,
-                duration = request.durationSec?.takeIf { it > 0f }?.coerceIn(10f, 600f),
-                bpm = request.bpm?.takeIf { it > 0 }?.coerceIn(30, 300),
-            ),
-            guidanceScale = request.guidanceScale.takeIf { it != 7f },
-            seed = request.seed?.takeIf { !request.useRandomSeed },
-            batchSize = request.batchSize.takeIf { it > 1 }?.coerceIn(2, 8),
+            useFormat = if (simpleMode) null else request.useFormat,
+            sampleMode = if (simpleMode) true else null,
+            audioConfig = if (simpleMode) {
+                null
+            } else {
+                AceMusicCompletionAudioConfig(
+                    format = request.audioFormat,
+                    vocalLanguage = request.vocalLanguage,
+                    duration = request.durationSec?.takeIf { it > 0f }?.toInt()?.coerceIn(10, 600),
+                    bpm = request.bpm?.takeIf { it > 0 }?.coerceIn(30, 300),
+                )
+            },
         )
+    }
 
     private fun completionMessage(request: AiMusicRequest): String {
-        if (request.sampleMode) return request.sampleQuery.ifBlank { request.prompt }
+        if (completionSimpleMode(request)) return request.sampleQuery.ifBlank { request.prompt }
         val prompt = request.prompt.ifBlank { request.sampleQuery }
         return buildString {
             append("<prompt>")
@@ -240,6 +271,9 @@ object AceMusicProvider : AiProvider {
             }
         }
     }
+
+    private fun completionSimpleMode(request: AiMusicRequest): Boolean =
+        request.sampleMode || request.lyrics.isBlank()
 
     private fun downloadAudio(fileValue: String, auth: AceMusicAuth, target: File) {
         val url = when {
@@ -289,10 +323,11 @@ object AceMusicProvider : AiProvider {
                 is String -> item
                 else -> ""
             }
-            val modelId = normalizeModelId(rawId)
+            val modelId = rawId.trim()
             if (modelId.isBlank()) return@mapNotNull null
             val label = (item as? JSONObject)?.let { firstPresentString(it, "name", "display_name", "label") }.orEmpty()
-            val isDefault = item is JSONObject && item.optBoolean("is_default", false) || modelId == normalizeModelId(defaultModel)
+            val isDefault = item is JSONObject && item.optBoolean("is_default", false) ||
+                defaultModel.isNotBlank() && modelId.equals(defaultModel, ignoreCase = true)
             AiModel(
                 providerId = id,
                 id = modelId,
@@ -300,6 +335,33 @@ object AceMusicProvider : AiProvider {
                 capabilities = setOf(AiCapability.MUSIC_GEN),
             )
         }
+    }
+
+    private fun parseFirstLiveModelId(raw: String): String {
+        val root = JSONObject(raw).also { ensureApiOk(it) }
+        val data = root.opt("data")
+        val defaultModel = when (data) {
+            is JSONObject -> firstPresentString(data, "default_model", "defaultModel")
+            else -> firstPresentString(root, "default_model", "defaultModel")
+        }
+        if (defaultModel.isNotBlank()) return defaultModel.trim()
+
+        val models = when (data) {
+            is JSONObject -> data.optJSONArray("models")
+            is JSONArray -> data
+            else -> root.optJSONArray("models")
+        } ?: return ""
+
+        for (i in 0 until models.length()) {
+            val item = models.opt(i)
+            val modelId = when (item) {
+                is JSONObject -> firstPresentString(item, "id", "model", "name")
+                is String -> item
+                else -> ""
+            }.trim()
+            if (modelId.isNotBlank()) return modelId
+        }
+        return ""
     }
 
     private fun parseResultRecords(value: Any?): List<JSONObject> {
@@ -432,32 +494,48 @@ object AceMusicProvider : AiProvider {
     }
 
     private fun generationModelId(modelId: String): String {
-        val clean = normalizeModelId(modelId).ifBlank { fallbackModels.first() }
+        val clean = modelId.trim().ifBlank { NATIVE_DEFAULT_MODEL }
+        if (clean.equals(MODEL_ALIAS, ignoreCase = true) || clean.equals("ACE Step", ignoreCase = true)) {
+            return NATIVE_DEFAULT_MODEL
+        }
+        if (clean.equals(CLOUD_REFERENCE_MODEL, ignoreCase = true)) {
+            return NATIVE_DEFAULT_MODEL
+        }
         return clean.substringAfterLast('/')
     }
 
-    private fun completionModelId(modelId: String): String {
-        val clean = normalizeModelId(modelId).ifBlank { fallbackModels.first() }
-        return when {
-            clean.startsWith("acemusic/", ignoreCase = true) -> clean
-            clean.startsWith("acestep/", ignoreCase = true) -> "acemusic/${clean.substringAfter('/')}"
-            "/" in clean -> clean
-            else -> "acemusic/$clean"
-        }
-    }
-
-    private fun normalizeModelId(raw: String): String {
-        val clean = raw.trim()
+    private fun completionFallbackModelId(modelId: String): String {
+        val clean = modelId.trim()
         val short = clean.substringAfterLast('/')
         return when {
-            clean.equals(MODEL_ALIAS, ignoreCase = true) -> fallbackModels.first()
-            clean.equals("ACE Step", ignoreCase = true) -> fallbackModels.first()
-            clean.equals("ACE-Step-v1.5", ignoreCase = true) -> fallbackModels.first()
-            short.equals("acestep-v1.5-turbo", ignoreCase = true) -> fallbackModels.first()
-            short.equals("acestep-v1.5-turbo-shift3", ignoreCase = true) -> fallbackModels[1]
+            clean.isBlank() -> MODEL_ALIAS
+            clean.equals(MODEL_ALIAS, ignoreCase = true) -> MODEL_ALIAS
+            clean.equals("ACE Step", ignoreCase = true) -> MODEL_ALIAS
+            clean.equals("ACE-Step-v1.5", ignoreCase = true) -> CLOUD_REFERENCE_MODEL
+            clean.startsWith("acemusic/", ignoreCase = true) && short.isLegacyAceStepModel() -> MODEL_ALIAS
+            short.isLegacyAceStepModel() -> MODEL_ALIAS
             else -> clean
         }
     }
+
+    private fun String.shouldRefreshCompletionModel(): Boolean {
+        val clean = trim()
+        val short = clean.substringAfterLast('/')
+        return when {
+            clean.isBlank() -> true
+            clean.equals(MODEL_ALIAS, ignoreCase = true) -> true
+            clean.equals("ACE Step", ignoreCase = true) -> true
+            clean.startsWith("acemusic/", ignoreCase = true) && short.isLegacyAceStepModel() -> true
+            short.isLegacyAceStepModel() -> true
+            else -> false
+        }
+    }
+
+    private fun String.isLegacyAceStepModel(): Boolean =
+        equals("acestep-v15-turbo", ignoreCase = true) ||
+            equals("acestep-v15-turbo-shift3", ignoreCase = true) ||
+            equals("acestep-v1.5-turbo", ignoreCase = true) ||
+            equals("acestep-v1.5-turbo-shift3", ignoreCase = true)
 
     private fun displayNameForModel(modelId: String, label: String, isDefault: Boolean): String {
         val shortId = modelId.substringAfterLast('/')

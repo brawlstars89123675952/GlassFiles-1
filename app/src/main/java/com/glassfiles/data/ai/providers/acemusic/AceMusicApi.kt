@@ -31,12 +31,12 @@ data class AceMusicCompletionRequest(
     @SerializedName("model") val model: String,
     @SerializedName("messages") val messages: List<AceMusicChatMessage>,
     @SerializedName("stream") val stream: Boolean = false,
-    @SerializedName("thinking") val thinking: Boolean = true,
-    @SerializedName("use_format") val useFormat: Boolean = false,
-    @SerializedName("sample_mode") val sampleMode: Boolean = false,
-    @SerializedName("use_cot_caption") val useCotCaption: Boolean = true,
-    @SerializedName("use_cot_language") val useCotLanguage: Boolean = false,
-    @SerializedName("audio_config") val audioConfig: AceMusicCompletionAudioConfig,
+    @SerializedName("thinking") val thinking: Boolean? = true,
+    @SerializedName("use_format") val useFormat: Boolean? = null,
+    @SerializedName("sample_mode") val sampleMode: Boolean? = null,
+    @SerializedName("use_cot_caption") val useCotCaption: Boolean? = null,
+    @SerializedName("use_cot_language") val useCotLanguage: Boolean? = null,
+    @SerializedName("audio_config") val audioConfig: AceMusicCompletionAudioConfig? = null,
     @SerializedName("guidance_scale") val guidanceScale: Float? = null,
     @SerializedName("seed") val seed: Int? = null,
     @SerializedName("batch_size") val batchSize: Int? = null,
@@ -50,7 +50,7 @@ data class AceMusicChatMessage(
 data class AceMusicCompletionAudioConfig(
     @SerializedName("format") val format: String = "mp3",
     @SerializedName("vocal_language") val vocalLanguage: String = "en",
-    @SerializedName("duration") val duration: Float? = null,
+    @SerializedName("duration") val duration: Int? = null,
     @SerializedName("bpm") val bpm: Int? = null,
 )
 

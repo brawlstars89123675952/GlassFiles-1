@@ -133,11 +133,34 @@ object ModelRegistry {
         }
     }
 
-    private fun normalizeCachedId(_provider: AiProviderId, rawId: String): String = rawId.trim()
+    private fun normalizeCachedId(provider: AiProviderId, rawId: String): String {
+        val clean = rawId.trim()
+        if (provider != AiProviderId.ACEMUSIC) return clean
+        val short = clean.substringAfterLast('/')
+        return when {
+            clean.equals("ACE Step", ignoreCase = true) -> "ACE Steps"
+            clean.equals("ACE Steps", ignoreCase = true) -> "ACE Steps"
+            clean.startsWith("acemusic/", ignoreCase = true) && short.isLegacyAceStepModel() -> "ACE Steps"
+            short.isLegacyAceStepModel() -> "ACE Steps"
+            else -> clean
+        }
+    }
+
+    private fun String.isLegacyAceStepModel(): Boolean =
+        equals("acestep-v15-turbo", ignoreCase = true) ||
+            equals("acestep-v15-turbo-shift3", ignoreCase = true) ||
+            equals("acestep-v1.5-turbo", ignoreCase = true) ||
+            equals("acestep-v1.5-turbo-shift3", ignoreCase = true)
 
     private fun normalizeCachedDisplayName(provider: AiProviderId, id: String, rawName: String): String {
         val clean = rawName.trim().ifBlank { id }
         if (provider != AiProviderId.ACEMUSIC) return clean
+        if (id.equals("ACE Steps", ignoreCase = true)) {
+            val lower = clean.lowercase()
+            if ("acestep-v15" in lower || "acestep-v1.5" in lower || "ace-step v1.5" in lower) {
+                return "ACE Steps"
+            }
+        }
         val shortId = id.substringAfterLast('/')
         return if (shortId !in clean) "$clean · $shortId" else clean
     }
