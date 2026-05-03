@@ -2,15 +2,15 @@ package com.glassfiles.data.ai.providers
 
 import android.content.Context
 import android.util.Base64
-import com.glassfiles.data.ai.providers.acemusic.AceMusicAudioConfig
-import com.glassfiles.data.ai.providers.acemusic.AceMusicChatMessage
-import com.glassfiles.data.ai.providers.acemusic.AceMusicCompletionRequest
-import com.glassfiles.data.ai.providers.acemusic.AceMusicNetwork
-import com.glassfiles.data.ai.providers.acemusic.AceMusicRepository
-import com.google.gson.Gson
 import com.glassfiles.data.ai.models.AiCapability
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
+import com.glassfiles.data.ai.providers.acemusic.AceMusicAuthMode
+import com.glassfiles.data.ai.providers.acemusic.AceMusicGenerationRequest
+import com.glassfiles.data.ai.providers.acemusic.AceMusicNetwork
+import com.glassfiles.data.ai.providers.acemusic.AceMusicRepository
+import com.glassfiles.data.ai.providers.acemusic.AceMusicTaskRecord
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -23,24 +23,24 @@ import java.net.URLEncoder
 /**
  * Official ACEMusic / ACE-Step cloud API.
  *
- * Music generation is a separate flow from chat/image/video:
- * the public hosted service uses the OpenAI-compatible
- * `/v1/chat/completions` endpoint and returns audio inline.
+ * Music generation is a separate flow from chat/image/video.
+ * The native ACE-Step API submits a task via `/release_task`,
+ * then polls `/query_result` until the generated audio file is ready.
  */
 object AceMusicProvider : AiProvider {
     override val id: AiProviderId = AiProviderId.ACEMUSIC
 
     private const val DEFAULT_BASE_URL = "https://api.acemusic.ai"
-    private const val CLOUD_MODEL_ALIAS = "ACE Steps"
-    private const val CLOUD_MODEL_ALIAS_SINGULAR = "ACE Step"
-    private val gson = Gson()
+    private const val MODEL_ALIAS = "ACE Steps"
+    private const val POLL_INTERVAL_MS = 3_000L
+    private const val GENERATION_TIMEOUT_MS = 11 * 60_000L
     private val fallbackModels = listOf(
-        "acestep/acestep-v15-turbo",
-        "acestep/acestep-v15-turbo-shift3",
+        "acestep-v15-turbo",
+        "acestep-v15-turbo-shift3",
     )
     private val fallbackModelNames = mapOf(
-        "acestep/acestep-v15-turbo" to "ACE-Step v1.5 Turbo",
-        "acestep/acestep-v15-turbo-shift3" to "ACE-Step v1.5 Turbo Shift3",
+        "acestep-v15-turbo" to "ACE-Step v1.5 Turbo",
+        "acestep-v15-turbo-shift3" to "ACE-Step v1.5 Turbo Shift3",
     )
 
     override suspend fun listModels(context: Context, apiKey: String): List<AiModel> = withContext(Dispatchers.IO) {
@@ -69,9 +69,9 @@ object AceMusicProvider : AiProvider {
         onProgress: (String) -> Unit,
     ): List<AiMusicResult> = withContext(Dispatchers.IO) {
         onProgress("submit")
-        val completion = createMusicCompletion(modelId, request, apiKey, onProgress)
-        val taskId = completion.optString("id", "acemusic-${System.currentTimeMillis()}")
-        val records = parseCompletionAudio(completion, request)
+        val taskResult = createMusicTaskResult(modelId, request, apiKey, onProgress)
+        val taskId = taskResult.optString("id", "acemusic-${System.currentTimeMillis()}")
+        val records = parseTaskAudio(taskResult, request)
         val outDir = File(context.cacheDir, "ai_music").apply { mkdirs() }
         val auth = parseAuth(apiKey)
         records.mapIndexed { index, payload ->
@@ -94,7 +94,7 @@ object AceMusicProvider : AiProvider {
         }
     }
 
-    private suspend fun createMusicCompletion(
+    private suspend fun createMusicTaskResult(
         modelId: String,
         request: AiMusicRequest,
         apiKey: String,
@@ -102,42 +102,86 @@ object AceMusicProvider : AiProvider {
     ): JSONObject {
         val auth = parseAuth(apiKey)
         val repo = repository(auth)
-        val attempts = completionAttempts(modelId)
-        var lastRetryable: Throwable? = null
-        var lastAttempt: CompletionAttempt? = null
+        val release = repo.releaseTaskOrThrow(generationRequest(modelId, request))
+        val taskId = release.taskId.orEmpty()
+        if (taskId.isBlank()) throw RuntimeException("${id.displayName}: release_task returned empty task_id")
+        onProgress("queued")
+        return pollTaskResult(repo, taskId, onProgress)
+    }
 
-        attempts.forEachIndexed { index, attempt ->
-            if (index > 0) onProgress("retry:${attempt.mode.statusName}")
-            try {
-                return postCompletion(attempt.modelId, request, auth, repo, attempt.mode, onProgress)
-            } catch (e: Exception) {
-                if (!e.isRetryableCloudError()) throw e
-                lastRetryable = e
-                lastAttempt = attempt
+    private suspend fun pollTaskResult(
+        repo: AceMusicRepository,
+        taskId: String,
+        onProgress: (String) -> Unit,
+    ): JSONObject {
+        val deadline = System.currentTimeMillis() + GENERATION_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            delay(POLL_INTERVAL_MS)
+            val records = repo.queryResultOrThrow(listOf(taskId))
+            val record = records.firstOrNull { it.taskId == taskId } ?: records.firstOrNull()
+            if (record == null) {
+                onProgress("poll:empty")
+                continue
+            }
+            when (record.status) {
+                1 -> return taskRecordToJson(taskId, record)
+                2 -> throw RuntimeException("${id.displayName}: task failed: ${taskErrorText(record)}")
+                else -> onProgress("poll:${record.status ?: 0}")
             }
         }
+        throw RuntimeException("${id.displayName}: generation timed out for task $taskId")
+    }
 
-        val attemptLabel = lastAttempt?.let { "${it.modelId}/${it.mode.statusName}" } ?: "unknown"
-        throw RuntimeException(
-            "${id.displayName}: generation failed after ${attempts.size} ACEMusic payload variants. " +
-                "Last attempt=$attemptLabel. Last error: ${lastRetryable?.message ?: "unknown error"}",
-            lastRetryable,
+    private fun generationRequest(modelId: String, request: AiMusicRequest): AceMusicGenerationRequest {
+        val prompt = if (request.sampleMode) "" else request.prompt.ifBlank { request.sampleQuery }
+        val sampleQuery = if (request.sampleMode) request.sampleQuery.ifBlank { request.prompt } else ""
+        return AceMusicGenerationRequest(
+            prompt = prompt,
+            model = generationModelId(modelId),
+            audioDurationSec = (request.durationSec ?: 30f).toInt().coerceIn(10, 600),
+            lyrics = if (request.sampleMode) "" else request.lyrics,
+            thinking = request.thinking,
+            vocalLanguage = request.vocalLanguage,
+            audioFormat = request.audioFormat,
+            sampleMode = request.sampleMode,
+            sampleQuery = sampleQuery,
+            useFormat = request.useFormat,
+            bpm = request.bpm?.takeIf { it > 0 }?.coerceIn(30, 300),
+            keyScale = request.keyScale,
+            timeSignature = request.timeSignature.toAceTimeSignature(),
+            inferenceSteps = request.inferenceSteps.coerceIn(1, 200),
+            guidanceScale = request.guidanceScale,
+            useRandomSeed = request.useRandomSeed,
+            seed = request.seed?.takeIf { !request.useRandomSeed } ?: -1,
+            batchSize = request.batchSize.coerceIn(1, 8),
+            shift = request.shift.coerceIn(1f, 5f),
+            inferMethod = request.inferMethod.ifBlank { "ode" },
+            timesteps = request.timesteps.takeIf { it.isNotBlank() },
+            useAdg = request.useAdg,
+            cfgIntervalStart = request.cfgIntervalStart,
+            cfgIntervalEnd = request.cfgIntervalEnd,
+            useCotCaption = request.useCotCaption,
+            useCotLanguage = request.useCotLanguage,
+            constrainedDecoding = request.constrainedDecoding,
+            allowLmBatch = request.allowLmBatch,
+            lmTemperature = request.lmTemperature,
+            lmCfgScale = request.lmCfgScale,
+            lmNegativePrompt = request.lmNegativePrompt.takeIf { it.isNotBlank() },
+            lmTopK = request.lmTopK?.takeIf { it > 0 },
+            lmTopP = request.lmTopP,
+            lmRepetitionPenalty = request.lmRepetitionPenalty,
         )
     }
 
-    private suspend fun postCompletion(
-        modelId: String,
-        request: AiMusicRequest,
-        auth: AceMusicAuth,
-        repo: AceMusicRepository,
-        mode: CompletionPayloadMode,
-        onProgress: (String) -> Unit,
-    ): JSONObject {
-        val body = completionRequest(modelId, request, auth, mode)
-        onProgress("generating:${mode.statusName}")
-        val response = repo.createCompletionOrThrow(body)
-        return JSONObject(gson.toJson(response)).also { ensureCompletionOk(it) }
-    }
+    private fun taskRecordToJson(taskId: String, record: AceMusicTaskRecord): JSONObject =
+        JSONObject()
+            .put("id", taskId)
+            .put("result", record.result.orEmpty())
+
+    private fun taskErrorText(record: AceMusicTaskRecord): String =
+        record.error?.takeIf { !it.isJsonNull }?.toString().orEmpty()
+            .ifBlank { record.result.orEmpty() }
+            .ifBlank { "unknown error" }
 
     private fun downloadAudio(fileValue: String, auth: AceMusicAuth, target: File) {
         val url = when {
@@ -146,7 +190,10 @@ object AceMusicProvider : AiProvider {
             fileValue.startsWith("/") -> "${auth.baseUrl}/v1/audio?path=${URLEncoder.encode(fileValue, "UTF-8")}"
             else -> "${auth.baseUrl}/v1/audio?path=${URLEncoder.encode(fileValue, "UTF-8")}"
         }
-        val client = AceMusicNetwork.createOkHttpClient(apiKeyProvider = { auth.apiKey })
+        val client = AceMusicNetwork.createOkHttpClient(
+            apiKeyProvider = { auth.apiKey },
+            authMode = auth.authMode,
+        )
         val request = Request.Builder().url(url).get().build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
@@ -248,20 +295,15 @@ object AceMusicProvider : AiProvider {
         return JSONArray().put(result)
     }
 
-    private fun parseCompletionAudio(root: JSONObject, request: AiMusicRequest): List<AudioPayload> {
+    private fun parseTaskAudio(root: JSONObject, request: AiMusicRequest): List<AudioPayload> {
         val payloads = mutableListOf<AudioPayload>()
-        val choices = root.optJSONArray("choices") ?: JSONArray()
-        for (i in 0 until choices.length()) {
-            val message = choices.optJSONObject(i)?.optJSONObject("message") ?: continue
-            collectAudioPayloads(message.opt("audio"), payloads)
-            collectAudioPayloads(message.opt("audio_url"), payloads)
-            collectAudioPayloads(message.opt("audios"), payloads)
-        }
         collectAudioPayloads(root.opt("audio"), payloads)
         collectAudioPayloads(root.opt("audio_url"), payloads)
+        collectAudioPayloads(root.opt("file"), payloads)
+        collectAudioPayloads(root.opt("url"), payloads)
         return payloads.ifEmpty {
             parseResultRecords(root.opt("result")).mapNotNull { record ->
-                val file = record.optString("file", record.optString("audio_url", ""))
+                val file = firstPresentString(record, "file", "audio_url", "url", "path")
                 file.takeIf { it.isNotBlank() }?.let { AudioPayload(value = it, inline = false, format = request.audioFormat) }
             }
         }
@@ -276,7 +318,7 @@ object AceMusicProvider : AiProvider {
                 if (direct.isNotBlank()) {
                     target += AudioPayload(
                         value = direct,
-                        inline = !direct.startsWith("http://") && !direct.startsWith("https://"),
+                        inline = isInlineAudioValue(direct),
                         format = firstPresentString(value, "format", "mime_type"),
                     )
                 }
@@ -285,12 +327,20 @@ object AceMusicProvider : AiProvider {
                 if (value.isNotBlank()) {
                     target += AudioPayload(
                         value = value,
-                        inline = !value.startsWith("http://") && !value.startsWith("https://"),
+                        inline = isInlineAudioValue(value),
                         format = "",
                     )
                 }
             }
         }
+    }
+
+    private fun isInlineAudioValue(value: String): Boolean {
+        val clean = value.trim()
+        if (clean.startsWith("data:audio/", ignoreCase = true)) return true
+        if (clean.startsWith("http://", ignoreCase = true) || clean.startsWith("https://", ignoreCase = true)) return false
+        if (clean.startsWith("/") || "?" in clean || "." in clean.substringBefore('?')) return false
+        return clean.length > 256 && clean.all { it.isLetterOrDigit() || it in "+/=\r\n" }
     }
 
     private fun firstPresentString(obj: JSONObject, vararg keys: String): String {
@@ -312,13 +362,20 @@ object AceMusicProvider : AiProvider {
         )
     }
 
-    private fun completionModelId(modelId: String): String {
+    private fun generationModelId(modelId: String): String {
         val clean = normalizeModelId(modelId).ifBlank { fallbackModels.first() }
-        return if ('/' in clean || clean.any(Char::isWhitespace)) clean else "acestep/$clean"
+        return clean.substringAfterLast('/')
     }
 
     private fun normalizeModelId(raw: String): String {
-        return raw.trim()
+        val clean = raw.trim()
+        return when {
+            clean.equals(MODEL_ALIAS, ignoreCase = true) -> fallbackModels.first()
+            clean.equals("ACE Step", ignoreCase = true) -> fallbackModels.first()
+            clean.equals("acestep-v1.5-turbo", ignoreCase = true) -> fallbackModels.first()
+            clean.equals("acestep-v1.5-turbo-shift3", ignoreCase = true) -> fallbackModels[1]
+            else -> clean
+        }
     }
 
     private fun displayNameForModel(modelId: String, label: String, isDefault: Boolean): String {
@@ -333,94 +390,20 @@ object AceMusicProvider : AiProvider {
         return if (isDefault && "default" !in base.lowercase()) "$base · default" else base
     }
 
-    private fun completionMessage(request: AiMusicRequest): String {
-        if (request.sampleMode) return request.sampleQuery.ifBlank { request.prompt }
-        if (request.lyrics.isBlank()) return "<prompt>${request.prompt}</prompt>"
-        return buildString {
-            if (request.prompt.isNotBlank()) append("<prompt>${request.prompt}</prompt>")
-            if (isNotEmpty()) append("\n")
-            append("<lyrics>${request.lyrics}</lyrics>")
-        }
-    }
-
-    private fun completionRequest(
-        modelId: String,
-        request: AiMusicRequest,
-        auth: AceMusicAuth,
-        mode: CompletionPayloadMode,
-    ): AceMusicCompletionRequest {
-        val full = mode == CompletionPayloadMode.FULL
-        val chatOnly = mode == CompletionPayloadMode.CHAT_ONLY
-        val audioConfig = if (chatOnly) {
-            null
-        } else {
-            AceMusicAudioConfig(
-                durationSec = request.durationSec?.takeIf { full && it > 0f }?.coerceIn(10f, 600f),
-                format = request.audioFormat,
-                bpm = request.bpm?.takeIf { full && it > 0 }?.coerceIn(30, 300),
-                keyScale = request.keyScale.takeIf { full && it.isNotBlank() },
-                timeSignature = request.timeSignature.toAceTimeSignature().takeIf { full && it.isNotBlank() },
-                vocalLanguage = request.vocalLanguage,
-                instrumental = true.takeIf { full && !request.sampleMode && request.lyrics.isBlank() },
-            )
-        }
-
-        return AceMusicCompletionRequest(
-            model = modelId,
-            messages = listOf(AceMusicChatMessage(role = "user", content = completionMessage(request))),
-            stream = false,
-            modalities = listOf("audio", "text").takeIf { !chatOnly },
-            audioConfig = audioConfig,
-            taskType = "text2music".takeIf { !chatOnly },
-            sampleMode = request.sampleMode.takeIf { !chatOnly },
-            useFormat = (if (full) request.useFormat else false).takeIf { !chatOnly },
-            useCotCaption = (if (full) request.useCotCaption else false).takeIf { !chatOnly },
-            useCotLanguage = (if (full) request.useCotLanguage else false).takeIf { !chatOnly },
-            thinking = (if (full) request.thinking else false).takeIf { !chatOnly },
-            lyrics = request.lyrics.takeIf { !chatOnly && !request.sampleMode && it.isNotBlank() },
-            guidanceScale = request.guidanceScale.takeIf { full && it != 7f },
-            batchSize = request.batchSize.takeIf { full && it > 1 }?.coerceIn(2, 8),
-            seed = request.seed?.takeIf { full && !request.useRandomSeed },
-            aiToken = auth.apiKey.takeIf { mode == CompletionPayloadMode.TOKEN_BODY },
-        )
-    }
-
     private fun repository(auth: AceMusicAuth): AceMusicRepository =
         AceMusicRepository(
             AceMusicNetwork.createApi(
                 baseUrl = auth.baseUrl,
                 apiKeyProvider = { auth.apiKey },
+                authMode = auth.authMode,
             ),
         )
-
-    private fun completionAttempts(modelId: String): List<CompletionAttempt> {
-        val models = buildList {
-            val primary = completionModelId(modelId)
-            add(primary)
-            if (primary.equals(CLOUD_MODEL_ALIAS, ignoreCase = true)) add(CLOUD_MODEL_ALIAS_SINGULAR)
-            if (primary.equals(CLOUD_MODEL_ALIAS_SINGULAR, ignoreCase = true)) add(CLOUD_MODEL_ALIAS)
-            fallbackModels.forEach(::add)
-        }.distinct()
-        val attempts = mutableListOf<CompletionAttempt>()
-        models.forEachIndexed { index, candidate ->
-            if (index == 0) {
-                attempts += CompletionAttempt(candidate, CompletionPayloadMode.FULL)
-                attempts += CompletionAttempt(candidate, CompletionPayloadMode.COMPACT)
-                attempts += CompletionAttempt(candidate, CompletionPayloadMode.TOKEN_BODY)
-                attempts += CompletionAttempt(candidate, CompletionPayloadMode.CHAT_ONLY)
-            } else {
-                attempts += CompletionAttempt(candidate, CompletionPayloadMode.COMPACT)
-                attempts += CompletionAttempt(candidate, CompletionPayloadMode.TOKEN_BODY)
-                attempts += CompletionAttempt(candidate, CompletionPayloadMode.CHAT_ONLY)
-            }
-        }
-        return attempts
-    }
 
     private fun parseAuth(raw: String): AceMusicAuth {
         val clean = raw.trim()
         var key = clean
         var baseUrl = DEFAULT_BASE_URL
+        var authMode = AceMusicAuthMode.BEARER
 
         fun acceptBase(value: String) {
             val v = value.unquote().trim().trimEnd('/')
@@ -429,7 +412,15 @@ object AceMusicProvider : AiProvider {
 
         fun acceptKey(value: String) {
             val v = value.unquote().trim()
-            if (v.isNotBlank()) key = v
+            if (v.isNotBlank()) key = v.removePrefix("Bearer ").removePrefix("bearer ").trim()
+        }
+
+        fun acceptAuthMode(value: String) {
+            val v = value.unquote().trim().lowercase().replace("-", "_")
+            authMode = when (v) {
+                "x_api_key", "x-api-key", "xapikey", "api_key", "apikey" -> AceMusicAuthMode.X_API_KEY
+                else -> AceMusicAuthMode.BEARER
+            }
         }
 
         runCatching {
@@ -437,6 +428,11 @@ object AceMusicProvider : AiProvider {
                 val obj = JSONTokener(clean).nextValue() as? JSONObject ?: return@runCatching
                 firstPresentString(obj, "base_url", "baseUrl", "api_url", "apiUrl", "url").takeIf { it.isNotBlank() }?.let(::acceptBase)
                 firstPresentString(obj, "api_key", "apiKey", "key", "token", "ai_token", "aiToken").takeIf { it.isNotBlank() }?.let(::acceptKey)
+                firstPresentString(obj, "x_api_key", "x-api-key", "xApiKey").takeIf { it.isNotBlank() }?.let {
+                    acceptKey(it)
+                    authMode = AceMusicAuthMode.X_API_KEY
+                }
+                firstPresentString(obj, "auth_mode", "authMode", "auth_header", "authHeader", "header").takeIf { it.isNotBlank() }?.let(::acceptAuthMode)
             }
         }
 
@@ -452,6 +448,11 @@ object AceMusicProvider : AiProvider {
             when (name) {
                 "base_url", "baseurl", "api_url", "apiurl", "url" -> acceptBase(value)
                 "api_key", "apikey", "key", "token", "ai_token", "aitoken" -> acceptKey(value)
+                "x_api_key", "xapikey" -> {
+                    acceptKey(value)
+                    authMode = AceMusicAuthMode.X_API_KEY
+                }
+                "auth_mode", "authmode", "auth_header", "authheader", "header" -> acceptAuthMode(value)
             }
         }
 
@@ -466,7 +467,11 @@ object AceMusicProvider : AiProvider {
             }
         }
 
-        return AceMusicAuth(apiKey = key, baseUrl = baseUrl)
+        return AceMusicAuth(
+            apiKey = key.removePrefix("Bearer ").removePrefix("bearer ").trim(),
+            baseUrl = baseUrl,
+            authMode = authMode,
+        )
     }
 
     private fun ensureApiOk(root: JSONObject) {
@@ -476,25 +481,6 @@ object AceMusicProvider : AiProvider {
         if ((hasCode && code != 0 && code !in 200..299) || error.isNotBlank()) {
             throw RuntimeException("${id.displayName}: ${error.ifBlank { "API code $code" }}")
         }
-    }
-
-    private fun ensureCompletionOk(root: JSONObject) {
-        if (root.has("error") && !root.isNull("error")) {
-            val error = root.opt("error")
-            val message = if (error is JSONObject) error.optString("message", error.toString()) else error.toString()
-            throw RuntimeException("${id.displayName}: $message")
-        }
-        val choices = root.optJSONArray("choices") ?: return
-        val first = choices.optJSONObject(0) ?: return
-        if (first.optString("finish_reason") == "error") {
-            val message = first.optJSONObject("message")?.optString("content", "").orEmpty()
-            throw RuntimeException("${id.displayName}: ${message.ifBlank { "generation failed" }}")
-        }
-    }
-
-    private fun Throwable.isRetryableCloudError(): Boolean {
-        val text = message.orEmpty().lowercase()
-        return "http 500" in text || "http 502" in text || "http 503" in text || "internal server" in text
     }
 
     private fun extensionFor(format: String, fileUrl: String): String {
@@ -535,10 +521,11 @@ object AceMusicProvider : AiProvider {
     }
 
     private fun String.toAceTimeSignature(): String = when (trim()) {
-        "", "4" -> ""
-        "2" -> "2/4"
-        "3" -> "3/4"
-        "6" -> "6/8"
+        "" -> ""
+        "2", "2/4" -> "2"
+        "3", "3/4" -> "3"
+        "4", "4/4" -> "4"
+        "6", "6/8" -> "6"
         else -> trim()
     }
 
@@ -548,19 +535,8 @@ object AceMusicProvider : AiProvider {
     private data class AceMusicAuth(
         val apiKey: String,
         val baseUrl: String,
+        val authMode: AceMusicAuthMode,
     )
-
-    private data class CompletionAttempt(
-        val modelId: String,
-        val mode: CompletionPayloadMode,
-    )
-
-    private enum class CompletionPayloadMode(val statusName: String) {
-        FULL("full"),
-        COMPACT("compact"),
-        CHAT_ONLY("chat"),
-        TOKEN_BODY("token"),
-    }
 
     private data class AudioPayload(
         val value: String,

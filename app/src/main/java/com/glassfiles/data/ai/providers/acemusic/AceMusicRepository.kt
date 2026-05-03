@@ -13,72 +13,59 @@ class AceMusicRepository(
     private val api: AceMusicApi,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    suspend fun createCompletion(
-        request: AceMusicCompletionRequest,
-    ): AceMusicNetworkResult<AceMusicCompletionResponse> = withContext(ioDispatcher) {
-        try {
-            AceMusicNetworkResult.Success(api.createCompletion(request))
-        } catch (e: HttpException) {
-            val rawError = e.response()?.errorBody()?.string().orEmpty()
-            Log.e(REPOSITORY_LOG_TAG, "ACEMusic HTTP ${e.code()} raw error: $rawError", e)
-            AceMusicNetworkResult.HttpError(
-                code = e.code(),
-                rawErrorBody = rawError,
-                message = e.message(),
-                cause = e,
-            )
-        } catch (e: IOException) {
-            Log.e(REPOSITORY_LOG_TAG, "ACEMusic network error: ${e.message}", e)
-            AceMusicNetworkResult.NetworkError(e)
-        } catch (e: Exception) {
-            Log.e(REPOSITORY_LOG_TAG, "ACEMusic unexpected error: ${e.message}", e)
-            AceMusicNetworkResult.UnexpectedError(e)
-        }
+    suspend fun releaseTaskOrThrow(
+        request: AceMusicGenerationRequest,
+    ): AceMusicReleaseTaskData = withContext(ioDispatcher) {
+        val envelope = callOrThrow("release_task") { api.releaseTask(request) }
+        envelope.requireOk("release_task").data ?: throw RuntimeException("ACEMusic release_task: empty data")
     }
 
-    suspend fun createCompletionOrThrow(
-        request: AceMusicCompletionRequest,
-    ): AceMusicCompletionResponse {
-        return when (val result = createCompletion(request)) {
-            is AceMusicNetworkResult.Success -> result.value
-            is AceMusicNetworkResult.HttpError -> throw AceMusicHttpDebugException(
-                statusCode = result.code,
-                rawErrorBody = result.rawErrorBody,
-                cause = result.cause,
-            )
-            is AceMusicNetworkResult.NetworkError -> throw RuntimeException("ACEMusic network error: ${result.cause.message}", result.cause)
-            is AceMusicNetworkResult.UnexpectedError -> throw RuntimeException("ACEMusic error: ${result.cause.message}", result.cause)
+    suspend fun queryResultOrThrow(
+        taskIds: List<String>,
+    ): List<AceMusicTaskRecord> = withContext(ioDispatcher) {
+        val envelope = callOrThrow("query_result") {
+            api.queryResult(AceMusicQueryResultRequest(taskIds))
         }
+        envelope.requireOk("query_result").data.orEmpty()
     }
 
     suspend fun listModelsRawOrThrow(): String = withContext(ioDispatcher) {
-        try {
-            api.listModelsRaw().string()
+        callOrThrow("models") { api.listModelsRaw().string() }
+    }
+
+    private suspend fun <T> callOrThrow(
+        label: String,
+        block: suspend () -> T,
+    ): T {
+        return try {
+            block()
         } catch (e: HttpException) {
             val rawError = e.response()?.errorBody()?.string().orEmpty()
-            Log.e(REPOSITORY_LOG_TAG, "ACEMusic models HTTP ${e.code()} raw error: $rawError", e)
+            Log.e(REPOSITORY_LOG_TAG, "ACEMusic $label HTTP ${e.code()} raw error: $rawError", e)
             throw AceMusicHttpDebugException(
                 statusCode = e.code(),
                 rawErrorBody = rawError,
                 cause = e,
             )
+        } catch (e: IOException) {
+            Log.e(REPOSITORY_LOG_TAG, "ACEMusic $label network error: ${e.message}", e)
+            throw RuntimeException("ACEMusic network error: ${e.message}", e)
+        } catch (e: Exception) {
+            Log.e(REPOSITORY_LOG_TAG, "ACEMusic $label unexpected error: ${e.message}", e)
+            throw e
         }
     }
-}
 
-sealed class AceMusicNetworkResult<out T> {
-    data class Success<T>(val value: T) : AceMusicNetworkResult<T>()
-
-    data class HttpError(
-        val code: Int,
-        val rawErrorBody: String,
-        val message: String?,
-        val cause: HttpException,
-    ) : AceMusicNetworkResult<Nothing>()
-
-    data class NetworkError(val cause: IOException) : AceMusicNetworkResult<Nothing>()
-
-    data class UnexpectedError(val cause: Exception) : AceMusicNetworkResult<Nothing>()
+    private fun <T> AceMusicEnvelope<T>.requireOk(label: String): AceMusicEnvelope<T> {
+        val apiError = error?.takeIf { !it.isJsonNull }?.toString().orEmpty()
+        if (code != null && code !in listOf(0, 200)) {
+            throw RuntimeException("ACEMusic $label API code $code: ${apiError.ifBlank { "unknown error" }}")
+        }
+        if (apiError.isNotBlank()) {
+            throw RuntimeException("ACEMusic $label API error: $apiError")
+        }
+        return this
+    }
 }
 
 class AceMusicHttpDebugException(

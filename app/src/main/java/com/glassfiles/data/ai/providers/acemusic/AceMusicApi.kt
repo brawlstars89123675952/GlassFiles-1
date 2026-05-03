@@ -8,78 +8,79 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 
 interface AceMusicApi {
-    @POST("v1/chat/completions")
-    suspend fun createCompletion(
-        @Body request: AceMusicCompletionRequest,
-    ): AceMusicCompletionResponse
+    @POST("release_task")
+    suspend fun releaseTask(
+        @Body request: AceMusicGenerationRequest,
+    ): AceMusicEnvelope<AceMusicReleaseTaskData>
+
+    @POST("query_result")
+    suspend fun queryResult(
+        @Body request: AceMusicQueryResultRequest,
+    ): AceMusicEnvelope<List<AceMusicTaskRecord>>
 
     @GET("v1/models")
     suspend fun listModelsRaw(): ResponseBody
 }
 
-data class AceMusicCompletionRequest(
-    @SerializedName("model") val model: String,
-    @SerializedName("messages") val messages: List<AceMusicChatMessage>,
-    @SerializedName("stream") val stream: Boolean = false,
-    @SerializedName("modalities") val modalities: List<String>? = null,
-    @SerializedName("audio_config") val audioConfig: AceMusicAudioConfig? = null,
-    @SerializedName("task_type") val taskType: String? = null,
-    @SerializedName("sample_mode") val sampleMode: Boolean? = null,
-    @SerializedName("use_format") val useFormat: Boolean? = null,
-    @SerializedName("use_cot_caption") val useCotCaption: Boolean? = null,
-    @SerializedName("use_cot_language") val useCotLanguage: Boolean? = null,
-    @SerializedName("thinking") val thinking: Boolean? = null,
-    @SerializedName("lyrics") val lyrics: String? = null,
-    @SerializedName("guidance_scale") val guidanceScale: Float? = null,
-    @SerializedName("batch_size") val batchSize: Int? = null,
-    @SerializedName("seed") val seed: Int? = null,
-    @SerializedName("ai_token") val aiToken: String? = null,
-)
-
-data class AceMusicChatMessage(
-    @SerializedName("role") val role: String,
-    @SerializedName("content") val content: String,
-)
-
-data class AceMusicAudioConfig(
-    @SerializedName("duration") val durationSec: Float? = null,
-    @SerializedName("format") val format: String = "mp3",
+data class AceMusicGenerationRequest(
+    @SerializedName("prompt") val prompt: String,
+    @SerializedName("model") val model: String = "acestep-v15-turbo",
+    @SerializedName("audio_duration") val audioDurationSec: Int = 30,
+    @SerializedName("lyrics") val lyrics: String = "",
+    @SerializedName("thinking") val thinking: Boolean = false,
+    @SerializedName("vocal_language") val vocalLanguage: String = "en",
+    @SerializedName("audio_format") val audioFormat: String = "mp3",
+    @SerializedName("sample_mode") val sampleMode: Boolean = false,
+    @SerializedName("sample_query") val sampleQuery: String = "",
+    @SerializedName("use_format") val useFormat: Boolean = false,
     @SerializedName("bpm") val bpm: Int? = null,
-    @SerializedName("key_scale") val keyScale: String? = null,
-    @SerializedName("time_signature") val timeSignature: String? = null,
-    @SerializedName("vocal_language") val vocalLanguage: String? = null,
-    @SerializedName("instrumental") val instrumental: Boolean? = null,
+    @SerializedName("key_scale") val keyScale: String = "",
+    @SerializedName("time_signature") val timeSignature: String = "",
+    @SerializedName("inference_steps") val inferenceSteps: Int = 8,
+    @SerializedName("guidance_scale") val guidanceScale: Float = 7f,
+    @SerializedName("use_random_seed") val useRandomSeed: Boolean = true,
+    @SerializedName("seed") val seed: Int = -1,
+    @SerializedName("batch_size") val batchSize: Int = 1,
+    @SerializedName("shift") val shift: Float = 3f,
+    @SerializedName("infer_method") val inferMethod: String = "ode",
+    @SerializedName("timesteps") val timesteps: String? = null,
+    @SerializedName("use_adg") val useAdg: Boolean = false,
+    @SerializedName("cfg_interval_start") val cfgIntervalStart: Float? = null,
+    @SerializedName("cfg_interval_end") val cfgIntervalEnd: Float? = null,
+    @SerializedName("use_cot_caption") val useCotCaption: Boolean = true,
+    @SerializedName("use_cot_language") val useCotLanguage: Boolean = false,
+    @SerializedName("constrained_decoding") val constrainedDecoding: Boolean = true,
+    @SerializedName("allow_lm_batch") val allowLmBatch: Boolean = true,
+    @SerializedName("lm_temperature") val lmTemperature: Float? = null,
+    @SerializedName("lm_cfg_scale") val lmCfgScale: Float? = null,
+    @SerializedName("lm_negative_prompt") val lmNegativePrompt: String? = null,
+    @SerializedName("lm_top_k") val lmTopK: Int? = null,
+    @SerializedName("lm_top_p") val lmTopP: Float? = null,
+    @SerializedName("lm_repetition_penalty") val lmRepetitionPenalty: Float? = null,
+    @SerializedName("task_type") val taskType: String = "text2music",
 )
 
-data class AceMusicCompletionResponse(
-    @SerializedName("id") val id: String? = null,
-    @SerializedName("object") val objectType: String? = null,
-    @SerializedName("created") val created: Long? = null,
-    @SerializedName("model") val model: String? = null,
-    @SerializedName("choices") val choices: List<AceMusicChoice> = emptyList(),
-    @SerializedName("usage") val usage: AceMusicUsage? = null,
-    @SerializedName("audio") val audio: JsonElement? = null,
-    @SerializedName("audio_url") val audioUrl: JsonElement? = null,
-    @SerializedName("result") val result: JsonElement? = null,
+data class AceMusicQueryResultRequest(
+    @SerializedName("task_id_list") val taskIdList: List<String>,
+)
+
+data class AceMusicEnvelope<T>(
+    @SerializedName("data") val data: T? = null,
+    @SerializedName("code") val code: Int? = null,
     @SerializedName("error") val error: JsonElement? = null,
+    @SerializedName("timestamp") val timestamp: Long? = null,
+    @SerializedName("extra") val extra: JsonElement? = null,
 )
 
-data class AceMusicChoice(
-    @SerializedName("index") val index: Int? = null,
-    @SerializedName("message") val message: AceMusicAssistantMessage? = null,
-    @SerializedName("finish_reason") val finishReason: String? = null,
+data class AceMusicReleaseTaskData(
+    @SerializedName("task_id") val taskId: String? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("queue_position") val queuePosition: Int? = null,
 )
 
-data class AceMusicAssistantMessage(
-    @SerializedName("role") val role: String? = null,
-    @SerializedName("content") val content: String? = null,
-    @SerializedName("audio") val audio: JsonElement? = null,
-    @SerializedName("audio_url") val audioUrl: JsonElement? = null,
-    @SerializedName("audios") val audios: JsonElement? = null,
-)
-
-data class AceMusicUsage(
-    @SerializedName("prompt_tokens") val promptTokens: Int? = null,
-    @SerializedName("completion_tokens") val completionTokens: Int? = null,
-    @SerializedName("total_tokens") val totalTokens: Int? = null,
+data class AceMusicTaskRecord(
+    @SerializedName("task_id") val taskId: String? = null,
+    @SerializedName("status") val status: Int? = null,
+    @SerializedName("result") val result: String? = null,
+    @SerializedName("error") val error: JsonElement? = null,
 )
