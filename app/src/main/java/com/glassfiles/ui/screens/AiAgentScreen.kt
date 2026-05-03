@@ -1490,6 +1490,7 @@ fun AiAgentScreen(
                     todoItems = todoItems,
                     approvals = approvals,
                     approvalSettings = approvalSettings,
+                    planOnlyTurn = planOnlyTurn,
                     activeSkillLabel = activeSkillsLabel,
                     allowedSkillTools = skillAllowedTools,
                     context = context,
@@ -5025,6 +5026,13 @@ private suspend fun runAgentLoop(
      * `autoApproveReads`, which used to be the only one wired in.
      */
     approvalSettings: com.glassfiles.data.ai.agent.AiAgentApprovalSettings,
+    /**
+     * Hard client-side guard for plan-first mode. The prompt and prompt-time
+     * tool filtering already steer the model toward read-only inspection, but
+     * this prevents any stale or unexpected non-read-only tool call from
+     * executing before the user approves the plan.
+     */
+    planOnlyTurn: Boolean = false,
     activeSkillLabel: String = "",
     allowedSkillTools: Set<String>? = null,
     context: android.content.Context,
@@ -5228,6 +5236,38 @@ private suspend fun runAgentLoop(
             if (!AgentToolRegistry.isReadOnly(call.name)) estimate?.bumpWriteProposal()
             if (call.isTodoTool()) {
                 val result = executeTodoTool(call, todoItems)
+                transcript += AgentEntry.ToolResult(result)
+                results += AiMessage(
+                    role = "tool",
+                    content = result.output,
+                    toolCallId = result.callId,
+                    toolName = result.name,
+                )
+                continue
+            }
+            if (planOnlyTurn && !AgentToolRegistry.isReadOnly(call.name)) {
+                AiAgentPermissionLog.append(
+                    context,
+                    AiAgentPermissionLog.Entry(
+                        sessionId = localSessionId.orEmpty(),
+                        repoFullName = repoFullName,
+                        tool = call.name,
+                        category = "PLAN",
+                        decision = "denied",
+                        reason = "plan mode allows only read-only tools until user approval",
+                        autoApproved = false,
+                        yoloMode = approvalSettings.yoloMode,
+                        sessionTrust = approvalSettings.sessionTrust,
+                        protectedPattern = null,
+                        activeSkill = activeSkillLabel.ifBlank { "auto" },
+                    ),
+                )
+                val result = AiToolResult(
+                    callId = call.id,
+                    name = call.name,
+                    output = "deny: plan mode allows only read-only tools until user approval",
+                    isError = true,
+                )
                 transcript += AgentEntry.ToolResult(result)
                 results += AiMessage(
                     role = "tool",

@@ -25,6 +25,7 @@ object AiAgentMemoryStore {
     private const val WORKING_MEMORY_PROMPT_BUDGET = 2_000
     private const val MAX_CONTEXT_CHARS = 18_000
     private const val MAX_SUMMARY_CHATS = 5
+    private const val MEMORY_FILE_WARN_BYTES = 12 * 1024
 
     data class MemoryFile(
         val key: String,
@@ -735,12 +736,17 @@ object AiAgentMemoryStore {
             ?.sortedBy { it.name.lowercase(Locale.US) }
             ?.toList()
             .orEmpty()
+        val indexedFiles = files + topicFiles
+        val oversizedFiles = indexedFiles
+            .filter { it.isFile && it.length() > MEMORY_FILE_WARN_BYTES }
+            .sortedByDescending { it.length() }
         val content = buildString {
             appendLine("# Memory Index")
             appendLine()
             appendLine("Scope: `$repoFullName`")
             appendLine()
             appendLine("This generated index is intentionally short. Detailed memory belongs in project.md, preferences.md, decisions.md, working_memory.md, and topics/*.md.")
+            appendLine("Keep large details in focused topic files; the agent prompt only receives a capped memory summary.")
             appendLine()
             appendLine("## Core files")
             files.forEach { file ->
@@ -755,6 +761,16 @@ object AiAgentMemoryStore {
                     appendLine("- `${displayMemoryIndexPath(context, repoFullName, file)}` - ${memoryFileSummary(file)}")
                 }
                 if (topicFiles.size > 40) appendLine("- ... ${topicFiles.size - 40} more topic files")
+            }
+            appendLine()
+            appendLine("## Warnings")
+            if (oversizedFiles.isEmpty()) {
+                appendLine("- No oversized memory files.")
+            } else {
+                oversizedFiles.take(12).forEach { file ->
+                    appendLine("- `${displayMemoryIndexPath(context, repoFullName, file)}` is ${formatBytes(file.length())}; split stale details into smaller `topics/*.md` files.")
+                }
+                if (oversizedFiles.size > 12) appendLine("- ... ${oversizedFiles.size - 12} more oversized files")
             }
         }.trimEnd() + "\n"
         val index = File(repo, MEMORY_INDEX_FILE)
@@ -821,8 +837,9 @@ object AiAgentMemoryStore {
 
     private fun memoryFileSummary(file: File): String =
         if (file.isFile) {
-            val size = file.length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-            "${formatBytes(size)}, ${file.readText().lineCount()} lines"
+            val bytes = file.length()
+            val warning = if (bytes > MEMORY_FILE_WARN_BYTES) ", too long" else ""
+            "${formatBytes(bytes)}, ${file.readText().lineCount()} lines$warning"
         } else {
             "missing"
         }
@@ -883,11 +900,14 @@ object AiAgentMemoryStore {
 
     private fun String.lineCount(): Int = if (isEmpty()) 0 else lineSequence().count()
 
-    private fun formatBytes(bytes: Int): String = when {
+    private fun formatBytes(bytes: Long): String = when {
         bytes >= 1024 * 1024 -> String.format(Locale.US, "%.1fMB", bytes / (1024.0 * 1024.0))
         bytes >= 1024 -> String.format(Locale.US, "%.1fKB", bytes / 1024.0)
         else -> "${bytes}B"
     }
+
+    private fun formatBytes(bytes: Int): String =
+        formatBytes(bytes.toLong())
 
     private fun normalizeToolInput(value: String): String =
         value.trim().replace('\\', '/').trim('/')
