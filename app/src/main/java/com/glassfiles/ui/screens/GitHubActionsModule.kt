@@ -584,7 +584,7 @@ private fun WorkflowDetailRunRow(run: GHWorkflowRun, nowMs: Long, onClick: () ->
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("#${run.runNumber}", color = color, fontFamily = JetBrainsMono, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-            Text(run.name.ifBlank { run.workflowName }, color = palette.textPrimary, fontFamily = JetBrainsMono, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(run.name.ifBlank { run.displayTitle }, color = palette.textPrimary, fontFamily = JetBrainsMono, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Text(displayRunStatus(run), color = color, fontFamily = JetBrainsMono, fontSize = 11.sp)
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
