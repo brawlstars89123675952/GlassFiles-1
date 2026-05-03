@@ -138,6 +138,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private val chatKeyProviders = AiProviderId.entries.filter { it != AiProviderId.ACEMUSIC }
+
+private fun configuredChatProviders(context: Context): List<AiProviderId> =
+    AiKeyStore.configuredProviders(context).filter { it in chatKeyProviders }
+
 /**
  * Chat / sessions screen for the AI module, terminal-themed.
  *
@@ -179,7 +184,7 @@ private fun AiChatScreenInner(
     var sessions by remember { mutableStateOf(historyMgr.getSessions()) }
     var consumedPrompt by remember { mutableStateOf(false) }
     var keyRefreshTick by remember { mutableIntStateOf(0) }
-    val hasKey = remember(keyRefreshTick) { AiKeyStore.configuredProviders(context).isNotEmpty() }
+    val hasKey = remember(keyRefreshTick) { configuredChatProviders(context).isNotEmpty() }
     if (!hasKey) {
         ApiKeySetupScreen(onBack = onBack, onKeySet = { keyRefreshTick++ })
         return
@@ -228,7 +233,7 @@ private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
     val context = LocalContext.current
     val keyValues = remember {
         mutableStateMapOf<AiProviderId, String>().apply {
-            AiProviderId.entries.forEach { put(it, AiKeyStore.getKey(context, it)) }
+            chatKeyProviders.forEach { put(it, AiKeyStore.getKey(context, it)) }
         }
     }
     var proxy by remember { mutableStateOf(AiKeyStore.getGeminiProxy(context)) }
@@ -249,7 +254,7 @@ private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
                 fontSize = 13.sp,
                 lineHeight = 1.4.em,
             )
-            AiProviderId.entries.forEach { provider ->
+            chatKeyProviders.forEach { provider ->
                 AiModuleSectionLabel("> ${provider.displayName.lowercase()}")
                 TerminalMonoField(
                     value = keyValues[provider].orEmpty(),
@@ -287,7 +292,7 @@ private fun ApiKeySetupScreen(onBack: () -> Unit, onKeySet: () -> Unit) {
             AiModulePillButton(
                 label = Strings.aiSetupContinue,
                 onClick = {
-                    AiProviderId.entries.forEach { provider ->
+                    chatKeyProviders.forEach { provider ->
                         AiKeyStore.saveKey(context, provider, keyValues[provider].orEmpty())
                     }
                     AiKeyStore.saveGeminiProxy(context, proxy)
@@ -464,7 +469,7 @@ private fun ChatView(
     var selectedProvider by remember {
         mutableStateOf(
             sessionModelKey?.providerId
-                ?: loadSavedChatProvider(context, AiKeyStore.configuredProviders(context)),
+                ?: loadSavedChatProvider(context, configuredChatProviders(context)),
         )
     }
     var modelId by remember { mutableStateOf(sessionModelKey?.modelId ?: loadSavedChatModelId(context).orEmpty()) }
@@ -482,7 +487,7 @@ private fun ChatView(
     var editIdx by remember { mutableIntStateOf(-1) }
     var editTxt by remember { mutableStateOf("") }
     val colors = AiModuleTheme.colors
-    val configuredProviders = remember(keyRefreshTick) { AiKeyStore.configuredProviders(context) }
+    val configuredProviders = remember(keyRefreshTick) { configuredChatProviders(context) }
     val currentModel = chatModels.firstOrNull { it.providerId == selectedProvider && it.id == modelId }
     val pendingInputChars = input.length +
         (attachedFile?.promptContent?.length ?: 0) +
@@ -1289,7 +1294,7 @@ private fun ChatView(
 
     if (showSettings) {
         TerminalKeysDialog(
-            initialKeys = AiProviderId.entries.associateWith { AiKeyStore.getKey(context, it) },
+            initialKeys = chatKeyProviders.associateWith { AiKeyStore.getKey(context, it) },
             initialProxy = AiKeyStore.getGeminiProxy(context),
             initialRegion = AiKeyStore.getQwenRegion(context),
             onSave = { keys, proxyUrl, region ->
@@ -1436,7 +1441,7 @@ private fun loadSavedChatModelId(context: Context): String? =
         ?.takeIf { it.isNotBlank() }
 
 private fun loadSavedChatModelKey(context: Context): String? {
-    val configured = AiKeyStore.configuredProviders(context)
+    val configured = configuredChatProviders(context)
     val provider = loadSavedChatProvider(context, configured) ?: return null
     val model = loadSavedChatModelId(context) ?: return null
     return chatModelKey(provider, model)
@@ -2146,7 +2151,7 @@ private fun TerminalKeysDialog(
     val colors = AiModuleTheme.colors
     val keys = remember {
         mutableStateMapOf<AiProviderId, String>().apply {
-            AiProviderId.entries.forEach { put(it, initialKeys[it].orEmpty()) }
+            chatKeyProviders.forEach { put(it, initialKeys[it].orEmpty()) }
         }
     }
     var pU by remember { mutableStateOf(initialProxy) }
@@ -2165,7 +2170,7 @@ private fun TerminalKeysDialog(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                AiProviderId.entries.forEach { provider ->
+                chatKeyProviders.forEach { provider ->
                     AiModuleSectionLabel("> ${provider.displayName.lowercase()}")
                     TerminalMonoField(
                         value = keys[provider].orEmpty(),

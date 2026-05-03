@@ -61,7 +61,7 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.launch
 import java.io.File
 
-enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_HUB, AI_CHAT, AI_CODING, AI_IMAGE, AI_VIDEO, AI_KEYS, AI_MODELS, AI_SETTINGS, AI_AGENT, AI_USAGE, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
+enum class AppScreen { MAIN, TERMINAL, SEARCH, TRASH, STORAGE, AI_HUB, AI_CHAT, AI_CODING, AI_IMAGE, AI_VIDEO, AI_MUSIC, AI_KEYS, AI_MODELS, AI_SETTINGS, AI_AGENT, AI_USAGE, SETTINGS, DUPLICATES, QR_SCANNER, OCR, TAGGED_FILES, DEVICE_INFO, APP_MANAGER, BOOKMARKS, DIFF, NOTES, CONTENT_SEARCH, SHIZUKU, FTP, DUAL_PANE, THEME, GITHUB }
 
 @Composable
 fun GlassFilesApp(
@@ -317,6 +317,7 @@ fun GlassFilesApp(
                         onCoding = { navigateTo(AppScreen.AI_CODING) },
                         onImage = { navigateTo(AppScreen.AI_IMAGE) },
                         onVideo = { navigateTo(AppScreen.AI_VIDEO) },
+                        onMusic = { navigateTo(AppScreen.AI_MUSIC) },
                         onModels = { navigateTo(AppScreen.AI_MODELS) },
                         onKeys = { navigateTo(AppScreen.AI_KEYS) },
                         onSettings = { navigateTo(AppScreen.AI_SETTINGS) },
@@ -358,6 +359,9 @@ fun GlassFilesApp(
                 }
                 AppScreen.AI_VIDEO -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
                     AiVideoGenScreen(onBack = { goBack() })
+                }
+                AppScreen.AI_MUSIC -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
+                    AiMusicGenScreen(onBack = { goBack() })
                 }
                 AppScreen.AI_KEYS -> Box(Modifier.fillMaxSize().background(SurfaceLight)) {
                     AiKeysScreen(onBack = { goBack() })

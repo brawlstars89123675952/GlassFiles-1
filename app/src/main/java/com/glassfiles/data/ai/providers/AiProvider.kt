@@ -69,6 +69,18 @@ interface AiProvider {
     ): String = throw UnsupportedOperationException("${id.displayName} doesn't support video generation in this build")
 
     /**
+     * Optional: generates one or more music/audio files. This is intentionally
+     * separate from chat/image/video flows so music providers stay isolated.
+     */
+    suspend fun generateMusic(
+        context: Context,
+        modelId: String,
+        request: AiMusicRequest,
+        apiKey: String,
+        onProgress: (String) -> Unit = {},
+    ): List<AiMusicResult> = throw UnsupportedOperationException("${id.displayName} doesn't support music generation in this build")
+
+    /**
      * Optional: non-streaming chat that surfaces *tool calls* the model wants
      * to make. Drives the agent loop:
      *
@@ -140,3 +152,51 @@ data class AiTokenUsage(
     val totalTokens: Int get() = inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens
     val hasCacheHit: Boolean get() = cacheCreationTokens > 0 || cacheReadTokens > 0
 }
+
+data class AiMusicRequest(
+    val prompt: String = "",
+    val lyrics: String = "",
+    val sampleMode: Boolean = false,
+    val sampleQuery: String = "",
+    val useFormat: Boolean = false,
+    val thinking: Boolean = true,
+    val vocalLanguage: String = "en",
+    val audioFormat: String = "mp3",
+    val durationSec: Float? = 60f,
+    val bpm: Int? = null,
+    val keyScale: String = "",
+    val timeSignature: String = "4",
+    val inferenceSteps: Int = 8,
+    val guidanceScale: Float = 7f,
+    val useRandomSeed: Boolean = true,
+    val seed: Int? = null,
+    val batchSize: Int = 1,
+    val shift: Float = 3f,
+    val inferMethod: String = "ode",
+    val timesteps: String = "",
+    val useAdg: Boolean = false,
+    val cfgIntervalStart: Float? = null,
+    val cfgIntervalEnd: Float? = null,
+    val useCotCaption: Boolean = true,
+    val useCotLanguage: Boolean = false,
+    val constrainedDecoding: Boolean = true,
+    val allowLmBatch: Boolean = true,
+    val lmTemperature: Float? = null,
+    val lmCfgScale: Float? = null,
+    val lmNegativePrompt: String = "",
+    val lmTopK: Int? = null,
+    val lmTopP: Float? = null,
+    val lmRepetitionPenalty: Float? = null,
+)
+
+data class AiMusicResult(
+    val filePath: String,
+    val prompt: String = "",
+    val lyrics: String = "",
+    val bpm: Int? = null,
+    val keyScale: String = "",
+    val timeSignature: String = "",
+    val durationSec: Float? = null,
+    val seed: String = "",
+    val taskId: String = "",
+)

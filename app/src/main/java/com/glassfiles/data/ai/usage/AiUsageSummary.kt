@@ -178,6 +178,7 @@ private fun AiUsageMode.displayLabel(): String = when (this) {
     AiUsageMode.CODING -> "coding"
     AiUsageMode.IMAGE -> "image"
     AiUsageMode.VIDEO -> "video"
+    AiUsageMode.MUSIC -> "music"
     AiUsageMode.GITHUB_AGENT -> "github agent"
     AiUsageMode.SKILL_AUTO_DETECTION -> "skill auto-detection"
 }

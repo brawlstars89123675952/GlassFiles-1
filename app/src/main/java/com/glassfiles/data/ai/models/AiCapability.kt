@@ -13,6 +13,7 @@ enum class AiCapability {
     VISION,      // accepts images as input
     IMAGE_GEN,   // generates images
     VIDEO_GEN,   // generates videos
+    MUSIC_GEN,   // generates music / songs
     CODING,      // tuned for code (or top-tier general models that handle code well)
     REASONING,   // explicit chain-of-thought / "thinking" models (o1, R1, QwQ, ...)
     EMBEDDING,   // produces embedding vectors (not used in chat UI, but listed)

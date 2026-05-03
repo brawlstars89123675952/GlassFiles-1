@@ -9,10 +9,12 @@ import org.json.JSONObject
  * cached file on disk) so the user can scroll back through previous outputs
  * after leaving the screen.
  *
- * Stored as JSON in SharedPreferences under per-mode keys (`image`, `video`).
+ * Stored as JSON in SharedPreferences under per-mode keys (`image`, `video`,
+ * `music`).
  * Capped at [MAX_PER_MODE]; oldest entries are evicted when the cap is hit.
  *
- * The cached file itself lives under `cacheDir/ai_images/` (or `ai_videos/`)
+ * The cached file itself lives under `cacheDir/ai_images/`, `ai_videos/`,
+ * or `ai_music/`
  * and is owned by the screens that produce it; this store only remembers
  * the path. If the file is deleted by the OS cache eviction the row is
  * still listed but rendering will fail gracefully.
@@ -23,17 +25,19 @@ object AiAssetHistoryStore {
 
     const val MODE_IMAGE = "image"
     const val MODE_VIDEO = "video"
+    const val MODE_MUSIC = "music"
 
     /**
      * Single record describing one generated asset.
      *
      * @param id stable identifier (epoch-millis at creation).
-     * @param mode [MODE_IMAGE] or [MODE_VIDEO].
+     * @param mode [MODE_IMAGE], [MODE_VIDEO], or [MODE_MUSIC].
      * @param providerId enum name of the provider that produced the asset.
      * @param modelId raw model id (e.g. `gpt-image-1`, `veo-2`).
      * @param modelDisplay human-readable label shown in the UI.
      * @param prompt the user prompt used to generate.
-     * @param size for images: `WxH` or `auto`; for videos: aspect-ratio token.
+     * @param size for images: `WxH` or `auto`; for videos: aspect-ratio token;
+     *  for music: duration/format summary.
      * @param filePath absolute path of the cached file on disk.
      * @param savedToGalleryUri non-null if the user has already saved this
      *  asset to the system gallery (used to render a check icon).

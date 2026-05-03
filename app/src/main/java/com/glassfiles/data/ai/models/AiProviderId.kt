@@ -20,4 +20,5 @@ enum class AiProviderId(
     MOONSHOT("Moonshot (Kimi)", "ai_key_moonshot", "https://platform.moonshot.ai/console/api-keys"),
     ALIBABA("Alibaba (Qwen)", "ai_key_alibaba", "https://dashscope.console.aliyun.com/apiKey"),
     OPENROUTER("OpenRouter", "ai_key_openrouter", "https://openrouter.ai/keys"),
+    ACEMUSIC("ACEMusic", "ai_key_acemusic", "https://acemusic.ai/playground/api-key"),
 }

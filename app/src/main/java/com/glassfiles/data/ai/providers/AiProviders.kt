@@ -12,6 +12,7 @@ object AiProviders {
         MoonshotProvider,
         AlibabaProvider,
         OpenRouterProvider,
+        AceMusicProvider,
     ).associateBy { it.id }
 
     fun get(id: AiProviderId): AiProvider = all[id]

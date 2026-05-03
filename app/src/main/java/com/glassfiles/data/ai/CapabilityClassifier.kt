@@ -5,6 +5,7 @@ import com.glassfiles.data.ai.models.AiCapability.AUDIO
 import com.glassfiles.data.ai.models.AiCapability.CODING
 import com.glassfiles.data.ai.models.AiCapability.EMBEDDING
 import com.glassfiles.data.ai.models.AiCapability.IMAGE_GEN
+import com.glassfiles.data.ai.models.AiCapability.MUSIC_GEN
 import com.glassfiles.data.ai.models.AiCapability.REASONING
 import com.glassfiles.data.ai.models.AiCapability.TEXT
 import com.glassfiles.data.ai.models.AiCapability.VIDEO_GEN
@@ -51,6 +52,9 @@ object CapabilityClassifier {
         // ─── Audio (TTS / STT) ──────────────────────────────────────────────
         if (matchesAny(id, "whisper", "tts-", "tts1", "audio")) caps += AUDIO
 
+        // ─── Music generation ───────────────────────────────────────────────
+        if (matchesAny(id, "acestep", "ace-step", "musicgen", "music-gen", "song")) caps += MUSIC_GEN
+
         // ─── Embeddings ─────────────────────────────────────────────────────
         if (matchesAny(id, "embedding", "embed-", "text-embedding")) caps += EMBEDDING
 
@@ -90,7 +94,7 @@ object CapabilityClassifier {
 
         // ─── Text (the default) ─────────────────────────────────────────────
         // Anything that isn't pure image/video/audio/embedding gets TEXT.
-        if (IMAGE_GEN !in caps && VIDEO_GEN !in caps && EMBEDDING !in caps && AUDIO !in caps) {
+        if (IMAGE_GEN !in caps && VIDEO_GEN !in caps && MUSIC_GEN !in caps && EMBEDDING !in caps && AUDIO !in caps) {
             caps += TEXT
         }
 
@@ -111,6 +115,11 @@ object CapabilityClassifier {
                 if (upstream != id) {
                     return classify(providerId, upstream)
                 }
+            }
+            AiProviderId.ACEMUSIC -> {
+                caps -= TEXT
+                caps -= AUDIO
+                caps += MUSIC_GEN
             }
             else -> Unit
         }

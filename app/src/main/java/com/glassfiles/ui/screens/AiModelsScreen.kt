@@ -69,7 +69,7 @@ fun AiModelsScreen(onBack: () -> Unit) {
     val configured by remember {
         derivedStateOf { AiKeyStore.configuredProviders(context) }
     }
-    // Always show all 7 tabs so the user can see the empty state and a "set
+    // Always show all provider tabs so the user can see the empty state and a "set
     // your key" hint, but mark the unconfigured ones as such.
     val tabs = remember { AiProviderId.entries.toList() }
     var selected by remember { mutableStateOf(tabs.first()) }

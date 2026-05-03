@@ -2,7 +2,7 @@ package com.glassfiles.data.ai.usage
 
 /**
  * Local-only record of one AI request. Written by the agent loop and
- * by every one-shot AI call (chat completion, image gen, video gen).
+ * by every one-shot AI call (chat completion, image gen, video gen, music gen).
  *
  * Privacy notes (see PR-COST-C spec):
  *  - prompt content is NEVER stored
@@ -78,6 +78,9 @@ enum class AiUsageMode {
 
     /** Video generation. */
     VIDEO,
+
+    /** Music / song generation. */
+    MUSIC,
 
     /** AI Agent run against a GitHub repo. */
     GITHUB_AGENT,

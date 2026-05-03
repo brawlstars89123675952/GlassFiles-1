@@ -65,8 +65,7 @@ import com.glassfiles.ui.theme.JetBrainsMono
  *
  * Layout: a man-page list — each provider is a `> name [status] masked`
  * line. Tapping the row drops down an inline editor (input + reveal
- * toggle + Save / Remove / Get-key link). All seven providers fit
- * above the fold on a typical phone without scrolling.
+ * toggle + Save / Remove / Get-key link).
  */
 @Composable
 fun AiKeysScreen(onBack: () -> Unit) {

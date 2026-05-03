@@ -467,7 +467,9 @@ private fun CodingChatView(
     val sessionId = initialSession.id
     val sessionCreatedAt = initialSession.createdAt
 
-    val configured by remember { derivedStateOf { AiKeyStore.configuredProviders(context) } }
+    val configured by remember {
+        derivedStateOf { AiKeyStore.configuredProviders(context).filter { it != AiProviderId.ACEMUSIC } }
+    }
     var provider by remember(configured) {
         mutableStateOf(
             initialSession.providerId.takeIf { it.isNotBlank() }

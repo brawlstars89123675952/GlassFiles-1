@@ -53,6 +53,7 @@ fun AiHubScreen(
     onCoding: () -> Unit,
     onImage: () -> Unit,
     onVideo: () -> Unit,
+    onMusic: () -> Unit,
     onModels: () -> Unit,
     onKeys: () -> Unit,
     onSettings: () -> Unit,
@@ -74,6 +75,7 @@ fun AiHubScreen(
                     AiHubItem(Icons.Rounded.Build, Strings.aiAgent, Strings.aiAgentSubtitle, soon = false, onAgent),
                     AiHubItem(Icons.Rounded.Image, Strings.aiImageGen, Strings.aiImageGenSubtitle, soon = false, onImage),
                     AiHubItem(Icons.Rounded.Movie, Strings.aiVideoGen, Strings.aiVideoGenSubtitle, soon = false, onVideo),
+                    AiHubItem(null, Strings.aiMusicGen, Strings.aiMusicGenSubtitle, soon = false, onMusic, glyph = "♪"),
                     AiHubItem(Icons.Rounded.BubbleChart, Strings.aiModels, Strings.aiModelsSubtitle, soon = false, onModels),
                     AiHubItem(Icons.Rounded.VpnKey, Strings.aiKeys, Strings.aiKeysSubtitle, soon = false, onKeys),
                     AiHubItem(Icons.Rounded.Insights, Strings.aiUsageTitle, Strings.aiUsageSubtitle, soon = false, onUsage),
@@ -88,11 +90,12 @@ fun AiHubScreen(
 }
 
 private data class AiHubItem(
-    val icon: ImageVector,
+    val icon: ImageVector?,
     val title: String,
     val subtitle: String,
     val soon: Boolean,
     val onClick: () -> Unit,
+    val glyph: String? = null,
 )
 
 @Composable
@@ -111,7 +114,17 @@ private fun AiHubRow(item: AiHubItem) {
             Modifier.size(34.dp).clip(CircleShape).background(colors.surfaceElevated),
             contentAlignment = Alignment.Center,
         ) {
-            AiModuleIcon(item.icon, null, Modifier.size(17.dp), tint = colors.accent)
+            if (item.glyph != null) {
+                AiModuleText(
+                    item.glyph,
+                    color = colors.accent,
+                    fontFamily = JetBrainsMono,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 17.sp,
+                )
+            } else if (item.icon != null) {
+                AiModuleIcon(item.icon, null, Modifier.size(17.dp), tint = colors.accent)
+            }
         }
         Spacer(Modifier.size(12.dp))
         Column(Modifier.weight(1f)) {

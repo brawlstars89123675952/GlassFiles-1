@@ -325,6 +325,7 @@ fun AiAgentScreen(
         }
         // Models — chat-capable from any provider with a key
         for (p in AiProviderId.values()) {
+            if (p == AiProviderId.ACEMUSIC) continue
             val key = AiKeyStore.getKey(context, p)
             if (key.isBlank()) continue
             try {
