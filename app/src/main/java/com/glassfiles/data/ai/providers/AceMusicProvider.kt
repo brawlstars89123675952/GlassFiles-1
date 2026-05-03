@@ -2,11 +2,18 @@ package com.glassfiles.data.ai.providers
 
 import android.content.Context
 import android.util.Base64
+import com.glassfiles.data.ai.providers.acemusic.AceMusicAudioConfig
+import com.glassfiles.data.ai.providers.acemusic.AceMusicChatMessage
+import com.glassfiles.data.ai.providers.acemusic.AceMusicCompletionRequest
+import com.glassfiles.data.ai.providers.acemusic.AceMusicNetwork
+import com.glassfiles.data.ai.providers.acemusic.AceMusicRepository
+import com.google.gson.Gson
 import com.glassfiles.data.ai.models.AiCapability
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -26,6 +33,7 @@ object AceMusicProvider : AiProvider {
     private const val DEFAULT_BASE_URL = "https://api.acemusic.ai"
     private const val CLOUD_MODEL_ALIAS = "ACE Steps"
     private const val CLOUD_MODEL_ALIAS_SINGULAR = "ACE Step"
+    private val gson = Gson()
     private val fallbackModels = listOf(
         "acestep/acestep-v15-turbo",
         "acestep/acestep-v15-turbo-shift3",
@@ -38,10 +46,7 @@ object AceMusicProvider : AiProvider {
     override suspend fun listModels(context: Context, apiKey: String): List<AiModel> = withContext(Dispatchers.IO) {
         runCatching {
             val auth = parseAuth(apiKey)
-            val conn = Http.open("${auth.baseUrl}/v1/models", headers = authHeaders(auth))
-            Http.ensureOk(conn, id.displayName)
-            val raw = conn.inputStream.bufferedReader().use { it.readText() }
-            conn.disconnect()
+            val raw = repository(auth).listModelsRawOrThrow()
             parseModels(raw).ifEmpty { fallbackModelList() }
         }.getOrElse {
             fallbackModelList()
@@ -89,13 +94,14 @@ object AceMusicProvider : AiProvider {
         }
     }
 
-    private fun createMusicCompletion(
+    private suspend fun createMusicCompletion(
         modelId: String,
         request: AiMusicRequest,
         apiKey: String,
         onProgress: (String) -> Unit,
     ): JSONObject {
         val auth = parseAuth(apiKey)
+        val repo = repository(auth)
         val attempts = completionAttempts(modelId)
         var lastRetryable: Throwable? = null
         var lastAttempt: CompletionAttempt? = null
@@ -103,7 +109,7 @@ object AceMusicProvider : AiProvider {
         attempts.forEachIndexed { index, attempt ->
             if (index > 0) onProgress("retry:${attempt.mode.statusName}")
             try {
-                return postCompletion(attempt.modelId, request, auth, attempt.mode, onProgress)
+                return postCompletion(attempt.modelId, request, auth, repo, attempt.mode, onProgress)
             } catch (e: Exception) {
                 if (!e.isRetryableCloudError()) throw e
                 lastRetryable = e
@@ -119,56 +125,18 @@ object AceMusicProvider : AiProvider {
         )
     }
 
-    private fun postCompletion(
+    private suspend fun postCompletion(
         modelId: String,
         request: AiMusicRequest,
         auth: AceMusicAuth,
+        repo: AceMusicRepository,
         mode: CompletionPayloadMode,
         onProgress: (String) -> Unit,
     ): JSONObject {
-        val body = JSONObject().apply {
-            put("model", modelId)
-            put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", completionMessage(request))))
-            put("stream", false)
-
-            if (mode != CompletionPayloadMode.CHAT_ONLY) {
-                put("modalities", JSONArray().put("audio").put("text"))
-                put("task_type", "text2music")
-                put("sample_mode", request.sampleMode)
-                put("use_format", if (mode == CompletionPayloadMode.FULL) request.useFormat else false)
-                put("use_cot_caption", if (mode == CompletionPayloadMode.FULL) request.useCotCaption else false)
-                put("use_cot_language", if (mode == CompletionPayloadMode.FULL) request.useCotLanguage else false)
-                put("thinking", if (mode == CompletionPayloadMode.FULL) request.thinking else false)
-                if (!request.sampleMode && request.lyrics.isNotBlank()) put("lyrics", request.lyrics)
-                if (mode == CompletionPayloadMode.FULL) {
-                    request.guidanceScale.takeIf { it != 7f }?.let { put("guidance_scale", it) }
-                    request.batchSize.takeIf { it > 1 }?.let { put("batch_size", it.coerceIn(2, 8)) }
-                    request.seed?.takeIf { !request.useRandomSeed }?.let { put("seed", it) }
-                }
-                if (mode == CompletionPayloadMode.TOKEN_BODY) put("ai_token", auth.apiKey)
-            }
-
-            val audioConfig = JSONObject()
-                .put("format", request.audioFormat)
-                .put("vocal_language", request.vocalLanguage)
-            if (mode == CompletionPayloadMode.FULL) {
-                request.durationSec?.takeIf { it > 0f }?.let { audioConfig.put("duration", it.coerceIn(10f, 600f)) }
-                request.bpm?.takeIf { it > 0 }?.let { audioConfig.put("bpm", it.coerceIn(30, 300)) }
-                if (request.keyScale.isNotBlank()) audioConfig.put("key_scale", request.keyScale)
-                val signature = request.timeSignature.toAceTimeSignature()
-                if (signature.isNotBlank()) audioConfig.put("time_signature", signature)
-                if (!request.sampleMode && request.lyrics.isBlank()) audioConfig.put("instrumental", true)
-            }
-            if (mode != CompletionPayloadMode.CHAT_ONLY) put("audio_config", audioConfig)
-        }.toString()
-        val conn = Http.postJson("${auth.baseUrl}/v1/chat/completions", body, authHeaders(auth)).apply {
-            readTimeout = 11 * 60_000
-        }
+        val body = completionRequest(modelId, request, auth, mode)
         onProgress("generating:${mode.statusName}")
-        Http.ensureOk(conn, id.displayName)
-        val raw = conn.inputStream.bufferedReader().use { it.readText() }
-        conn.disconnect()
-        return JSONObject(raw).also { ensureCompletionOk(it) }
+        val response = repo.createCompletionOrThrow(body)
+        return JSONObject(gson.toJson(response)).also { ensureCompletionOk(it) }
     }
 
     private fun downloadAudio(fileValue: String, auth: AceMusicAuth, target: File) {
@@ -178,10 +146,16 @@ object AceMusicProvider : AiProvider {
             fileValue.startsWith("/") -> "${auth.baseUrl}/v1/audio?path=${URLEncoder.encode(fileValue, "UTF-8")}"
             else -> "${auth.baseUrl}/v1/audio?path=${URLEncoder.encode(fileValue, "UTF-8")}"
         }
-        val conn = Http.open(url, headers = authHeaders(auth))
-        Http.ensureOk(conn, id.displayName)
-        conn.inputStream.use { input -> target.outputStream().use { input.copyTo(it) } }
-        conn.disconnect()
+        val client = AceMusicNetwork.createOkHttpClient(apiKeyProvider = { auth.apiKey })
+        val request = Request.Builder().url(url).get().build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val raw = response.body?.string()?.take(800) ?: "error ${response.code}"
+                throw RuntimeException("${id.displayName} HTTP ${response.code}: $raw")
+            }
+            val body = response.body ?: throw RuntimeException("${id.displayName}: empty audio response")
+            body.byteStream().use { input -> target.outputStream().use { input.copyTo(it) } }
+        }
     }
 
     private fun saveAudioPayload(payload: AudioPayload, auth: AceMusicAuth, target: File) {
@@ -369,6 +343,56 @@ object AceMusicProvider : AiProvider {
         }
     }
 
+    private fun completionRequest(
+        modelId: String,
+        request: AiMusicRequest,
+        auth: AceMusicAuth,
+        mode: CompletionPayloadMode,
+    ): AceMusicCompletionRequest {
+        val full = mode == CompletionPayloadMode.FULL
+        val chatOnly = mode == CompletionPayloadMode.CHAT_ONLY
+        val audioConfig = if (chatOnly) {
+            null
+        } else {
+            AceMusicAudioConfig(
+                durationSec = request.durationSec?.takeIf { full && it > 0f }?.coerceIn(10f, 600f),
+                format = request.audioFormat,
+                bpm = request.bpm?.takeIf { full && it > 0 }?.coerceIn(30, 300),
+                keyScale = request.keyScale.takeIf { full && it.isNotBlank() },
+                timeSignature = request.timeSignature.toAceTimeSignature().takeIf { full && it.isNotBlank() },
+                vocalLanguage = request.vocalLanguage,
+                instrumental = true.takeIf { full && !request.sampleMode && request.lyrics.isBlank() },
+            )
+        }
+
+        return AceMusicCompletionRequest(
+            model = modelId,
+            messages = listOf(AceMusicChatMessage(role = "user", content = completionMessage(request))),
+            stream = false,
+            modalities = listOf("audio", "text").takeIf { !chatOnly },
+            audioConfig = audioConfig,
+            taskType = "text2music".takeIf { !chatOnly },
+            sampleMode = request.sampleMode.takeIf { !chatOnly },
+            useFormat = (if (full) request.useFormat else false).takeIf { !chatOnly },
+            useCotCaption = (if (full) request.useCotCaption else false).takeIf { !chatOnly },
+            useCotLanguage = (if (full) request.useCotLanguage else false).takeIf { !chatOnly },
+            thinking = (if (full) request.thinking else false).takeIf { !chatOnly },
+            lyrics = request.lyrics.takeIf { !chatOnly && !request.sampleMode && it.isNotBlank() },
+            guidanceScale = request.guidanceScale.takeIf { full && it != 7f },
+            batchSize = request.batchSize.takeIf { full && it > 1 }?.coerceIn(2, 8),
+            seed = request.seed?.takeIf { full && !request.useRandomSeed },
+            aiToken = auth.apiKey.takeIf { mode == CompletionPayloadMode.TOKEN_BODY },
+        )
+    }
+
+    private fun repository(auth: AceMusicAuth): AceMusicRepository =
+        AceMusicRepository(
+            AceMusicNetwork.createApi(
+                baseUrl = auth.baseUrl,
+                apiKeyProvider = { auth.apiKey },
+            ),
+        )
+
     private fun completionAttempts(modelId: String): List<CompletionAttempt> {
         val models = buildList {
             val primary = completionModelId(modelId)
@@ -392,9 +416,6 @@ object AceMusicProvider : AiProvider {
         }
         return attempts
     }
-
-    private fun authHeaders(auth: AceMusicAuth): Map<String, String> =
-        mapOf("Authorization" to "Bearer ${auth.apiKey}")
 
     private fun parseAuth(raw: String): AceMusicAuth {
         val clean = raw.trim()
