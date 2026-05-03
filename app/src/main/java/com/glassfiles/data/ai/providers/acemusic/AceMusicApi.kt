@@ -8,6 +8,11 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 
 interface AceMusicApi {
+    @POST("v1/chat/completions")
+    suspend fun createCompletion(
+        @Body request: AceMusicCompletionRequest,
+    ): ResponseBody
+
     @POST("release_task")
     suspend fun releaseTask(
         @Body request: AceMusicGenerationRequest,
@@ -21,6 +26,33 @@ interface AceMusicApi {
     @GET("v1/models")
     suspend fun listModelsRaw(): ResponseBody
 }
+
+data class AceMusicCompletionRequest(
+    @SerializedName("model") val model: String,
+    @SerializedName("messages") val messages: List<AceMusicChatMessage>,
+    @SerializedName("stream") val stream: Boolean = false,
+    @SerializedName("thinking") val thinking: Boolean = true,
+    @SerializedName("use_format") val useFormat: Boolean = false,
+    @SerializedName("sample_mode") val sampleMode: Boolean = false,
+    @SerializedName("use_cot_caption") val useCotCaption: Boolean = true,
+    @SerializedName("use_cot_language") val useCotLanguage: Boolean = false,
+    @SerializedName("audio_config") val audioConfig: AceMusicCompletionAudioConfig,
+    @SerializedName("guidance_scale") val guidanceScale: Float? = null,
+    @SerializedName("seed") val seed: Int? = null,
+    @SerializedName("batch_size") val batchSize: Int? = null,
+)
+
+data class AceMusicChatMessage(
+    @SerializedName("role") val role: String,
+    @SerializedName("content") val content: String,
+)
+
+data class AceMusicCompletionAudioConfig(
+    @SerializedName("format") val format: String = "mp3",
+    @SerializedName("vocal_language") val vocalLanguage: String = "en",
+    @SerializedName("duration") val duration: Float? = null,
+    @SerializedName("bpm") val bpm: Int? = null,
+)
 
 data class AceMusicGenerationRequest(
     @SerializedName("prompt") val prompt: String,

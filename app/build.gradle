@@ -20,8 +20,8 @@ def resolveGitSha = {
 
 def glassFilesGitSha = resolveGitSha()
 def glassFilesRunNumber = System.getenv("GITHUB_RUN_NUMBER")?.trim() ?: "local"
-def glassFilesVersionCode = 3
-def glassFilesVersionName = "2.0-pre2"
+def glassFilesVersionCode = 4
+def glassFilesVersionName = "2.0-pre3"
 
 android {
     namespace 'com.glassfiles'
