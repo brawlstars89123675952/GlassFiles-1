@@ -239,6 +239,7 @@ object AceMusicProvider : AiProvider {
         return data.models.orEmpty().mapNotNull { item ->
             val modelId = item.id.orEmpty().ifBlank { item.model.orEmpty() }.ifBlank { item.name.orEmpty() }.trim()
             if (modelId.isBlank()) return@mapNotNull null
+            val label = item.name.orEmpty().takeIf { it.isNotBlank() && it != modelId }.orEmpty()
             val isDefault = item.isDefault == true ||
                 defaultModel.isNotBlank() && modelId.equals(defaultModel, ignoreCase = true)
             AiModel(
