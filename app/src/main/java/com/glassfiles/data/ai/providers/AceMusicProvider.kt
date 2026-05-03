@@ -1,11 +1,11 @@
 package com.glassfiles.data.ai.providers
 
 import android.content.Context
+import android.util.Base64
 import com.glassfiles.data.ai.models.AiCapability
 import com.glassfiles.data.ai.models.AiModel
 import com.glassfiles.data.ai.models.AiProviderId
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -17,16 +17,16 @@ import java.net.URLEncoder
  * Official ACEMusic / ACE-Step cloud API.
  *
  * Music generation is a separate flow from chat/image/video:
- * `/v1/music/generate` submits work, `/v1/jobs/{job_id}` polls it, and
- * `/v1/audio` downloads the generated file.
+ * the public hosted service uses the OpenAI-compatible
+ * `/v1/chat/completions` endpoint and returns audio inline.
  */
 object AceMusicProvider : AiProvider {
     override val id: AiProviderId = AiProviderId.ACEMUSIC
 
     private const val BASE_URL = "https://api.acemusic.ai"
     private val fallbackModels = listOf(
-        "acestep-v15-turbo",
-        "acestep-v15-turbo-shift3",
+        "acemusic/acestep-v15-turbo",
+        "acemusic/acestep-v15-turbo-shift3",
     )
 
     override suspend fun listModels(context: Context, apiKey: String): List<AiModel> = withContext(Dispatchers.IO) {
@@ -57,106 +57,68 @@ object AceMusicProvider : AiProvider {
         onProgress: (String) -> Unit,
     ): List<AiMusicResult> = withContext(Dispatchers.IO) {
         onProgress("submit")
-        val jobId = releaseTask(modelId, request, apiKey)
-        onProgress("queued:$jobId")
-        val records = pollTask(jobId, apiKey, onProgress)
+        val completion = createMusicCompletion(modelId, request, apiKey, onProgress)
+        val taskId = completion.optString("id", "acemusic-${System.currentTimeMillis()}")
+        val records = parseCompletionAudio(completion, request)
         val outDir = File(context.cacheDir, "ai_music").apply { mkdirs() }
-        records.mapIndexedNotNull { index, record ->
-            val fileUrl = record.optString("file", "").ifBlank { record.optString("audio_url", "") }
-            if (fileUrl.isBlank()) return@mapIndexedNotNull null
-            val ext = extensionFor(request.audioFormat, fileUrl)
+        records.mapIndexed { index, payload ->
+            val ext = extensionForPayload(payload, request.audioFormat)
             val target = File(outDir, "acemusic_${System.currentTimeMillis()}_$index.$ext")
-            downloadAudio(fileUrl, apiKey, target)
-            val metas = record.optJSONObject("metas")
+            saveAudioPayload(payload, apiKey, target)
             AiMusicResult(
                 filePath = target.absolutePath,
-                prompt = record.optString("prompt", request.prompt),
-                lyrics = record.optString("lyrics", request.lyrics),
-                bpm = metas?.optInt("bpm")?.takeIf { it > 0 },
-                keyScale = metas?.optString("keyscale", "") ?: metas?.optString("key_scale", "").orEmpty(),
-                timeSignature = metas?.optString("timesignature", "") ?: metas?.optString("time_signature", "").orEmpty(),
-                durationSec = metas?.optDouble("duration")?.takeIf { it > 0.0 }?.toFloat(),
-                seed = record.optString("seed_value", ""),
-                taskId = jobId,
+                prompt = request.prompt.ifBlank { request.sampleQuery },
+                lyrics = request.lyrics,
+                bpm = request.bpm,
+                keyScale = request.keyScale,
+                timeSignature = request.timeSignature,
+                durationSec = request.durationSec,
+                seed = request.seed?.toString().orEmpty(),
+                taskId = taskId,
             )
         }.ifEmpty {
             throw RuntimeException("${id.displayName}: no audio files in result")
         }
     }
 
-    private fun releaseTask(modelId: String, request: AiMusicRequest, apiKey: String): String {
+    private fun createMusicCompletion(
+        modelId: String,
+        request: AiMusicRequest,
+        apiKey: String,
+        onProgress: (String) -> Unit,
+    ): JSONObject {
         val body = JSONObject().apply {
-            put("model", modelId)
-            put("caption", request.prompt)
+            put("model", completionModelId(modelId))
+            put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", completionPrompt(request))))
+            put("stream", false)
             put("thinking", request.thinking)
             put("use_format", request.useFormat)
-            put("vocal_language", request.vocalLanguage)
-            put("audio_format", request.audioFormat)
             put("sample_mode", request.sampleMode)
-            put("inference_steps", request.inferenceSteps.coerceIn(1, 200))
+            put("use_cot_caption", request.useCotCaption)
+            put("use_cot_language", request.useCotLanguage)
+            put(
+                "audio_config",
+                JSONObject()
+                    .put("format", request.audioFormat)
+                    .put("vocal_language", request.vocalLanguage),
+            )
             put("guidance_scale", request.guidanceScale)
             put("use_random_seed", request.useRandomSeed)
             put("batch_size", request.batchSize.coerceIn(1, 8))
-            put("shift", request.shift)
-            put("infer_method", request.inferMethod)
-            put("use_adg", request.useAdg)
-            put("use_cot_caption", request.useCotCaption)
-            put("use_cot_language", request.useCotLanguage)
-            put("constrained_decoding", request.constrainedDecoding)
-            put("allow_lm_batch", request.allowLmBatch)
-            if (request.lyrics.isNotBlank()) put("lyrics", request.lyrics)
-            if (request.sampleQuery.isNotBlank()) put("sample_query", request.sampleQuery)
-            if (request.timesteps.isNotBlank()) put("timesteps", request.timesteps)
             request.durationSec?.takeIf { it > 0f }?.let { put("audio_duration", it.coerceIn(10f, 600f)) }
             request.bpm?.takeIf { it > 0 }?.let { put("bpm", it.coerceIn(30, 300)) }
             if (request.keyScale.isNotBlank()) put("key_scale", request.keyScale)
             if (request.timeSignature.isNotBlank()) put("time_signature", request.timeSignature)
             if (!request.useRandomSeed) put("seed", request.seed ?: -1)
-            request.cfgIntervalStart?.let { put("cfg_interval_start", it.coerceIn(0f, 1f)) }
-            request.cfgIntervalEnd?.let { put("cfg_interval_end", it.coerceIn(0f, 1f)) }
-            request.lmTemperature?.let { put("lm_temperature", it.coerceIn(0f, 2f)) }
-            request.lmCfgScale?.let { put("lm_cfg_scale", it.coerceIn(0f, 20f)) }
-            if (request.lmNegativePrompt.isNotBlank()) put("lm_negative_prompt", request.lmNegativePrompt)
-            request.lmTopK?.takeIf { it > 0 }?.let { put("lm_top_k", it.coerceAtMost(500)) }
-            request.lmTopP?.let { put("lm_top_p", it.coerceIn(0f, 1f)) }
-            request.lmRepetitionPenalty?.let { put("lm_repetition_penalty", it.coerceIn(0f, 5f)) }
         }.toString()
-        val conn = Http.postJson("$BASE_URL/v1/music/generate", body, authHeaders(apiKey))
+        val conn = Http.postJson("$BASE_URL/v1/chat/completions", body, authHeaders(apiKey)).apply {
+            readTimeout = 11 * 60_000
+        }
+        onProgress("generating")
         Http.ensureOk(conn, id.displayName)
         val raw = conn.inputStream.bufferedReader().use { it.readText() }
         conn.disconnect()
-        val root = JSONObject(raw).also { ensureApiOk(it) }
-        val data = root.optJSONObject("data") ?: root
-        val jobId = data.optString("job_id", data.optString("task_id", ""))
-        if (jobId.isBlank()) throw RuntimeException("${id.displayName}: no job_id in response")
-        return jobId
-    }
-
-    private suspend fun pollTask(
-        jobId: String,
-        apiKey: String,
-        onProgress: (String) -> Unit,
-    ): List<JSONObject> {
-        val deadline = System.currentTimeMillis() + 20 * 60_000L
-        while (System.currentTimeMillis() < deadline) {
-            val conn = Http.open("$BASE_URL/v1/jobs/${URLEncoder.encode(jobId, "UTF-8")}", headers = authHeaders(apiKey))
-            Http.ensureOk(conn, id.displayName)
-            val raw = conn.inputStream.bufferedReader().use { it.readText() }
-            conn.disconnect()
-            val root = JSONObject(raw).also { ensureApiOk(it) }
-            val task = root.optJSONObject("data") ?: root
-            val status = task.optString("status", "")
-            onProgress(statusLabel(status))
-            when (status) {
-                "succeeded" -> return parseResultRecords(task.opt("result"))
-                "failed" -> {
-                    val err = task.opt("error")?.toString().orEmpty().ifBlank { "task failed" }
-                    throw RuntimeException("${id.displayName}: $err")
-                }
-                else -> delay(4_000)
-            }
-        }
-        throw RuntimeException("${id.displayName}: task did not finish in 20min")
+        return JSONObject(raw).also { ensureCompletionOk(it) }
     }
 
     private fun downloadAudio(fileValue: String, apiKey: String, target: File) {
@@ -170,6 +132,16 @@ object AceMusicProvider : AiProvider {
         Http.ensureOk(conn, id.displayName)
         conn.inputStream.use { input -> target.outputStream().use { input.copyTo(it) } }
         conn.disconnect()
+    }
+
+    private fun saveAudioPayload(payload: AudioPayload, apiKey: String, target: File) {
+        if (!payload.inline) {
+            downloadAudio(payload.value, apiKey, target)
+            return
+        }
+        val raw = payload.value.trim().substringAfter("base64,", payload.value.trim())
+        val bytes = Base64.decode(raw, Base64.DEFAULT)
+        target.outputStream().use { it.write(bytes) }
     }
 
     private fun parseModels(raw: String): List<AiModel> {
@@ -249,6 +221,61 @@ object AceMusicProvider : AiProvider {
         return JSONArray().put(result)
     }
 
+    private fun parseCompletionAudio(root: JSONObject, request: AiMusicRequest): List<AudioPayload> {
+        val payloads = mutableListOf<AudioPayload>()
+        val choices = root.optJSONArray("choices") ?: JSONArray()
+        for (i in 0 until choices.length()) {
+            val message = choices.optJSONObject(i)?.optJSONObject("message") ?: continue
+            collectAudioPayloads(message.opt("audio"), payloads)
+            collectAudioPayloads(message.opt("audio_url"), payloads)
+            collectAudioPayloads(message.opt("audios"), payloads)
+        }
+        collectAudioPayloads(root.opt("audio"), payloads)
+        collectAudioPayloads(root.opt("audio_url"), payloads)
+        return payloads.ifEmpty {
+            parseResultRecords(root.opt("result")).mapNotNull { record ->
+                val file = record.optString("file", record.optString("audio_url", ""))
+                file.takeIf { it.isNotBlank() }?.let { AudioPayload(value = it, inline = false, format = request.audioFormat) }
+            }
+        }
+    }
+
+    private fun collectAudioPayloads(value: Any?, target: MutableList<AudioPayload>) {
+        when (value) {
+            is JSONArray -> for (i in 0 until value.length()) collectAudioPayloads(value.opt(i), target)
+            is JSONObject -> {
+                collectAudioPayloads(value.opt("audio_url"), target)
+                val direct = firstPresentString(value, "url", "data", "b64_json", "base64", "content")
+                if (direct.isNotBlank()) {
+                    target += AudioPayload(
+                        value = direct,
+                        inline = !direct.startsWith("http://") && !direct.startsWith("https://"),
+                        format = firstPresentString(value, "format", "mime_type"),
+                    )
+                }
+            }
+            is String -> {
+                if (value.isNotBlank()) {
+                    target += AudioPayload(
+                        value = value,
+                        inline = !value.startsWith("http://") && !value.startsWith("https://"),
+                        format = "",
+                    )
+                }
+            }
+        }
+    }
+
+    private fun firstPresentString(obj: JSONObject, vararg keys: String): String {
+        keys.forEach { key ->
+            if (!obj.isNull(key)) {
+                val value = obj.optString(key, "")
+                if (value.isNotBlank()) return value
+            }
+        }
+        return ""
+    }
+
     private fun fallbackModelList(): List<AiModel> = fallbackModels.map { name ->
         AiModel(
             providerId = id,
@@ -256,6 +283,23 @@ object AceMusicProvider : AiProvider {
             displayName = name,
             capabilities = setOf(AiCapability.MUSIC_GEN),
         )
+    }
+
+    private fun completionModelId(modelId: String): String {
+        val clean = modelId.trim().ifBlank { fallbackModels.first() }
+        return if ('/' in clean) clean else "acemusic/$clean"
+    }
+
+    private fun completionPrompt(request: AiMusicRequest): String {
+        if (request.sampleMode) return request.sampleQuery.ifBlank { request.prompt }
+        return buildString {
+            if (request.prompt.isNotBlank()) append(request.prompt)
+            if (request.lyrics.isNotBlank()) {
+                if (isNotEmpty()) append("\n\n")
+                append("Lyrics:\n")
+                append(request.lyrics)
+            }
+        }
     }
 
     private fun authHeaders(apiKey: String): Map<String, String> =
@@ -270,12 +314,18 @@ object AceMusicProvider : AiProvider {
         }
     }
 
-    private fun statusLabel(status: String): String = when (status) {
-        "queued" -> "queued"
-        "running" -> "running"
-        "succeeded" -> "succeeded"
-        "failed" -> "failed"
-        else -> status.ifBlank { "unknown" }
+    private fun ensureCompletionOk(root: JSONObject) {
+        if (root.has("error") && !root.isNull("error")) {
+            val error = root.opt("error")
+            val message = if (error is JSONObject) error.optString("message", error.toString()) else error.toString()
+            throw RuntimeException("${id.displayName}: $message")
+        }
+        val choices = root.optJSONArray("choices") ?: return
+        val first = choices.optJSONObject(0) ?: return
+        if (first.optString("finish_reason") == "error") {
+            val message = first.optJSONObject("message")?.optString("content", "").orEmpty()
+            throw RuntimeException("${id.displayName}: ${message.ifBlank { "generation failed" }}")
+        }
     }
 
     private fun extensionFor(format: String, fileUrl: String): String {
@@ -287,8 +337,37 @@ object AceMusicProvider : AiProvider {
         return fromUrl?.fileExtension() ?: "mp3"
     }
 
+    private fun extensionForPayload(payload: AudioPayload, requestedFormat: String): String {
+        val fromFormat = payload.format.lowercase()
+            .substringAfter("audio/", payload.format.lowercase())
+            .substringBefore(";")
+            .takeIf { it.isNotBlank() }
+            ?.normalizeAudioExtension()
+        if (fromFormat != null) return fromFormat
+        if (payload.value.startsWith("data:audio/")) {
+            val fromDataUrl = payload.value.substringAfter("data:audio/")
+                .substringBefore(";")
+                .normalizeAudioExtension()
+            if (fromDataUrl in audioExtensions.map { it.fileExtension() }) return fromDataUrl
+        }
+        return extensionFor(requestedFormat, payload.value)
+    }
+
     private val audioExtensions = setOf("mp3", "wav", "wav32", "flac", "opus", "aac")
 
     private fun String.fileExtension(): String =
         if (this == "wav32") "wav" else this
+
+    private fun String.normalizeAudioExtension(): String = when (lowercase()) {
+        "mpeg", "mpg", "mpga" -> "mp3"
+        "x-wav", "wave" -> "wav"
+        "x-flac" -> "flac"
+        else -> fileExtension()
+    }
+
+    private data class AudioPayload(
+        val value: String,
+        val inline: Boolean,
+        val format: String,
+    )
 }
