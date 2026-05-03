@@ -146,6 +146,7 @@ internal fun RepoDetailScreen(
     var loadingPaths by remember(repo.fullName, selectedBranch) { mutableStateOf(setOf<String>()) }
     var showUpload by remember { mutableStateOf(false) }; var showCreateFile by remember { mutableStateOf(false) }
     var showCreateBranch by remember { mutableStateOf(false) }; var showCreateIssue by remember { mutableStateOf(false) }
+    var showIssueEvents by remember { mutableStateOf(false) }
     var showCreatePR by remember { mutableStateOf(false) }; var selectedIssue by remember { mutableStateOf<GHIssue?>(null) }
     var selectedCommitSha by remember { mutableStateOf<String?>(null) }; var deleteTarget by remember { mutableStateOf<GHContent?>(null) }
     var showBranchPicker by remember { mutableStateOf(false) }
@@ -206,6 +207,7 @@ internal fun RepoDetailScreen(
             showCreateFile -> showCreateFile = false
             showCreateBranch -> showCreateBranch = false
             showCreateIssue -> showCreateIssue = false
+            showIssueEvents -> showIssueEvents = false
             showCreatePR -> showCreatePR = false
             showBranchPicker -> showBranchPicker = false
             showDispatch -> showDispatch = false
@@ -332,6 +334,25 @@ internal fun RepoDetailScreen(
         RepoTab.CODE_SEARCH -> { /* searches on demand */ }
     }; loading = false }
 
+    if (showIssueEvents) {
+        IssueEventsScreen(
+            repo = repo,
+            onBack = { showIssueEvents = false },
+            onOpenIssue = { number, title ->
+                showIssueEvents = false
+                selectedIssue = GHIssue(
+                    number = number,
+                    title = title,
+                    state = "",
+                    author = "",
+                    createdAt = "",
+                    comments = 0,
+                    isPR = false
+                )
+            },
+        )
+        return
+    }
     if (selectedIssue != null) { IssueDetailScreen(repo, selectedIssue!!.number) { selectedIssue = null }; return }
     if (selectedCommitSha != null) { 
         CommitDiffScreen(repo.owner, repo.name, selectedCommitSha!!) { selectedCommitSha = null }; 
@@ -707,8 +728,11 @@ internal fun RepoDetailScreen(
                     AiModulePillButton(label = "+ file", onClick = { showCreateFile = true })
                     AiModulePillButton(label = "upload \u2191", onClick = { showUpload = true })
                 }
-                RepoTab.ISSUES -> if (canWrite || repo.permissions == null) {
-                    AiModulePillButton(label = "+ issue", onClick = { showCreateIssue = true })
+                RepoTab.ISSUES -> {
+                    GitHubTerminalButton("events", onClick = { showIssueEvents = true }, color = palette.textSecondary)
+                    if (canWrite || repo.permissions == null) {
+                        GitHubTerminalButton("+ issue", onClick = { showCreateIssue = true }, color = palette.accent)
+                    }
                 }
                 RepoTab.PULLS -> if (canWrite || repo.permissions == null) {
                     AiModulePillButton(label = "+ pr", onClick = { showCreatePR = true })
@@ -1165,6 +1189,241 @@ internal fun IssuesTab(issues: List<GHIssue>, hasMore: Boolean, onLoadMore: () -
         }
     }
 }; if (hasMore) item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { GitHubTerminalButton("load more", onClick = onLoadMore, color = AiModuleTheme.colors.accent) } } } }
+
+@Composable
+private fun IssueEventsScreen(
+    repo: GHRepo,
+    onBack: () -> Unit,
+    onOpenIssue: (Int, String) -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val palette = AiModuleTheme.colors
+    var events by remember(repo.fullName) { mutableStateOf<List<GHIssueEvent>>(emptyList()) }
+    var page by remember(repo.fullName) { mutableIntStateOf(1) }
+    var hasMore by remember(repo.fullName) { mutableStateOf(true) }
+    var loading by remember(repo.fullName) { mutableStateOf(true) }
+    var query by rememberSaveable(repo.fullName, "issue-events-query") { mutableStateOf("") }
+    var reloadNonce by remember { mutableIntStateOf(0) }
+
+    suspend fun loadEvents(reset: Boolean) {
+        loading = true
+        val nextPage = if (reset) 1 else page + 1
+        val result = GitHubManager.getIssueEvents(context, repo.owner, repo.name, page = nextPage)
+        events = if (reset) result else events + result
+        page = nextPage
+        hasMore = result.size >= 100
+        loading = false
+    }
+
+    LaunchedEffect(repo.fullName, reloadNonce) {
+        loadEvents(reset = true)
+    }
+
+    val filteredEvents = remember(events, query) {
+        val q = query.trim()
+        if (q.isBlank()) events else events.filter { event ->
+            event.event.contains(q, ignoreCase = true) ||
+                event.actor.contains(q, ignoreCase = true) ||
+                event.issueTitle.contains(q, ignoreCase = true) ||
+                event.issueNumber.toString().contains(q) ||
+                event.label.contains(q, ignoreCase = true) ||
+                event.assignee.contains(q, ignoreCase = true) ||
+                event.milestone.contains(q, ignoreCase = true)
+        }
+    }
+
+    AiModuleSurface {
+        Column(Modifier.fillMaxSize().background(palette.background)) {
+            GitHubPageBar(
+                title = "> issue events",
+                subtitle = repo.fullName,
+                onBack = onBack,
+                trailing = {
+                    GitHubTopBarAction(
+                        glyph = GhGlyphs.REFRESH,
+                        onClick = { reloadNonce++ },
+                        tint = palette.accent,
+                        enabled = !loading,
+                        contentDescription = "refresh issue events",
+                    )
+                },
+            )
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(palette.background)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                GitHubTerminalTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = "filter events",
+                    singleLine = true,
+                    minHeight = 38.dp,
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "events=${events.size}",
+                        color = palette.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 11.sp,
+                    )
+                    if (query.isNotBlank()) {
+                        Text(
+                            "filtered=${filteredEvents.size}",
+                            color = palette.textMuted,
+                            fontFamily = JetBrainsMono,
+                            fontSize = 11.sp,
+                        )
+                        GitHubTerminalButton("clear", onClick = { query = "" }, color = palette.textSecondary)
+                    }
+                }
+            }
+
+            when {
+                loading && events.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    AiModuleSpinner(label = "loading…")
+                }
+                filteredEvents.isEmpty() -> Box(
+                    Modifier.fillMaxSize().padding(24.dp),
+                    contentAlignment = Alignment.TopStart,
+                ) {
+                    Text(
+                        if (query.isBlank()) "// no issue events" else "// no matching issue events",
+                        color = palette.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 13.sp,
+                    )
+                }
+                else -> LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, top = 2.dp, end = 16.dp, bottom = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(filteredEvents) { event ->
+                        IssueEventRow(event = event, onOpenIssue = onOpenIssue)
+                    }
+                    if (hasMore && query.isBlank()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                GitHubTerminalButton(
+                                    label = if (loading) "loading…" else "load more",
+                                    onClick = { scope.launch { loadEvents(reset = false) } },
+                                    color = if (loading) palette.textMuted else palette.accent,
+                                    enabled = !loading,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IssueEventRow(event: GHIssueEvent, onOpenIssue: (Int, String) -> Unit) {
+    val palette = AiModuleTheme.colors
+    val color = issueEventColor(event.event, palette)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(3.dp))
+            .border(1.dp, palette.border, RoundedCornerShape(3.dp))
+            .background(palette.surface)
+            .let {
+                if (event.issueNumber > 0) it.clickable { onOpenIssue(event.issueNumber, event.issueTitle) } else it
+            }
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                event.event.ifBlank { "event" },
+                color = color,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp,
+                modifier = Modifier.widthIn(min = 82.dp, max = 132.dp),
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    "#${event.issueNumber} ${event.issueTitle.ifBlank { "untitled issue" }}",
+                    color = palette.textPrimary,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "${event.actor.ifBlank { "github" }} · ${event.createdAt.take(19).replace("T", " ")}",
+                    color = palette.textMuted,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (event.issueNumber > 0) {
+                AiModuleGlyph(GhGlyphs.ARROW_RIGHT, Modifier.size(16.dp), tint = palette.textMuted, fontSize = 13.sp)
+            }
+        }
+        val chips = buildList {
+            if (event.label.isNotBlank()) add("label:${event.label}" to color)
+            if (event.assignee.isNotBlank()) add("assignee:${event.assignee}" to palette.accent)
+            if (event.milestone.isNotBlank()) add("milestone:${event.milestone}" to GitHubSuccessGreen)
+            if (event.renameFrom.isNotBlank() || event.renameTo.isNotBlank()) {
+                add("rename:${event.renameFrom}->${event.renameTo}" to palette.warning)
+            }
+            if (event.commitId.isNotBlank()) add("commit:${event.commitId.take(7)}" to palette.textSecondary)
+        }
+        if (chips.isNotEmpty()) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                chips.forEach { (label, chipColor) ->
+                    IssueEventChip(label = label, color = chipColor)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IssueEventChip(label: String, color: Color) {
+    Text(
+        text = label,
+        color = color,
+        fontFamily = JetBrainsMono,
+        fontSize = 10.sp,
+        maxLines = 1,
+        modifier = Modifier
+            .border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(2.dp))
+            .background(color.copy(alpha = 0.08f))
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+    )
+}
+
+private fun issueEventColor(event: String, palette: AiModuleColors): Color =
+    when (event) {
+        "closed", "locked", "unassigned", "unlabeled", "demilestoned" -> GitHubErrorRed
+        "reopened", "unlocked", "assigned", "labeled", "milestoned" -> GitHubSuccessGreen
+        "renamed", "transferred", "converted_note_to_issue" -> palette.warning
+        "referenced", "cross-referenced", "connected", "disconnected" -> palette.accent
+        else -> palette.textSecondary
+    }
 
 @Composable
 internal fun PullsTab(

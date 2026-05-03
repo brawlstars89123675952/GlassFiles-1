@@ -14,6 +14,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -1569,43 +1570,180 @@ private fun ActionsSettingsPanel(repo: GHRepo) {
     var permissions by remember { mutableStateOf<GHActionsPermissions?>(null) }
     var workflowPermissions by remember { mutableStateOf<GHWorkflowPermissions?>(null) }
     var retention by remember { mutableStateOf<GHActionsRetention?>(null) }
+    var actionsEnabled by remember { mutableStateOf(false) }
+    var allowedActions by remember { mutableStateOf("all") }
+    var defaultWorkflowPermissions by remember { mutableStateOf("read") }
+    var canApprovePullRequestReviews by remember { mutableStateOf(false) }
+    var retentionDays by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf<String?>(null) }
 
     suspend fun load() {
         loading = true
-        permissions = GitHubManager.getRepoActionsPermissions(context, repo.owner, repo.name)
-        workflowPermissions = GitHubManager.getRepoActionsWorkflowPermissions(context, repo.owner, repo.name)
-        retention = GitHubManager.getRepoActionsRetention(context, repo.owner, repo.name)
+        val loadedPermissions = GitHubManager.getRepoActionsPermissions(context, repo.owner, repo.name)
+        val loadedWorkflowPermissions = GitHubManager.getRepoActionsWorkflowPermissions(context, repo.owner, repo.name)
+        val loadedRetention = GitHubManager.getRepoActionsRetention(context, repo.owner, repo.name)
+        permissions = loadedPermissions
+        workflowPermissions = loadedWorkflowPermissions
+        retention = loadedRetention
+        actionsEnabled = loadedPermissions?.enabled ?: false
+        allowedActions = normalizeActionsAllowedPolicy(loadedPermissions?.allowedActions)
+        defaultWorkflowPermissions = normalizeWorkflowTokenPermission(loadedWorkflowPermissions?.defaultWorkflowPermissions)
+        canApprovePullRequestReviews = loadedWorkflowPermissions?.canApprovePullRequestReviews ?: false
+        retentionDays = loadedRetention?.days?.takeIf { it > 0 }?.toString().orEmpty()
         loading = false
     }
 
     LaunchedEffect(repo.owner, repo.name) { load() }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ActionsPanelHeader("Actions settings", "Repository Actions permissions, workflow token policy and retention.", loading) { scope.launch { load() } }
-        ActionInfoCard(
+        ActionsPanelHeader("Actions settings", "Repository Actions permissions, workflow token policy and retention.", loading || saving != null) { scope.launch { load() } }
+
+        ActionsSettingsCard(
             title = "Actions permissions",
             subtitle = if (permissions?.enabled == true) "Enabled" else "Disabled or unavailable",
-            meta = listOf("Allowed actions: ${permissions?.allowedActions.orEmpty().ifBlank { "unknown" }}"),
-            actionLabel = null,
-            onAction = {}
-        )
-        ActionInfoCard(
+            meta = listOf("Allowed actions: ${permissions?.allowedActions.orEmpty().ifBlank { "unknown" }}")
+        ) {
+            GitHubTerminalCheckbox(
+                "enabled",
+                checked = actionsEnabled,
+                onToggle = { actionsEnabled = !actionsEnabled },
+                enabled = saving == null
+            )
+            Text("Allowed actions", fontSize = 11.sp, color = TextTertiary, fontFamily = JetBrainsMono)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                actionsAllowedPolicies.forEach { policy ->
+                    GitHubTerminalTab(policy, selected = allowedActions == policy) { allowedActions = policy }
+                }
+            }
+            GitHubTerminalButton(
+                if (saving == "actions") "saving..." else "save actions policy",
+                enabled = saving == null,
+                color = Blue,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    saving = "actions"
+                    scope.launch {
+                        val ok = GitHubManager.setRepoActionsPermissions(context, repo.owner, repo.name, actionsEnabled, allowedActions)
+                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        saving = null
+                        if (ok) load()
+                    }
+                }
+            )
+        }
+
+        ActionsSettingsCard(
             title = "Workflow permissions",
             subtitle = workflowPermissions?.defaultWorkflowPermissions.orEmpty().ifBlank { "Unavailable" },
-            meta = listOf("Approve PR reviews: ${workflowPermissions?.canApprovePullRequestReviews ?: false}"),
-            actionLabel = null,
-            onAction = {}
-        )
-        ActionInfoCard(
+            meta = listOf("Approve PR reviews: ${workflowPermissions?.canApprovePullRequestReviews ?: false}")
+        ) {
+            Text("Default GITHUB_TOKEN permission", fontSize = 11.sp, color = TextTertiary, fontFamily = JetBrainsMono)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                workflowTokenPermissions.forEach { value ->
+                    GitHubTerminalTab(value, selected = defaultWorkflowPermissions == value) {
+                        defaultWorkflowPermissions = value
+                    }
+                }
+            }
+            GitHubTerminalCheckbox(
+                "allow actions to approve pull requests",
+                checked = canApprovePullRequestReviews,
+                onToggle = { canApprovePullRequestReviews = !canApprovePullRequestReviews },
+                enabled = saving == null
+            )
+            GitHubTerminalButton(
+                if (saving == "workflow") "saving..." else "save workflow permissions",
+                enabled = saving == null,
+                color = Blue,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    saving = "workflow"
+                    scope.launch {
+                        val ok = GitHubManager.setRepoActionsWorkflowPermissions(
+                            context,
+                            repo.owner,
+                            repo.name,
+                            defaultWorkflowPermissions,
+                            canApprovePullRequestReviews
+                        )
+                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        saving = null
+                        if (ok) load()
+                    }
+                }
+            )
+        }
+
+        ActionsSettingsCard(
             title = "Artifact and log retention",
             subtitle = retention?.days?.takeIf { it > 0 }?.let { "$it days" } ?: "Unavailable",
-            meta = emptyList(),
-            actionLabel = null,
-            onAction = {}
-        )
+            meta = emptyList()
+        ) {
+            Text("Retention days", fontSize = 11.sp, color = TextTertiary, fontFamily = JetBrainsMono)
+            GitHubTerminalTextField(
+                value = retentionDays,
+                onValueChange = { retentionDays = it.filter { char -> char.isDigit() }.take(4) },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = "90",
+                singleLine = true,
+                minHeight = 38.dp
+            )
+            GitHubTerminalButton(
+                if (saving == "retention") "saving..." else "save retention",
+                enabled = saving == null && retentionDays.toIntOrNull()?.let { it > 0 } == true,
+                color = Blue,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    val days = retentionDays.toIntOrNull() ?: return@GitHubTerminalButton
+                    saving = "retention"
+                    scope.launch {
+                        val ok = GitHubManager.setRepoActionsRetention(context, repo.owner, repo.name, days)
+                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                        saving = null
+                        if (ok) load()
+                    }
+                }
+            )
+        }
     }
 }
+
+@Composable
+private fun ActionsSettingsCard(
+    title: String,
+    subtitle: String,
+    meta: List<String>,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val palette = AiModuleTheme.colors
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(2.dp))
+            .border(1.dp, palette.textMuted.copy(alpha = 0.55f), RoundedCornerShape(2.dp))
+            .background(palette.surface)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(title.lowercase(Locale.US), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = palette.textPrimary, fontFamily = JetBrainsMono)
+        Text(subtitle, fontSize = 12.sp, color = palette.textSecondary, fontFamily = JetBrainsMono, lineHeight = 16.sp)
+        if (meta.any { it.isNotBlank() }) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                meta.filter { it.isNotBlank() }.forEach { MiniActionsBadge(it, palette.textSecondary) }
+            }
+        }
+        content()
+    }
+}
+
+private val actionsAllowedPolicies = listOf("all", "local_only", "selected")
+private val workflowTokenPermissions = listOf("read", "write")
+
+private fun normalizeActionsAllowedPolicy(value: String?): String =
+    value?.takeIf { it in actionsAllowedPolicies } ?: "all"
+
+private fun normalizeWorkflowTokenPermission(value: String?): String =
+    value?.takeIf { it in workflowTokenPermissions } ?: "read"
 
 @Composable
 private fun ActionsPanelHeader(title: String, subtitle: String, loading: Boolean, onRefresh: () -> Unit) {

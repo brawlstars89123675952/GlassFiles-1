@@ -1204,3 +1204,40 @@
 ### Проверка
 - Gradle/CI не запускались по build policy.
 - Выполнена только статическая проверка `git diff --check`.
+
+## 2026-05-03
+
+### GitHub Actions settings write UI
+- Реализован следующий public GitHub API block из `GITHUB_API_ANALYSIS.md`: write UI для repository Actions settings.
+- `GitHubActionsModule.kt`:
+  - `ActionsSettingsPanel` теперь не только читает, но и сохраняет Actions policy через `/actions/permissions`;
+  - добавлены controls для `enabled` и `allowed_actions` (`all / local_only / selected`);
+  - workflow token policy сохраняется через `/actions/permissions/workflow`;
+  - добавлен выбор `read / write` для default `GITHUB_TOKEN` permissions;
+  - добавлен toggle `can_approve_pull_request_reviews`;
+  - artifact/log retention теперь сохраняется через `/actions/permissions/artifact-and-log-retention`;
+  - после successful save панель перечитывает актуальное состояние.
+  - новые controls выдержаны в terminal UI: `GitHubTerminalButton`, `GitHubTerminalTab`, `GitHubTerminalCheckbox`, `GitHubTerminalTextField`, border/surface card без Material-like field.
+- `GITHUB_API_ANALYSIS.md`:
+  - Actions permissions, workflow token permissions и artifact/log retention перенесены из partial/read-only в fully implemented;
+  - partial section очищена от закрытого gap;
+  - remaining Actions gaps сужены до single workflow detail и enterprise runner groups.
+- Проверка:
+  - выполнен `git diff --check`
+  - локальная Android compile-проверка `./gradlew :app:compileDebugKotlin` запускалась, но остановилась на конфигурации проекта: в окружении нет Android SDK / `ANDROID_HOME` / `local.properties`
+
+### GitHub issues: repository event feed
+- Реализован следующий read-only public GitHub API gap из `GITHUB_API_ANALYSIS.md`: repository-wide issue events.
+- `GitHubManager.kt`:
+  - добавлен `getIssueEvents(...)` для `/repos/{owner}/{repo}/issues/events`;
+  - добавлена модель `GHIssueEvent` с issue number/title, actor, event type, label/assignee/milestone, rename и commit metadata.
+- `GitHubRepoModule.kt`:
+  - во вкладке `issues` добавлен terminal action `events`;
+  - добавлен `IssueEventsScreen` с refresh, фильтром, пагинацией и переходом из события в detail issue;
+  - новая UI часть использует terminal-style controls (`GitHubTerminalButton`, `GitHubTerminalTextField`, border/surface layout, glyph text), без добавления Material UI.
+- `GITHUB_API_ANALYSIS.md`:
+  - `Issue events` перенесён из backlog в implemented Issues Advanced;
+  - remaining issues gap сужен до deeper timeline event actions.
+- Проверка:
+  - локальная Android сборка не запускалась по прямой просьбе пользователя;
+  - выполнена только статическая проверка `git diff --check`.

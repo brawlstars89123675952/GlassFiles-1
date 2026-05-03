@@ -663,6 +663,33 @@ object GitHubManager {
         } catch (e: Exception) { emptyList() }
     }
 
+    suspend fun getIssueEvents(context: Context, owner: String, repo: String, page: Int = 1): List<GHIssueEvent> {
+        val r = request(context, "/repos/$owner/$repo/issues/events?per_page=100&page=$page")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                val issue = j.optJSONObject("issue")
+                val rename = j.optJSONObject("rename")
+                GHIssueEvent(
+                    id = j.optLong("id"),
+                    event = j.optString("event", ""),
+                    actor = j.optJSONObject("actor")?.optString("login") ?: "",
+                    createdAt = j.optString("created_at", ""),
+                    issueNumber = issue?.optInt("number", 0) ?: 0,
+                    issueTitle = issue?.optString("title", "") ?: "",
+                    label = j.optJSONObject("label")?.optString("name") ?: "",
+                    assignee = j.optJSONObject("assignee")?.optString("login") ?: "",
+                    milestone = j.optJSONObject("milestone")?.optString("title") ?: "",
+                    renameFrom = rename?.optString("from", "") ?: "",
+                    renameTo = rename?.optString("to", "") ?: "",
+                    commitId = j.optString("commit_id", "")
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
     suspend fun addComment(context: Context, owner: String, repo: String, number: Int, body: String): Boolean {
         val json = JSONObject().apply { put("body", body) }.toString()
         return request(context, "/repos/$owner/$repo/issues/$number/comments", "POST", json).success
@@ -4737,6 +4764,21 @@ data class GHCommit(val sha: String, val message: String, val author: String, va
 
 data class GHIssue(val number: Int, val title: String, val state: String, val author: String,
     val createdAt: String, val comments: Int, val isPR: Boolean)
+
+data class GHIssueEvent(
+    val id: Long,
+    val event: String,
+    val actor: String,
+    val createdAt: String,
+    val issueNumber: Int,
+    val issueTitle: String,
+    val label: String,
+    val assignee: String,
+    val milestone: String,
+    val renameFrom: String,
+    val renameTo: String,
+    val commitId: String
+)
 
 data class GHIssueDetail(val number: Int, val title: String, val body: String, val state: String,
     val author: String, val avatarUrl: String, val createdAt: String, val comments: Int,

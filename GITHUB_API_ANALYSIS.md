@@ -1,5 +1,9 @@
 # GitHub API Coverage Analysis for GlassFiles
 
+Last normalized: 2026-05-03. This matrix reflects the local code and
+`WORKLOG_GITHUB_MODULES.md`; keep backlog rows free of already implemented
+items.
+
 ## ✅ FULLY IMPLEMENTED (Backend + UI)
 
 ### Authentication & User
@@ -24,6 +28,7 @@
 | Delete repo | `/repos/{owner}/{repo}` (DELETE) | ✅ | ✅ | Via menu |
 | Get repo contents | `/repos/{owner}/{repo}/contents` | ✅ | ✅ | File browser with branches |
 | Get file content | `/repos/{owner}/{repo}/contents/{path}` | ✅ | ✅ | Base64 decode |
+| Update file content | `/repos/{owner}/{repo}/contents/{path}` (PUT with sha) | ✅ | ✅ | CodeEditorScreen commit flow |
 | Upload file | `/repos/{owner}/{repo}/contents/{path}` (PUT) | ✅ | ✅ | UploadDialog |
 | Delete file | `/repos/{owner}/{repo}/contents/{path}` (DELETE) | ✅ | ✅ | DeleteFileDialog |
 | Download file | `download_url` | ✅ | ✅ | To Downloads/GlassFiles_Git |
@@ -79,6 +84,15 @@
 | Update issue meta | `/repos/{owner}/{repo}/issues/{number}` (PATCH) | ✅ | ✅ | Labels, assignees, milestone |
 | List assignees | `/repos/{owner}/{repo}/assignees` | ✅ | ✅ | SettingsModule |
 
+### Issues Advanced
+| Feature | API Endpoint | Backend | UI | Notes |
+|---------|-------------|---------|-----|-------|
+| Lock/unlock issue | `/repos/{owner}/{repo}/issues/{number}/lock` (PUT/DELETE) | ✅ | ✅ | Lock dialog with GitHub lock reasons |
+| Issue timeline | `/repos/{owner}/{repo}/issues/{number}/timeline` | ✅ | ✅ | Full history dialog |
+| Issue events | `/repos/{owner}/{repo}/issues/events` | ✅ | ✅ | Repository-wide issue event feed |
+| Update comment | `/repos/{owner}/{repo}/issues/comments/{id}` (PATCH) | ✅ | ✅ | Edit existing issue comments |
+| Delete comment | `/repos/{owner}/{repo}/issues/comments/{id}` (DELETE) | ✅ | ✅ | Delete comments with confirmation |
+
 ### Pull Requests
 | Feature | API Endpoint | Backend | UI | Notes |
 |---------|-------------|---------|-----|-------|
@@ -91,6 +105,19 @@
 | View PR diff | `/repos/{owner}/{repo}/pulls/{number}/files` | ✅ | ✅ | PullRequestDiffScreen |
 | PR review comments | `/repos/{owner}/{repo}/pulls/{number}/comments` | ✅ | ✅ | Line comments in diff viewer |
 | PR check runs | `/repos/{owner}/{repo}/commits/{ref}/check-runs` | ✅ | ✅ | PR detail checks summary and full checks screen |
+| Update PR | `/repos/{owner}/{repo}/pulls/{number}` (PATCH) | ✅ | ✅ | Title, body, base, state |
+| List PR reviews | `/repos/{owner}/{repo}/pulls/{number}/reviews` | ✅ | ✅ | Review history |
+| Get single review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` | ✅ | ✅ | Review detail dialog |
+| Update review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` (PUT) | ✅ | ✅ | Pending review edit |
+| Delete review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` (DELETE) | ✅ | ✅ | Pending review delete |
+| Create review comment | `/repos/{owner}/{repo}/pulls/{number}/comments` (POST) | ✅ | ✅ | Line-level comments |
+| Update review comment | `/repos/{owner}/{repo}/pulls/comments/{id}` (PATCH) | ✅ | ✅ | Diff/comment views |
+| Delete review comment | `/repos/{owner}/{repo}/pulls/comments/{id}` (DELETE) | ✅ | ✅ | Diff/comment views |
+| Squash merge | `/repos/{owner}/{repo}/pulls/{number}/merge` (PUT) with `squash` | ✅ | ✅ | Merge method selector |
+| Rebase merge | `/repos/{owner}/{repo}/pulls/{number}/merge` (PUT) with `rebase` | ✅ | ✅ | Merge method selector |
+| Request reviewers | `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers` (POST) | ✅ | ✅ | Reviewer request flow |
+| Remove reviewers | `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers` (DELETE) | ✅ | ✅ | Reviewer removal flow |
+| PR mergeability | `/repos/{owner}/{repo}/pulls/{number}` | ✅ | ✅ | Uses `mergeable` and `mergeable_state` from PR detail |
 
 ### Releases
 | Feature | API Endpoint | Backend | UI | Notes |
@@ -116,6 +143,26 @@
 | Dispatch workflow | `/repos/{owner}/{repo}/actions/workflows/{id}/dispatches` (POST) | ✅ | ✅ | DispatchWorkflowDialog |
 | List artifacts | `/repos/{owner}/{repo}/actions/runs/{id}/artifacts` | ✅ | ✅ | WorkflowRunDetailScreen |
 | Download artifact | `/repos/{owner}/{repo}/actions/artifacts/{id}/zip` | ✅ | ✅ | To local file |
+| Delete artifact | `/repos/{owner}/{repo}/actions/artifacts/{id}` (DELETE) | ✅ | ✅ | Run detail and repository artifact panel |
+| List repository artifacts | `/repos/{owner}/{repo}/actions/artifacts` | ✅ | ✅ | Repository-wide artifacts panel |
+| Enable workflow | `/repos/{owner}/{repo}/actions/workflows/{id}/enable` (PUT) | ✅ | ✅ | Workflow toggle |
+| Disable workflow | `/repos/{owner}/{repo}/actions/workflows/{id}/disable` (PUT) | ✅ | ✅ | Workflow toggle |
+| Rerun failed jobs | `/repos/{owner}/{repo}/actions/runs/{id}/rerun-failed-jobs` (POST) | ✅ | ✅ | Run menu |
+| Rerun job | `/repos/{owner}/{repo}/actions/jobs/{id}/rerun` (POST) | ✅ | ✅ | Job action |
+| Force cancel run | `/repos/{owner}/{repo}/actions/runs/{id}/force-cancel` (POST) | ✅ | ✅ | Run danger action |
+| Delete run logs | `/repos/{owner}/{repo}/actions/runs/{id}/logs` (DELETE) | ✅ | ✅ | Run danger action |
+| Delete workflow run | `/repos/{owner}/{repo}/actions/runs/{id}` (DELETE) | ✅ | ✅ | Run danger action |
+| Workflow run attempts | `/repos/{owner}/{repo}/actions/runs/{id}/attempts/{attempt}` | ✅ | ✅ | Attempt picker and attempt jobs/logs |
+| Workflow usage | `/repos/{owner}/{repo}/actions/workflows/{id}/timing` | ✅ | ✅ | Usage metadata |
+| Workflow run usage | `/repos/{owner}/{repo}/actions/runs/{id}/timing` | ✅ | ✅ | Run summary metadata |
+| Pending deployments | `/repos/{owner}/{repo}/actions/runs/{id}/pending_deployments` | ✅ | ✅ | Deployment review section |
+| Actions cache usage/list/delete | `/repos/{owner}/{repo}/actions/cache/*` | ✅ | ✅ | Caches panel |
+| Actions variables CRUD | `/repos/{owner}/{repo}/actions/variables` | ✅ | ✅ | Variables panel |
+| Actions secrets CRUD | `/repos/{owner}/{repo}/actions/secrets` | ✅ | ✅ | Secrets panel with public-key encryption |
+| Self-hosted runners | `/repos/{owner}/{repo}/actions/runners` | ✅ | ✅ | List/delete plus registration/remove tokens |
+| Actions permissions read/write | `/repos/{owner}/{repo}/actions/permissions` | ✅ | ✅ | Settings panel |
+| Workflow token permissions read/write | `/repos/{owner}/{repo}/actions/permissions/workflow` | ✅ | ✅ | Settings panel |
+| Artifact/log retention read/write | `/repos/{owner}/{repo}/actions/permissions/artifact-and-log-retention` | ✅ | ✅ | Settings panel |
 | Matrix job grouping | Local UI over run jobs | - | ✅ | Collapsible prefix groups for large kernel matrices |
 | Kernel failure diagnostics | Local asset/cache/remote pattern catalog | - | ✅ | Remote-updatable kernel builder error summaries |
 
@@ -217,6 +264,32 @@
 | Get repository security advisory | `/repos/{owner}/{repo}/security-advisories/{ghsa_id}` | ✅ | ✅ | Advisory detail dialog |
 | Community profile | `/repos/{owner}/{repo}/community/profile` | ✅ | ✅ | Health percentage and community checklist |
 
+### Webhooks
+| Feature | API Endpoint | Backend | UI | Notes |
+|---------|-------------|---------|-----|-------|
+| List webhooks | `/repos/{owner}/{repo}/hooks` | ✅ | ✅ | Webhooks screen |
+| Get webhook | `/repos/{owner}/{repo}/hooks/{id}` | ✅ | ✅ | Detail dialog |
+| Create webhook | `/repos/{owner}/{repo}/hooks` (POST) | ✅ | ✅ | Create dialog |
+| Update webhook | `/repos/{owner}/{repo}/hooks/{id}` (PATCH) | ✅ | ✅ | Edit dialog |
+| Delete webhook | `/repos/{owner}/{repo}/hooks/{id}` (DELETE) | ✅ | ✅ | Confirmation dialog |
+| Test webhook | `/repos/{owner}/{repo}/hooks/{id}/tests` (POST) | ✅ | ✅ | Card action |
+| Ping webhook | `/repos/{owner}/{repo}/hooks/{id}/pings` (POST) | ✅ | ✅ | Card action |
+| Get webhook config | `/repos/{owner}/{repo}/hooks/{id}/config` | ✅ | ✅ | Config dialog |
+| Update webhook config | `/repos/{owner}/{repo}/hooks/{id}/config` (PATCH) | ✅ | ✅ | Config dialog |
+| Get webhook deliveries | `/repos/{owner}/{repo}/hooks/{id}/deliveries` | ✅ | ✅ | Deliveries screen |
+| Redeliver webhook | `/repos/{owner}/{repo}/hooks/{id}/deliveries/{delivery_id}/attempts` (POST) | ✅ | ✅ | Delivery detail action |
+
+### Repository Rules
+| Feature | API Endpoint | Backend | UI | Notes |
+|---------|-------------|---------|-----|-------|
+| List rulesets | `/repos/{owner}/{repo}/rulesets` | ✅ | ✅ | Rulesets screen |
+| Get ruleset | `/repos/{owner}/{repo}/rulesets/{id}` | ✅ | ✅ | Detail UI |
+| Create ruleset | `/repos/{owner}/{repo}/rulesets` (POST) | ✅ | ✅ | Raw rules JSON editor |
+| Update ruleset | `/repos/{owner}/{repo}/rulesets/{id}` (PUT) | ✅ | ✅ | Conditions/rules editor |
+| Delete ruleset | `/repos/{owner}/{repo}/rulesets/{id}` (DELETE) | ✅ | ✅ | Confirmation dialog |
+| Get rule suite | `/repos/{owner}/{repo}/rule-suites/{id}` | ✅ | ✅ | Detail dialog |
+| List rule suites | `/repos/{owner}/{repo}/rule-suites` | ✅ | ✅ | Ruleset detail |
+
 ### User Settings (Advanced)
 | Feature | API Endpoint | Backend | UI | Notes |
 |---------|-------------|---------|-----|-------|
@@ -241,20 +314,18 @@
 
 ---
 
-## ⚠️ PARTIALLY IMPLEMENTED (Backend only, minimal/no UI)
+## ⚠️ PARTIALLY IMPLEMENTED (Backend exists, UI is missing or read-only)
 
-| Feature | API Endpoint | Backend | UI | What's Missing |
-|---------|-------------|---------|-----|---------------|
-| Update file content | Contents API (PUT with sha) | ✅ | ⚠️ | EditFileScreen exists but basic |
-| Merge branch | `/repos/{owner}/{repo}/merges` (POST) | ❌ | ❌ | Not implemented |
+None currently tracked.
 
 ---
 
-## ❌ NOT IMPLEMENTED (Major GitHub API Features)
+## ❌ NOT IMPLEMENTED / REMAINING BACKLOG
 
 ### Repository Management
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
+| Merge branch | `/repos/{owner}/{repo}/merges` (POST) | Low | Branch-to-branch merge endpoint is not wired |
 | Transfer repo | `/repos/{owner}/{repo}/transfer` (POST) | Low | |
 | Rename default branch | `/repos/{owner}/{repo}/branches/{branch}/rename` (POST) | Low | |
 | Required signatures | `/repos/{owner}/{repo}/branches/{branch}/protection/required_signatures` | Low | |
@@ -270,33 +341,13 @@
 ### Issues (Advanced)
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
-| Lock/unlock issue | `/repos/{owner}/{repo}/issues/{number}/lock` (PUT/DELETE) | ✅ | Lock dialog with GitHub lock reasons |
-| Issue timeline | `/repos/{owner}/{repo}/issues/{number}/timeline` | ✅ | Full history dialog |
-| Issue events | `/repos/{owner}/{repo}/issues/events` | Low | |
-| Issue reactions (CRUD) | `/repos/{owner}/{repo}/issues/{number}/reactions` | ✅ | Emoji reactions |
-| Comment reactions (CRUD) | `/repos/{owner}/{repo}/issues/comments/{id}/reactions` | ✅ | Emoji reactions on issue comments |
-| Update comment | `/repos/{owner}/{repo}/issues/comments/{id}` (PATCH) | ✅ | Edit existing comment |
-| Delete comment | `/repos/{owner}/{repo}/issues/comments/{id}` (DELETE) | ✅ | Delete comment with confirmation |
+| Deeper timeline event actions | Multiple issue timeline/event endpoints | Low | Timeline is readable; event-specific mutations are not modeled |
 
 ### Pull Requests (Advanced)
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
-| Update PR | `/repos/{owner}/{repo}/pulls/{number}` (PATCH) | Medium | ✅ Implemented: title, body, base, state |
-| List PR reviews | `/repos/{owner}/{repo}/pulls/{number}/reviews` | Medium | ✅ Implemented review history |
-| Get single review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` | Low | ✅ Implemented from review history |
-| Update review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` (PUT) | Low | ✅ Implemented for pending reviews |
-| Delete review | `/repos/{owner}/{repo}/pulls/{number}/reviews/{id}` (DELETE) | Low | ✅ Implemented for pending reviews |
-| List review comments | `/repos/{owner}/{repo}/pulls/{number}/comments` | Medium | PR line comments |
-| Create review comment | `/repos/{owner}/{repo}/pulls/{number}/comments` (POST) | Medium | Line-level comments |
-| Update review comment | `/repos/{owner}/{repo}/pulls/comments/{id}` (PATCH) | Low | ✅ Implemented from diff/comment views |
-| Delete review comment | `/repos/{owner}/{repo}/pulls/comments/{id}` (DELETE) | Low | ✅ Implemented from diff/comment views |
-| PR check-runs | `/repos/{owner}/{repo}/commits/{ref}/check-runs` | Medium | CI status on PR |
-| PR check-suites | `/repos/{owner}/{repo}/commits/{ref}/check-suites` | Medium | |
-| PR merge status | `/repos/{owner}/{repo}/pulls/{number}/merge` (GET) | Low | Check if mergeable |
-| Squash merge | `/repos/{owner}/{repo}/pulls/{number}/merge` (PUT) with `squash` | Low | ✅ Implemented merge method selector |
-| Rebase merge | `/repos/{owner}/{repo}/pulls/{number}/merge` (PUT) with `rebase` | Low | ✅ Implemented merge method selector |
-| Request reviewers | `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers` (POST) | Medium | ✅ Implemented |
-| Remove reviewers | `/repos/{owner}/{repo}/pulls/{number}/requested_reviewers` (DELETE) | Medium | ✅ Implemented |
+| PR check suites | `/repos/{owner}/{repo}/commits/{ref}/check-suites` | Medium | Check runs are implemented; suites are not |
+| Check if PR was merged | `/repos/{owner}/{repo}/pulls/{number}/merge` (GET) | Low | Mergeability is shown from PR detail; this explicit endpoint is not wired |
 
 ### Git Data (Advanced)
 | Feature | API Endpoint | Priority | Notes |
@@ -317,54 +368,8 @@
 ### GitHub Actions (Advanced)
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
-| List workflow run artifacts | Already have | - | |
-| Delete artifact | `/repos/{owner}/{repo}/actions/artifacts/{id}` (DELETE) | Low | |
-| Get workflow | `/repos/{owner}/{repo}/actions/workflows/{id}` | Low | |
-| Disable workflow | `/repos/{owner}/{repo}/actions/workflows/{id}/disable` (PUT) | Low | |
-| Enable workflow | `/repos/{owner}/{repo}/actions/workflows/{id}/enable` (PUT) | Low | |
-| Get workflow permissions | `/repos/{owner}/{repo}/actions/permissions` | Low | |
-| Set workflow permissions | `/repos/{owner}/{repo}/actions/permissions` (PUT) | Low | |
-| List environment variables | `/repos/{owner}/{repo}/actions/variables` | Low | |
-| Create variable | `/repos/{owner}/{repo}/actions/variables` (POST) | Low | |
-| List secrets | `/repos/{owner}/{repo}/actions/secrets` | Low | Names only |
-| List self-hosted runners | `/repos/{owner}/{repo}/actions/runners` | Low | |
-| List runner groups | `/repos/{owner}/{repo}/actions/runner-groups` | Low | Enterprise only |
-| Get workflow usage | `/repos/{owner}/{repo}/actions/workflows/{id}/timing` | Low | |
-
-### Webhooks
-| Feature | API Endpoint | Priority | Notes |
-|---------|-------------|----------|-------|
-| List webhooks | `/repos/{owner}/{repo}/hooks` | Low | ✅ Implemented |
-| Get webhook | `/repos/{owner}/{repo}/hooks/{id}` | Low | ✅ Implemented with detail dialog |
-| Create webhook | `/repos/{owner}/{repo}/hooks` (POST) | Low | ✅ Implemented |
-| Update webhook | `/repos/{owner}/{repo}/hooks/{id}` (PATCH) | Low | ✅ Implemented |
-| Delete webhook | `/repos/{owner}/{repo}/hooks/{id}` (DELETE) | Low | ✅ Implemented |
-| Test webhook | `/repos/{owner}/{repo}/hooks/{id}/tests` (POST) | Low | ✅ Implemented |
-| Ping webhook | `/repos/{owner}/{repo}/hooks/{id}/pings` (POST) | Low | ✅ Implemented |
-| Get webhook config | `/repos/{owner}/{repo}/hooks/{id}/config` | Low | ✅ Implemented |
-| Update webhook config | `/repos/{owner}/{repo}/hooks/{id}/config` (PATCH) | Low | ✅ Implemented |
-| Get webhook deliveries | `/repos/{owner}/{repo}/hooks/{id}/deliveries` | Low | ✅ Implemented with filters and detail dialog |
-| Redeliver webhook | `/repos/{owner}/{repo}/hooks/{id}/deliveries/{delivery_id}/attempts` (POST) | Low | ✅ Implemented |
-
-### Repository Rules
-| Feature | API Endpoint | Priority | Notes |
-|---------|-------------|----------|-------|
-| List rulesets | `/repos/{owner}/{repo}/rulesets` | Medium | ✅ Implemented; newer than branch protection |
-| Get ruleset | `/repos/{owner}/{repo}/rulesets/{id}` | Medium | ✅ Implemented with detail UI |
-| Create ruleset | `/repos/{owner}/{repo}/rulesets` (POST) | Medium | ✅ Implemented with raw rules JSON editor |
-| Update ruleset | `/repos/{owner}/{repo}/rulesets/{id}` (PUT) | Medium | ✅ Implemented with conditions/rules editor |
-| Delete ruleset | `/repos/{owner}/{repo}/rulesets/{id}` (DELETE) | Medium | ✅ Implemented with confirmation dialog |
-| Get rule suite | `/repos/{owner}/{repo}/rule-suites/{id}` | Low | ✅ Implemented with detail dialog |
-| List rule suites | `/repos/{owner}/{repo}/rule-suites` | Low | ✅ Implemented in ruleset detail |
-
-### Search (Advanced)
-| Feature | API Endpoint | Priority | Notes |
-|---------|-------------|----------|-------|
-| Search commits | `/search/commits` | ✅ | Implemented in AdvancedSearchScreen |
-| Search issues | `/search/issues` | ✅ | Implemented in AdvancedSearchScreen |
-| Search users | `/search/users` | ✅ | Implemented in AdvancedSearchScreen |
-| Search topics | `/search/topics` | ✅ | Implemented in AdvancedSearchScreen |
-| Search labels | `/search/labels` | ✅ | Implemented in AdvancedSearchScreen with `repository_id` lookup |
+| Get single workflow | `/repos/{owner}/{repo}/actions/workflows/{id}` | Low | Workflow list/detail enough for current UI, no dedicated single-workflow detail endpoint |
+| List runner groups | `/repos/{owner}/{repo}/actions/runner-groups` | Low | Enterprise-only / not surfaced |
 
 ### GitHub Apps / OAuth
 | Feature | API Endpoint | Priority | Notes |
@@ -386,33 +391,31 @@
 
 ## 📊 SUMMARY
 
-### Coverage Statistics
+### Current Status Matrix
 
-| Category | Implemented | Partial | Missing | Coverage |
-|----------|------------|---------|---------|----------|
-| Authentication & User | 12 | 0 | 0 | 100% |
-| Repositories (Basic) | 18 | 0 | 0 | 100% |
-| Repositories (Advanced) | 1 | 0 | 19+ | 5% |
-| Branches | 4 | 0 | 5 | 44% |
-| Commits | 3 | 0 | 2 | 60% |
-| Issues (Basic) | 11 | 0 | 0 | 100% |
-| Issues (Advanced) | 6 | 0 | 2 | 75% |
-| Pull Requests (Basic) | 7 | 0 | 0 | 100% |
-| Pull Requests (Advanced) | 11 | 0 | 4+ | 73% |
-| Releases | 5 | 0 | 0 | 100% |
-| GitHub Actions | 13 | 0 | 8+ | 62% |
-| Gists | 4 | 0 | 0 | 100% |
-| Notifications | 6 | 0 | 0 | 100% |
-| Search | 5 | 0 | 0 | 100% |
-| Organizations | 2 | 0 | 0 | 100% |
-| User Settings | 20+ | 0 | 0 | 100% |
-| Git Data | 0 | 0 | 10+ | 0% |
-| Discussions | 7 | 0 | 0 | 100% |
-| Projects | 22 | 0 | 0 | 100% |
-| Packages | 6 | 0 | 0 | 100% |
-| Security | 13 | 0 | 0 | 100% |
-| Webhooks | 11 | 0 | 0 | 100% |
-| Repository Rules | 7 | 0 | 0 | 100% |
+| Area | Status | Remaining gaps |
+|------|--------|----------------|
+| Authentication & User | ✅ Complete | None tracked |
+| Repositories / Files | ✅ Complete for core mobile flows | Merge branch, transfer/rename/default-branch admin, repo invites, traffic analytics, stargazers/watchers/events |
+| Branches | ✅ Complete for list/create/delete/switch | Required signatures and other advanced protection sub-resources |
+| Commits / Compare | ✅ Complete for current UI | Low-level Git Data endpoints remain mostly internal or unsurfaced |
+| Issues | ✅ Complete for main issue flow | Deeper timeline event actions |
+| Pull Requests | ✅ Complete for PR detail/reviews/comments/merge methods/check runs | Check suites and explicit `GET /pulls/{number}/merge` merged-state endpoint |
+| Releases | ✅ Complete | None tracked |
+| GitHub Actions | ✅ Complete for runs/logs/artifacts/dispatch/jobs/cache/secrets/variables/runners/settings | Single-workflow detail and enterprise runner groups |
+| Gists | ✅ Complete | None tracked |
+| Notifications | ✅ Complete | None tracked |
+| Search | ✅ Complete | None tracked |
+| Organizations | ✅ Complete for list/user org repos | Org admin APIs intentionally out of scope |
+| Discussions | ✅ Complete | None tracked |
+| Projects / Projects V2 | ✅ Complete | None tracked |
+| Packages | ✅ Complete | None tracked |
+| Security | ✅ Complete | None tracked |
+| Webhooks | ✅ Complete | None tracked |
+| Repository Rules | ✅ Complete | None tracked |
+| User Settings | ✅ Complete for supported public APIs | Web-only settings remain out of scope |
+| GitHub Apps / OAuth | ❌ Backlog | Installations and legacy OAuth app authorization views |
+| Enterprise / Advanced | ❌ Backlog | Enterprise runners, org runner groups, SCIM, audit log, SAML SSO |
 
 ### Overall Assessment
 
@@ -421,10 +424,11 @@
 - ✅ Basic repository operations
 - ✅ File management (CRUD)
 - ✅ Branch management
-- ✅ Issues (basic CRUD + comments)
-- ✅ Pull Requests (basic CRUD + merge)
+- ✅ Commits and compare
+- ✅ Issues (basic CRUD, comments, reactions, lock/unlock, timeline)
+- ✅ Pull Requests (detail, reviews, comments, merge methods, check runs)
 - ✅ Releases (full CRUD)
-- ✅ GitHub Actions (runs, logs, dispatch)
+- ✅ GitHub Actions (runs, logs, dispatch, artifacts, caches, secrets, variables, runners)
 - ✅ Gists
 - ✅ Notifications
 - ✅ Advanced search (repositories, users, issues, commits, topics, labels)
@@ -439,15 +443,19 @@
 - ✅ Repository rulesets and rule suites
 
 **Partially Implemented / In Progress:**
-- ⚠️ Commits (diff viewing, but no compare)
-- ⚠️ GitHub Actions (missing advanced features)
-- ⚠️ Issues Advanced (timeline, lock/unlock, reactions and comment edit/delete implemented; remaining gaps are issue events and deeper timeline event actions)
+- None currently tracked.
 
 **Not Implemented / Early Coverage — Major Gaps:**
-- ⚠️ Advanced PR features (review detail/mutations, review comments, review comment mutations, check runs, reviewers, review history and merge methods implemented; remaining gaps are check suites and explicit merge status)
-- ⚠️ Advanced issue features (timeline, lock/unlock, reactions, edit/delete comments implemented; remaining gaps are issue events and deeper timeline event actions)
+- ⚠️ Git Data standalone UI/API surface.
+- ⚠️ Repository analytics/admin extras: traffic, stargazers/watchers/events, transfer, branch rename, invitations.
+- ⚠️ Advanced PR extras: check suites and explicit merged-state endpoint.
+- ⚠️ Deeper issue timeline event actions.
+- ⚠️ GitHub Apps/OAuth and Enterprise-only APIs.
 
 ### Recommendations for Next Implementation
 
 **Low Priority (nice to have):**
-1. **Advanced PR check suites / explicit merge status** — remaining PR polish
+1. **Advanced PR check suites / explicit merged-state endpoint** — remaining PR polish.
+2. **Repository analytics/admin extras** — traffic, stargazers/watchers/events, transfer and branch rename.
+3. **Standalone Git Data tools** — tree/blob/tag/ref viewers only if a concrete workflow needs them.
+4. **Single workflow detail** — wire `/actions/workflows/{id}` only if the workflow overview needs a separate detail screen.
