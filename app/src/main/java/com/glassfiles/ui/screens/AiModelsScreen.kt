@@ -337,6 +337,7 @@ private fun capabilityStyle(cap: AiCapability): Pair<String, androidx.compose.ui
         AiCapability.VISION -> "VIS" to colors.accent
         AiCapability.IMAGE_GEN -> "IMG" to colors.warning
         AiCapability.VIDEO_GEN -> "VID" to colors.warning
+        AiCapability.MUSIC_GEN -> "MUS" to colors.warning
         AiCapability.CODING -> "CODE" to colors.accent
         AiCapability.REASONING -> "REASON" to colors.accentDim
         AiCapability.EMBEDDING -> "EMB" to colors.textMuted

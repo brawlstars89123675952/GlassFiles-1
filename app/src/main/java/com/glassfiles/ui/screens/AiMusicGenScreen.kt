@@ -722,8 +722,8 @@ private class MusicPlaybackController {
             val mp = MediaPlayer().apply {
                 setDataSource(file.absolutePath)
                 setOnCompletionListener {
-                    isPlaying = false
-                    positionMs = durationMs
+                    this@MusicPlaybackController.isPlaying = false
+                    this@MusicPlaybackController.positionMs = durationMs
                 }
                 prepare()
                 start()
