@@ -551,9 +551,9 @@ private fun BC(name: String, sel: Boolean, onClick: () -> Unit) {
     val palette = AiModuleTheme.colors
     Box(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(GitHubControlRadius))
             .background(if (sel) palette.accent.copy(alpha = 0.15f) else palette.surface)
-            .border(1.dp, if (sel) palette.accent else palette.border, RoundedCornerShape(4.dp))
+            .border(1.dp, if (sel) palette.accent else palette.border, RoundedCornerShape(GitHubControlRadius))
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
@@ -604,7 +604,7 @@ internal fun BranchPickerDialog(
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(4.dp))
+                                .clip(RoundedCornerShape(GitHubControlRadius))
                                 .background(if (isCurrent) palette.accent.copy(alpha = 0.10f) else Color.Transparent)
                                 .clickable { onSelect(b) }
                                 .padding(horizontal = 8.dp, vertical = 6.dp),

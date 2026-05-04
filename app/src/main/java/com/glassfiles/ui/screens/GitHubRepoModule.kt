@@ -743,9 +743,9 @@ internal fun RepoDetailScreen(
         ) {
             Row(
                 Modifier
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(GitHubControlRadius))
                     .background(palette.accent.copy(alpha = 0.10f))
-                    .border(1.dp, palette.accent.copy(alpha = 0.55f), RoundedCornerShape(4.dp))
+                    .border(1.dp, palette.accent.copy(alpha = 0.55f), RoundedCornerShape(GitHubControlRadius))
                     .clickable { showBranchPicker = true }
                     .padding(horizontal = 8.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -814,9 +814,9 @@ internal fun RepoDetailScreen(
                 }
                 Box(
                     Modifier
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(RoundedCornerShape(GitHubControlRadius))
                         .background(if (sel) palette.accent.copy(alpha = 0.12f) else Color.Transparent)
-                        .border(1.dp, if (sel) palette.accent.copy(alpha = 0.55f) else palette.border, RoundedCornerShape(4.dp))
+                        .border(1.dp, if (sel) palette.accent.copy(alpha = 0.55f) else palette.border, RoundedCornerShape(GitHubControlRadius))
                         .clickable { selectedTab = tab; repoQuery = "" }
                         .padding(horizontal = 8.dp, vertical = 5.dp),
                 ) {

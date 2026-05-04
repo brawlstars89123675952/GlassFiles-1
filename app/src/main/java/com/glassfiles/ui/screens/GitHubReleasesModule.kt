@@ -404,8 +404,8 @@ private fun ReleaseActionButton(
 ) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(2.dp))
-            .border(1.dp, if (enabled) tint else tint.copy(alpha = 0.35f), RoundedCornerShape(2.dp))
+            .clip(RoundedCornerShape(GitHubControlRadius))
+            .border(1.dp, if (enabled) tint else tint.copy(alpha = 0.35f), RoundedCornerShape(GitHubControlRadius))
             .let { if (enabled) it.clickable(onClick = onClick) else it }
             .padding(horizontal = 10.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,

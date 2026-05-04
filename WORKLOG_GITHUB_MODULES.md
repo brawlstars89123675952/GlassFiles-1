@@ -39,6 +39,9 @@
   - собирает workflows, latest runs, Actions permissions, workflow token permissions, rate limit и recent Actions API errors
   - показывает findings по read-only token, disabled/restricted Actions, read-only `GITHUB_TOKEN`, inactive workflows, failed/cancelled/timed-out runs
   - отображает problem runs и failed jobs/steps, с переходом в существующий run detail
+- Выполнен terminal UI rounding pass для GitHub controls:
+  - добавлен общий `GitHubControlRadius = 6.dp`
+  - terminal buttons, quick chips, Actions filters, repo tabs, branch picker rows, release actions и terminal pills приведены к более мягкому радиусу
 
 ### Осталось / идеи дальше
 - Следующие улучшения делать уже вокруг конкретных GitHub workflow-сценариев: массовые действия, экспорт списков/логов, deeper Actions failure analysis.

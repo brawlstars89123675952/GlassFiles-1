@@ -605,7 +605,7 @@ private fun WorkflowRunMetaChip(label: String) {
         fontFamily = JetBrainsMono,
         fontSize = 10.sp,
         modifier = Modifier
-            .border(1.dp, AiModuleTheme.colors.border, RoundedCornerShape(2.dp))
+            .border(1.dp, AiModuleTheme.colors.border, RoundedCornerShape(GitHubControlRadius))
             .padding(horizontal = 6.dp, vertical = 3.dp),
     )
 }
@@ -921,9 +921,9 @@ private fun ActionsTerminalFilterChip(label: String, selected: Boolean, onClick:
     val bg = if (selected) palette.accent.copy(alpha = 0.10f) else Color.Transparent
     Box(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(GitHubControlRadius))
             .background(bg)
-            .border(1.dp, tint, RoundedCornerShape(4.dp))
+            .border(1.dp, tint, RoundedCornerShape(GitHubControlRadius))
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
@@ -2024,8 +2024,8 @@ private fun ActionsSettingsCard(
     val palette = AiModuleTheme.colors
     Column(
         Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(2.dp))
-            .border(1.dp, palette.textMuted.copy(alpha = 0.55f), RoundedCornerShape(2.dp))
+            .clip(RoundedCornerShape(GitHubControlRadius))
+            .border(1.dp, palette.textMuted.copy(alpha = 0.55f), RoundedCornerShape(GitHubControlRadius))
             .background(palette.surface)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -4324,12 +4324,12 @@ private fun FilterRow(content: @Composable () -> Unit) {
 private fun ActionsFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val palette = AiModuleTheme.colors
     Box(
-        Modifier.clip(RoundedCornerShape(4.dp))
+        Modifier.clip(RoundedCornerShape(GitHubControlRadius))
             .background(if (selected) palette.accent.copy(alpha = 0.10f) else palette.surface)
             .border(
                 1.dp,
                 if (selected) palette.accent.copy(alpha = 0.55f) else palette.border,
-                RoundedCornerShape(4.dp),
+                RoundedCornerShape(GitHubControlRadius),
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp)

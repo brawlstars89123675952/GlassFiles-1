@@ -520,9 +520,9 @@ private fun GitHubTerminalPill(label: String, color: Color) {
     val palette = AiModuleTheme.colors
     Box(
         Modifier
-            .clip(RoundedCornerShape(2.dp))
+            .clip(RoundedCornerShape(GitHubControlRadius))
             .background(palette.surface)
-            .border(1.dp, color.copy(alpha = 0.65f), RoundedCornerShape(2.dp))
+            .border(1.dp, color.copy(alpha = 0.65f), RoundedCornerShape(GitHubControlRadius))
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         Text(

@@ -340,9 +340,9 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
                     Box(
                         Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(GitHubControlRadius))
                             .background(palette.surface)
-                            .border(1.dp, palette.border, RoundedCornerShape(4.dp))
+                            .border(1.dp, palette.border, RoundedCornerShape(GitHubControlRadius))
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                     ) {
                         if (query.isEmpty()) {
@@ -368,9 +368,9 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
                     }
                     Box(
                         Modifier
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(GitHubControlRadius))
                             .background(if (searchPublic) palette.accent.copy(alpha = 0.10f) else palette.surface)
-                            .border(1.dp, if (searchPublic) palette.accent.copy(alpha = 0.55f) else palette.border, RoundedCornerShape(4.dp))
+                            .border(1.dp, if (searchPublic) palette.accent.copy(alpha = 0.55f) else palette.border, RoundedCornerShape(GitHubControlRadius))
                             .clickable { searchPublic = !searchPublic; query = "" }
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                     ) {
@@ -434,9 +434,9 @@ private fun TerminalQuickChip(label: String, onClick: () -> Unit) {
     val palette = AiModuleTheme.colors
     Box(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(GitHubControlRadius))
             .background(palette.surface)
-            .border(1.dp, palette.border, RoundedCornerShape(4.dp))
+            .border(1.dp, palette.border, RoundedCornerShape(GitHubControlRadius))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {

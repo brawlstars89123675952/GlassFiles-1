@@ -49,6 +49,7 @@ import java.util.TimeZone
 internal val GitHubSuccessGreen = Color(0xFF34C759)
 internal val GitHubErrorRed = Color(0xFFFF3B30)
 internal val GitHubMergedPurple = Color(0xFF6F42C1)
+internal val GitHubControlRadius = 6.dp
 
 @Composable
 internal fun Modifier.ghGlassCard(radius: androidx.compose.ui.unit.Dp = 16.dp): Modifier {
@@ -288,8 +289,8 @@ internal fun GitHubTerminalButton(
 ) {
     Box(
         modifier
-            .clip(RoundedCornerShape(2.dp))
-            .border(1.dp, if (enabled) color else color.copy(alpha = 0.35f), RoundedCornerShape(2.dp))
+            .clip(RoundedCornerShape(GitHubControlRadius))
+            .border(1.dp, if (enabled) color else color.copy(alpha = 0.35f), RoundedCornerShape(GitHubControlRadius))
             .let { if (enabled) it.clickable(onClick = onClick) else it }
             .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
@@ -499,8 +500,8 @@ internal fun GitHubPermissionHint(
 ) {
     Box(
         modifier
-            .border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(2.dp))
-            .background(color.copy(alpha = 0.08f), RoundedCornerShape(2.dp))
+            .border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(GitHubControlRadius))
+            .background(color.copy(alpha = 0.08f), RoundedCornerShape(GitHubControlRadius))
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
         Text(
