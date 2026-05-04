@@ -40,7 +40,6 @@ import com.glassfiles.data.github.GitHubManager
 import com.glassfiles.ui.components.AiModuleSpinner
 import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.theme.AiModuleTheme
-import com.glassfiles.ui.theme.GitHubErrorRed
 import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.launch
 
@@ -251,12 +250,12 @@ private fun GitHubAdminKv(label: String, value: String) {
 private fun GitHubAdminEmpty(text: String, error: Boolean = false) {
     val palette = AiModuleTheme.colors
     Box(
-        Modifier.fillMaxWidth().heightIn(min = 76.dp).border(1.dp, if (error) GitHubErrorRed else palette.border, RoundedCornerShape(4.dp)).background(palette.surface).padding(14.dp),
+        Modifier.fillMaxWidth().heightIn(min = 76.dp).border(1.dp, if (error) palette.error else palette.border, RoundedCornerShape(4.dp)).background(palette.surface).padding(14.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         Text(
             if (error) "! $text" else "// $text",
-            color = if (error) GitHubErrorRed else palette.textMuted,
+            color = if (error) palette.error else palette.textMuted,
             fontFamily = JetBrainsMono,
             fontSize = 12.sp,
         )
