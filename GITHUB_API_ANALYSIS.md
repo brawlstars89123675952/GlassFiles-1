@@ -356,6 +356,13 @@ items.
 | Rate limit check | `/rate_limit` | ✅ | ✅ | SettingsModule |
 | Clear cache | Local | ✅ | ✅ | SettingsModule |
 
+### Enterprise / Admin
+| Feature | API Endpoint | Backend | UI | Notes |
+|---------|-------------|---------|-----|-------|
+| List enterprise runners | `/enterprises/{enterprise}/actions/runners` | ✅ | ✅ | Admin API screen, requires enterprise token |
+| SCIM users | `/scim/v2/organizations/{org}/Users` | ✅ | ✅ | Admin API screen, requires SCIM/org admin access |
+| Audit log | `/orgs/{org}/audit-log` | ✅ | ✅ | Admin API screen with optional phrase |
+
 ---
 
 ## ⚠️ PARTIALLY IMPLEMENTED (Backend exists, UI is missing or read-only)
@@ -374,9 +381,6 @@ None currently tracked.
 ### Enterprise / Advanced
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
-| List enterprise runners | `/enterprises/{enterprise}/actions/runners` | Low | Enterprise only |
-| SCIM provisioning | `/scim/v2/organizations/{org}/Users` | Low | Enterprise only |
-| Audit log | `/orgs/{org}/audit-log` | Low | Enterprise only |
 | SAML SSO auth | Various | Low | Enterprise only |
 
 ---
@@ -408,7 +412,7 @@ None currently tracked.
 | User Settings | ✅ Complete for supported public APIs | Web-only settings remain out of scope |
 | GitHub Apps / Installations | ✅ Complete | None tracked for user installation flows |
 | OAuth | ❌ Backlog | Legacy OAuth app authorization views |
-| Enterprise / Advanced | ❌ Backlog | Enterprise runners, SCIM, audit log, SAML SSO |
+| Enterprise / Advanced | ✅ Partial admin utilities | SAML SSO auth remains out of scope |
 
 ### Overall Assessment
 
@@ -440,9 +444,9 @@ None currently tracked.
 - None currently tracked.
 
 **Not Implemented / Early Coverage — Major Gaps:**
-- ⚠️ Legacy OAuth authorizations and Enterprise-only APIs.
+- ⚠️ Legacy OAuth authorizations and SAML SSO authorization utilities.
 
 ### Recommendations for Next Implementation
 
 **Low Priority (nice to have):**
-1. **Legacy OAuth / enterprise-only screens** — only if a concrete admin workflow needs them.
+1. **Legacy OAuth / SAML SSO screens** — only if a concrete admin workflow needs them.

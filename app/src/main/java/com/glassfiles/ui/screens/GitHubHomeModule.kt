@@ -209,16 +209,18 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
     var showOrgs by rememberSaveable { mutableStateOf(false) }
     var showPackages by rememberSaveable { mutableStateOf(false) }
     var showApps by rememberSaveable { mutableStateOf(false) }
+    var showEnterpriseAdmin by rememberSaveable { mutableStateOf(false) }
     var showAdvancedSearch by rememberSaveable { mutableStateOf(false) }
     var reposPage by rememberSaveable { mutableIntStateOf(1) }; var reposHasMore by rememberSaveable { mutableStateOf(true) }
     val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState(0, 0) }
-    BackHandler(enabled = showStarred || showOrgs || showPackages || showApps || showAdvancedSearch || showCreate) {
+    BackHandler(enabled = showStarred || showOrgs || showPackages || showApps || showEnterpriseAdmin || showAdvancedSearch || showCreate) {
         when {
             showCreate -> showCreate = false
             showStarred -> showStarred = false
             showOrgs -> showOrgs = false
             showPackages -> showPackages = false
             showApps -> showApps = false
+            showEnterpriseAdmin -> showEnterpriseAdmin = false
             showAdvancedSearch -> showAdvancedSearch = false
         }
     }
@@ -231,6 +233,7 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
     if (showOrgs) { OrgsScreen(onBack = { showOrgs = false }, onRepoClick = { showOrgs = false; onRepoClick(it) }); return }
     if (showPackages && user != null) { PackagesScreen(userLogin = user.login, onBack = { showPackages = false }); return }
     if (showApps) { GitHubAppsScreen(onBack = { showApps = false }, onRepoClick = { showApps = false; onRepoClick(it) }); return }
+    if (showEnterpriseAdmin) { GitHubEnterpriseAdminScreen(onBack = { showEnterpriseAdmin = false }); return }
     if (showAdvancedSearch) { AdvancedSearchScreen(onBack = { showAdvancedSearch = false }, onRepoClick = onRepoClick, onProfile = onProfile); return }
     AiModuleSurface {
     val palette = AiModuleTheme.colors
@@ -314,6 +317,7 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
                     TerminalQuickChip("Search") { showAdvancedSearch = true }
                     TerminalQuickChip("Packages") { showPackages = true }
                     TerminalQuickChip("Apps") { showApps = true }
+                    TerminalQuickChip("Admin API") { showEnterpriseAdmin = true }
                     TerminalQuickChip(Strings.ghProfile) { if (user != null) onProfile(user.login) }
                 }
             }

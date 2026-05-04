@@ -2224,6 +2224,80 @@ object GitHubManager {
         } catch (e: Exception) { emptyList() }
     }
 
+    suspend fun getEnterpriseRunners(context: Context, enterprise: String): List<GHActionRunner> {
+        val cleanEnterprise = enterprise.trim()
+        if (cleanEnterprise.isBlank()) return emptyList()
+        val r = request(context, "/enterprises/$cleanEnterprise/actions/runners?per_page=100")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONObject(r.body).optJSONArray("runners") ?: JSONArray()
+            (0 until arr.length()).map { i -> parseActionRunner(arr.getJSONObject(i)) }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getOrgAuditLog(context: Context, org: String, phrase: String = "", page: Int = 1): List<GHAuditLogEntry> {
+        val cleanOrg = org.trim()
+        if (cleanOrg.isBlank()) return emptyList()
+        val query = buildString {
+            append("?per_page=100&page=$page")
+            if (phrase.isNotBlank()) append("&phrase=${URLEncoder.encode(phrase.trim(), "UTF-8")}")
+        }
+        val r = request(context, "/orgs/$cleanOrg/audit-log$query")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i ->
+                val j = arr.getJSONObject(i)
+                GHAuditLogEntry(
+                    id = j.optString("_document_id", j.optString("id", "")),
+                    action = j.optString("action", ""),
+                    actor = j.optString("actor", ""),
+                    createdAt = j.optString("@timestamp", j.optString("created_at", "")),
+                    org = j.optString("org", cleanOrg),
+                    repo = j.optString("repo", ""),
+                    user = j.optString("user", ""),
+                    operationType = j.optString("operation_type", ""),
+                    transportProtocol = j.optString("transport_protocol", "")
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getOrgScimUsers(context: Context, org: String, startIndex: Int = 1, count: Int = 50): GHScimUsersPage {
+        val cleanOrg = org.trim()
+        if (cleanOrg.isBlank()) return GHScimUsersPage()
+        val r = request(context, "/scim/v2/organizations/$cleanOrg/Users?startIndex=$startIndex&count=$count")
+        if (!r.success) return GHScimUsersPage(error = r.body.ifBlank { "HTTP ${r.code}" })
+        return try {
+            val j = JSONObject(r.body)
+            val resources = j.optJSONArray("Resources") ?: JSONArray()
+            GHScimUsersPage(
+                totalResults = j.optInt("totalResults", 0),
+                startIndex = j.optInt("startIndex", startIndex),
+                itemsPerPage = j.optInt("itemsPerPage", count),
+                users = (0 until resources.length()).map { i ->
+                    val user = resources.getJSONObject(i)
+                    val name = user.optJSONObject("name")
+                    val emails = user.optJSONArray("emails")?.let { arr ->
+                        (0 until arr.length()).mapNotNull { idx ->
+                            arr.optJSONObject(idx)?.optString("value")?.takeIf { it.isNotBlank() }
+                        }
+                    } ?: emptyList()
+                    GHScimUser(
+                        id = user.optString("id", ""),
+                        userName = user.optString("userName", ""),
+                        displayName = user.optString("displayName", ""),
+                        givenName = name?.optString("givenName", "") ?: "",
+                        familyName = name?.optString("familyName", "") ?: "",
+                        active = user.optBoolean("active", false),
+                        externalId = user.optString("externalId", ""),
+                        emails = emails
+                    )
+                }
+            )
+        } catch (e: Exception) { GHScimUsersPage(error = e.message ?: "parse error") }
+    }
+
     suspend fun deleteRepoSelfHostedRunner(context: Context, owner: String, repo: String, runnerId: Long): Boolean =
         request(context, "/repos/$owner/$repo/actions/runners/$runnerId", "DELETE").let { it.code == 204 || it.success }
 
@@ -5799,6 +5873,37 @@ data class GHActionRunnerGroup(
     val selectedWorkflows: List<String>,
     val runnersUrl: String,
     val selectedRepositoriesUrl: String
+)
+
+data class GHAuditLogEntry(
+    val id: String,
+    val action: String,
+    val actor: String,
+    val createdAt: String,
+    val org: String,
+    val repo: String,
+    val user: String,
+    val operationType: String,
+    val transportProtocol: String
+)
+
+data class GHScimUsersPage(
+    val totalResults: Int = 0,
+    val startIndex: Int = 1,
+    val itemsPerPage: Int = 0,
+    val users: List<GHScimUser> = emptyList(),
+    val error: String = ""
+)
+
+data class GHScimUser(
+    val id: String,
+    val userName: String,
+    val displayName: String,
+    val givenName: String,
+    val familyName: String,
+    val active: Boolean,
+    val externalId: String,
+    val emails: List<String>
 )
 
 data class GHRunnerToken(val token: String, val expiresAt: String)

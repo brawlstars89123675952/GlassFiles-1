@@ -1488,3 +1488,24 @@
 - Проверка:
   - локальная Android сборка не запускалась по прямой просьбе пользователя;
   - выполнены только статические проверки.
+
+### GitHub enterprise/admin utilities
+- Закрыта практичная часть enterprise/admin backlog из `GITHUB_API_ANALYSIS.md`.
+- `GitHubManager.kt`:
+  - добавлен `getEnterpriseRunners(...)` для `/enterprises/{enterprise}/actions/runners`;
+  - добавлен `getOrgAuditLog(...)` для `/orgs/{org}/audit-log`;
+  - добавлен `getOrgScimUsers(...)` для `/scim/v2/organizations/{org}/Users`;
+  - добавлены модели `GHAuditLogEntry`, `GHScimUsersPage`, `GHScimUser`.
+- `GitHubEnterpriseAdminModule.kt`:
+  - добавлен отдельный terminal-style экран `> enterprise api`;
+  - вкладки: enterprise runners, audit log, SCIM users;
+  - используются ручные поля `enterprise`, `org`, `phrase`, `start index`, потому что endpoints требуют конкретных admin/enterprise scopes;
+  - empty/error states явно объясняют, что токен может быть не eligible.
+- `GitHubHomeModule.kt`:
+  - добавлен quick chip `Admin API`.
+- `GITHUB_API_ANALYSIS.md`:
+  - enterprise runners, audit log и SCIM users перенесены в implemented;
+  - в остатке оставлены legacy OAuth и SAML SSO authorization utilities.
+- Проверка:
+  - локальная Android сборка не запускалась по прямой просьбе пользователя;
+  - выполнены только статические проверки.
