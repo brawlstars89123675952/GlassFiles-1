@@ -182,6 +182,14 @@ private data class JobLogMeta(
     val tooLarge: Boolean = false
 )
 
+private data class FailureEvidence(
+    val source: String,
+    val signalLines: List<String>,
+    val tailLines: List<String>,
+) {
+    val hasContent: Boolean get() = signalLines.isNotEmpty() || tailLines.isNotEmpty()
+}
+
 private const val ACTIONS_POLL_DELAY_MS = 5000L
 private const val ACTIONS_BACKOFF_DELAY_MS = 15000L
 
@@ -2875,8 +2883,14 @@ internal fun WorkflowRunDetailScreen(
     val firstFailedJob = remember(jobs) { jobs.firstOrNull { it.conclusion == "failure" } }
     val firstFailedStep = remember(firstFailedJob) { firstFailedJob?.steps?.firstOrNull { isFailedStep(it) } }
     val firstFailedLog = firstFailedJob?.let { jobLogs[it.id] }.orEmpty()
+    val firstFailedStepLog = firstFailedJob?.let { job ->
+        firstFailedStep?.let { step -> jobStepLogs[job.id]?.get(step.number) }
+    }.orEmpty()
     val failureDiagnostics = remember(firstFailedJob?.id, firstFailedStep?.number, firstFailedLog, kernelErrorCatalog) {
         buildFailureDiagnostics(context, firstFailedJob, firstFailedStep, firstFailedLog, kernelErrorCatalog)
+    }
+    val failureEvidence = remember(firstFailedJob?.id, firstFailedStep?.number, firstFailedLog, firstFailedStepLog) {
+        buildFailureEvidence(firstFailedJob, firstFailedStep, firstFailedLog, firstFailedStepLog)
     }
     val patternInfo = kernelErrorCatalog?.let { context.getString(R.string.actions_kernel_patterns_info, it.version, it.source.label) }
     val groupedJobItems = remember(filteredJobs, jobs.size, expandedMatrixGroups.toMap(), nowMs) {
@@ -3145,6 +3159,7 @@ internal fun WorkflowRunDetailScreen(
                             job = failedJob,
                             step = firstFailedStep,
                             diagnostics = failureDiagnostics,
+                            evidence = failureEvidence,
                             patternInfo = patternInfo,
                             logLoaded = jobLogs[failedJob.id] != null,
                             loading = loadingJobId == failedJob.id,
@@ -3153,6 +3168,16 @@ internal fun WorkflowRunDetailScreen(
                                 val clip = android.content.ClipData.newPlainText("failure-summary", summary)
                                 (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
                                 Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                            },
+                            onCopyEvidence = {
+                                val text = failureEvidenceText(repo, run, failedJob, firstFailedStep, failureDiagnostics, failureEvidence)
+                                val clip = android.content.ClipData.newPlainText("failure-evidence", text)
+                                (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
+                                Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                            },
+                            onExportEvidence = {
+                                val file = saveFailureEvidenceExport(repo, run, failedJob, firstFailedStep, failureDiagnostics, failureEvidence)
+                                Toast.makeText(context, file?.let { "${Strings.done}: ${it.name}" } ?: Strings.error, Toast.LENGTH_SHORT).show()
                             },
                             onShareSummary = run?.let { currentRun ->
                                 {
@@ -3544,10 +3569,13 @@ private fun FailureDiagnosisCard(
     job: GHJob,
     step: GHStep?,
     diagnostics: List<String>,
+    evidence: FailureEvidence,
     patternInfo: String?,
     logLoaded: Boolean,
     loading: Boolean,
     onCopySummary: () -> Unit,
+    onCopyEvidence: () -> Unit,
+    onExportEvidence: () -> Unit,
     onShareSummary: (() -> Unit)?,
     onOpenFailedLog: () -> Unit
 ) {
@@ -3588,8 +3616,37 @@ private fun FailureDiagnosisCard(
                 Text(message, fontSize = 11.sp, color = TextSecondary, lineHeight = 15.sp)
             }
         }
+        if (logLoaded && evidence.hasContent) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(AiModuleTheme.colors.background)
+                    .border(1.dp, Red.copy(alpha = 0.22f), RoundedCornerShape(6.dp))
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("evidence: ${evidence.source}", fontSize = 11.sp, color = Red, fontFamily = JetBrainsMono, fontWeight = FontWeight.Medium)
+                if (evidence.signalLines.isNotEmpty()) {
+                    Text("signals", fontSize = 10.sp, color = TextTertiary, fontFamily = JetBrainsMono)
+                    evidence.signalLines.take(5).forEach { line ->
+                        Text(line, fontSize = 10.sp, color = TextSecondary, fontFamily = JetBrainsMono, lineHeight = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                if (evidence.tailLines.isNotEmpty()) {
+                    Text("tail", fontSize = 10.sp, color = TextTertiary, fontFamily = JetBrainsMono)
+                    evidence.tailLines.takeLast(6).forEach { line ->
+                        Text(line, fontSize = 10.sp, color = TextTertiary, fontFamily = JetBrainsMono, lineHeight = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip(Icons.Rounded.ContentCopy, stringResource(R.string.actions_copy_failure_summary), Red, onCopySummary)
+            if (evidence.hasContent) {
+                Chip(Icons.Rounded.ContentCopy, "Copy evidence", Red, onCopyEvidence)
+                Chip(Icons.Rounded.Article, "Export evidence", Red, onExportEvidence)
+            }
             if (onShareSummary != null) {
                 Chip(Icons.Rounded.Share, stringResource(R.string.actions_share), Red, onShareSummary)
             }
@@ -4350,6 +4407,39 @@ private fun buildFailureDiagnostics(
     return messages.toList()
 }
 
+private fun buildFailureEvidence(
+    job: GHJob?,
+    step: GHStep?,
+    jobLog: String,
+    stepLog: String,
+): FailureEvidence {
+    if (job == null) return FailureEvidence("no failed job", emptyList(), emptyList())
+    val sourceLog = stepLog.ifBlank { jobLog }
+    if (sourceLog.isBlank()) return FailureEvidence("log not loaded", emptyList(), emptyList())
+    val source = if (stepLog.isNotBlank() && step != null) "step ${step.number}: ${step.name}" else "job: ${job.name}"
+    val lines = sourceLog.lineSequence()
+        .mapIndexed { index, line -> (index + 1) to compactFailureEvidenceLine(line) }
+        .filter { (_, line) -> line.isNotBlank() }
+        .toList()
+    val signalMatcher = Regex(
+        """(?i)\b(error|failed|failure|exception|fatal|denied|forbidden|not found|no such file|unresolved|undefined|cannot|could not|timeout|timed out|traceback|segmentation fault|permission|killed|oom|out of memory)\b"""
+    )
+    val signalLines = lines
+        .filter { (_, line) -> signalMatcher.containsMatchIn(line) }
+        .takeLast(8)
+        .map { (lineNumber, line) -> "L$lineNumber: $line" }
+    val tailLines = lines
+        .takeLast(10)
+        .map { (lineNumber, line) -> "L$lineNumber: $line" }
+    return FailureEvidence(source, signalLines, tailLines)
+}
+
+private fun compactFailureEvidenceLine(line: String): String =
+    line.replace(Regex("""\u001B\[[;?\d]*[ -/]*[@-~]"""), "")
+        .replace('\t', ' ')
+        .trim()
+        .take(240)
+
 private fun failureSummaryText(job: GHJob, step: GHStep?, diagnostics: List<String>): String {
     val lines = mutableListOf("Failed job: ${job.name}")
     if (step != null) lines += "Failed step: ${step.name} (#${step.number})"
@@ -4358,6 +4448,45 @@ private fun failureSummaryText(job: GHJob, step: GHStep?, diagnostics: List<Stri
         lines += items.map { "- $it" }
     }
     return lines.joinToString("\n")
+}
+
+private fun failureEvidenceText(
+    repo: GHRepo,
+    run: GHWorkflowRun?,
+    job: GHJob,
+    step: GHStep?,
+    diagnostics: List<String>,
+    evidence: FailureEvidence,
+): String = buildString {
+    appendLine("GlassFiles GitHub Actions failure evidence")
+    appendLine("repo: ${repo.fullName}")
+    run?.let {
+        appendLine("run: #${it.runNumber} (${it.id})")
+        appendLine("workflow: ${it.name.ifBlank { "workflow" }}")
+        appendLine("status: ${displayRunStatus(it)}")
+        appendLine("branch: ${it.branch.ifBlank { "-" }}")
+        appendLine("sha: ${it.headSha.ifBlank { "-" }}")
+        appendLine("url: ${it.htmlUrl.ifBlank { "-" }}")
+    }
+    appendLine("job: ${job.name} (${job.id})")
+    if (step != null) appendLine("step: ${step.number} ${step.name}")
+    if (diagnostics.isNotEmpty()) {
+        appendLine()
+        appendLine("likely causes")
+        diagnostics.forEach { appendLine("- $it") }
+    }
+    appendLine()
+    appendLine("evidence source: ${evidence.source}")
+    if (evidence.signalLines.isNotEmpty()) {
+        appendLine()
+        appendLine("signals")
+        evidence.signalLines.forEach { appendLine(it) }
+    }
+    if (evidence.tailLines.isNotEmpty()) {
+        appendLine()
+        appendLine("tail")
+        evidence.tailLines.forEach { appendLine(it) }
+    }
 }
 
 private fun shareFailureSummary(
@@ -4597,6 +4726,21 @@ private fun saveWorkflowRunReport(
             if (review.comment.isNotBlank()) appendLine("  ${review.comment}")
         }
     }
+    return if (saveTextFile(file, text)) file else null
+}
+
+private fun saveFailureEvidenceExport(
+    repo: GHRepo,
+    run: GHWorkflowRun?,
+    job: GHJob,
+    step: GHStep?,
+    diagnostics: List<String>,
+    evidence: FailureEvidence,
+): File? {
+    if (!evidence.hasContent) return null
+    val runPart = run?.runNumber?.toString() ?: job.id.toString()
+    val file = File(actionsExportDir(), "actions-failure-evidence-$runPart-${safeActionsFilePart(repo.fullName)}-${actionsExportTimestamp()}.txt")
+    val text = failureEvidenceText(repo, run, job, step, diagnostics, evidence)
     return if (saveTextFile(file, text)) file else null
 }
 

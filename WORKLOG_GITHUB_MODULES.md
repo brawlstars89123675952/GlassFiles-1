@@ -51,9 +51,13 @@
   - repository artifacts и caches экспортируются в txt из текущих загруженных списков
   - run detail экспортирует полный run report и отдельный bundle уже загруженных job logs
   - все файлы сохраняются в `Downloads/GlassFiles_Git`, UI остается terminal-style
+- Добавлен deeper Actions failure analysis:
+  - failed build карточка извлекает из загруженного failed step/job log подозрительные error-lines
+  - показывает tail failed log рядом с pattern diagnostics
+  - можно скопировать или экспортировать отдельный failure evidence report в `Downloads/GlassFiles_Git`
 
 ### Осталось / идеи дальше
-- Следующие улучшения делать уже вокруг конкретных GitHub workflow-сценариев: deeper Actions failure analysis.
+- Следующие улучшения делать уже вокруг конкретных GitHub workflow-сценариев: больше cross-run аналитики и repo-level failure trends.
 
 ## 2026-04-23
 
