@@ -1278,6 +1278,8 @@ private fun ActionsOverviewHeader(
                                     color = palette.accent,
                                 )
                             }
+                        } else {
+                            GitHubPermissionHint("write required")
                         }
                     }
                 }
@@ -1295,17 +1297,19 @@ private fun ActionsOverviewHeader(
                         )
                     }
                     Spacer(Modifier.weight(1f))
-                    if (canWrite) {
-                        GitHubTerminalButton(
-                            label = if (dispatching) "dispatching..." else "▶ run →",
-                            onClick = onDispatch,
-                            color = palette.accent,
-                            enabled = !dispatching &&
-                                workflows.isNotEmpty() &&
-                                dispatchSchema != null &&
-                                missingRequiredInputs.isEmpty(),
-                        )
+                    if (!canWrite) {
+                        GitHubPermissionHint("write required")
                     }
+                    GitHubTerminalButton(
+                        label = if (dispatching) "dispatching..." else "▶ run →",
+                        onClick = onDispatch,
+                        color = if (canWrite) palette.accent else palette.textMuted,
+                        enabled = canWrite &&
+                            !dispatching &&
+                            workflows.isNotEmpty() &&
+                            dispatchSchema != null &&
+                            missingRequiredInputs.isEmpty(),
+                    )
                 }
 
                 latestRun?.let { run ->

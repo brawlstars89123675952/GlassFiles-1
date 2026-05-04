@@ -645,6 +645,11 @@ internal fun BranchPickerDialog(
                         label = "+ new branch",
                         onClick = onCreateBranch,
                     )
+                } else {
+                    Spacer(Modifier.height(6.dp))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(palette.border))
+                    Spacer(Modifier.height(8.dp))
+                    GitHubPermissionHint("write required to create branch")
                 }
             }
         }

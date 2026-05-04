@@ -491,6 +491,42 @@ internal fun GitHubMonoEmpty(
     }
 }
 
+@Composable
+internal fun GitHubPermissionHint(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = AiModuleTheme.colors.warning,
+) {
+    Box(
+        modifier
+            .border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(2.dp))
+            .background(color.copy(alpha = 0.08f), RoundedCornerShape(2.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(
+            "! $text",
+            color = color,
+            fontFamily = JetBrainsMono,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+internal fun githubRepoPermissionLabel(repo: GHRepo): String {
+    val permissions = repo.permissions ?: return "unknown"
+    return when {
+        permissions.admin -> "admin"
+        permissions.maintain -> "maintain"
+        permissions.push -> "write"
+        permissions.triage -> "triage"
+        permissions.pull -> "read"
+        else -> "none"
+    }
+}
+
 // ═══════════════════════════════════
 // GitHub Actions Tab
 // ═══════════════════════════════════

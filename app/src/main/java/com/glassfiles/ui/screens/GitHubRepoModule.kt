@@ -663,6 +663,9 @@ internal fun RepoDetailScreen(
                             showRepoOverflow = false
                             showRepoSettings = true
                         }, color = palette.textSecondary)
+                    } else if (repo.permissions != null) {
+                        GitHubTerminalButton("settings", {}, color = palette.textMuted, enabled = false)
+                        GitHubPermissionHint("admin required")
                     }
                     GitHubTerminalButton("compare", {
                         showRepoOverflow = false
@@ -694,7 +697,7 @@ internal fun RepoDetailScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    "! read-only",
+                    "! read-only · permission=${githubRepoPermissionLabel(repo)} · write/admin actions are hidden",
                     color = palette.warning,
                     fontFamily = JetBrainsMono,
                     fontSize = 11.sp,
@@ -747,18 +750,26 @@ internal fun RepoDetailScreen(
                 RepoTab.FILES -> if (canWrite) {
                     AiModulePillButton(label = "+ file", onClick = { showCreateFile = true })
                     AiModulePillButton(label = "upload \u2191", onClick = { showUpload = true })
+                } else if (repo.permissions != null) {
+                    GitHubPermissionHint("write required")
                 }
                 RepoTab.ISSUES -> {
                     GitHubTerminalButton("events", onClick = { showIssueEvents = true }, color = palette.textSecondary)
                     if (canWrite || repo.permissions == null) {
                         GitHubTerminalButton("+ issue", onClick = { showCreateIssue = true }, color = palette.accent)
+                    } else {
+                        GitHubPermissionHint("write required")
                     }
                 }
                 RepoTab.PULLS -> if (canWrite || repo.permissions == null) {
                     AiModulePillButton(label = "+ pr", onClick = { showCreatePR = true })
+                } else {
+                    GitHubPermissionHint("write required")
                 }
                 RepoTab.ACTIONS -> if (canWrite) {
                     AiModulePillButton(label = "run \u25B6", onClick = { showDispatch = true })
+                } else if (repo.permissions != null) {
+                    GitHubPermissionHint("write required")
                 }
                 else -> {}
             }
@@ -2268,12 +2279,7 @@ private fun GitDataInputCard(
 private fun GitDataWriteCard(title: String, canWrite: Boolean, content: @Composable ColumnScope.() -> Unit) {
     TerminalInsightCard(title) {
         if (!canWrite) {
-            Text(
-                "! write access required",
-                color = AiModuleTheme.colors.warning,
-                fontFamily = JetBrainsMono,
-                fontSize = 12.sp,
-            )
+            GitHubPermissionHint("write permission required")
             Text(
                 "This low-level Git Data mutation is disabled for the current token.",
                 color = AiModuleTheme.colors.textMuted,

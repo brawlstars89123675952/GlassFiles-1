@@ -15,10 +15,17 @@
   - опциональная проверка организации: metadata и audit log
   - опциональная проверка enterprise runners
 - Существующий сетевой слой `GitHubManager.request(...)` расширен сбором HTTP response headers без изменения публичного поведения старых вызовов.
+- Добавлены permission hints для GitHub UI:
+  - общий `GitHubPermissionHint(...)` в shared terminal UI
+  - repo overflow показывает disabled `settings` с `admin required`, а не просто скрывает действие
+  - read-only banner показывает текущий уровень permission (`read`, `triage`, `write`, `maintain`, `admin`)
+  - верхние repo actions показывают `write required` для file/issue/pr/actions операций
+  - Git Data write cards показывают единый терминальный hint вместо разрозненного текста
+  - Actions overview показывает `write required` рядом с workflow enable/disable и run dispatch
+  - Branch picker показывает, почему создание ветки недоступно
 
 ### Осталось / идеи дальше
 - Добавить журнал последних GitHub API ошибок внутри приложения.
-- Добавить подсказки по required permissions прямо рядом с disabled действиями в repo/actions/settings экранах.
 - Добавить экспорт diagnostics report в `.txt`/`.json` для отладки токенов и прав.
 
 ## 2026-04-23
