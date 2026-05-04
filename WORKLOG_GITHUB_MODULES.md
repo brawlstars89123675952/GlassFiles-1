@@ -1237,7 +1237,7 @@
   - новая UI часть использует terminal-style controls (`GitHubTerminalButton`, `GitHubTerminalTextField`, border/surface layout, glyph text), без добавления Material UI.
 - `GITHUB_API_ANALYSIS.md`:
   - `Issue events` перенесён из backlog в implemented Issues Advanced;
-  - remaining issues gap сужен до deeper timeline event actions.
+  - remaining issues gap был сужен до deeper timeline/event actions; позже закрыт в секции `GitHub issue events detail`.
 - Проверка:
   - локальная Android сборка не запускалась по прямой просьбе пользователя;
   - выполнена только статическая проверка `git diff --check`.
@@ -1447,6 +1447,25 @@
 - `GITHUB_API_ANALYSIS.md`:
   - create tree/blob/tag/commit и create/update/delete ref перенесены в implemented Git Data;
   - Git Data write backlog очищен.
+- Проверка:
+  - локальная Android сборка не запускалась по прямой просьбе пользователя;
+  - выполнены только статические проверки.
+
+### GitHub issue events detail
+- Закрыт issue event/timeline gap из `GITHUB_API_ANALYSIS.md` для публичных REST endpoints.
+- `GitHubManager.kt`:
+  - `getIssueEvents(...)` переведен на общий parser;
+  - добавлен `getIssueEventsForIssue(...)` для `/repos/{owner}/{repo}/issues/{number}/events`;
+  - добавлен `getIssueEvent(...)` для `/repos/{owner}/{repo}/issues/events/{event_id}`;
+  - `GHIssueEvent` расширен `url`, `commitUrl`, `authorAssociation`, `stateReason`, `performedViaGithubApp`.
+- `GitHubRepoModule.kt`:
+  - repo-wide issue events получили terminal-style detail action;
+  - detail modal показывает label/assignee/milestone/rename/commit/app/api metadata;
+  - issue timeline dialog получил tabs `timeline` и `events`;
+  - per-issue events tab умеет догружать single event detail by id.
+- `GITHUB_API_ANALYSIS.md`:
+  - per-issue events и single issue event перенесены в implemented;
+  - issue timeline/event backlog очищен.
 - Проверка:
   - локальная Android сборка не запускалась по прямой просьбе пользователя;
   - выполнены только статические проверки.

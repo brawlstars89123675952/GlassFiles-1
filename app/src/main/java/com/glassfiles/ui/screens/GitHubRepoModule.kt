@@ -1262,6 +1262,7 @@ private fun IssueEventsScreen(
     var loading by remember(repo.fullName) { mutableStateOf(true) }
     var query by rememberSaveable(repo.fullName, "issue-events-query") { mutableStateOf("") }
     var reloadNonce by remember { mutableIntStateOf(0) }
+    var detailEvent by remember { mutableStateOf<GHIssueEvent?>(null) }
 
     suspend fun loadEvents(reset: Boolean) {
         loading = true
@@ -1364,7 +1365,16 @@ private fun IssueEventsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(filteredEvents) { event ->
-                        IssueEventRow(event = event, onOpenIssue = onOpenIssue)
+                        IssueEventRow(
+                            event = event,
+                            onOpenIssue = onOpenIssue,
+                            onDetails = {
+                                detailEvent = event
+                                scope.launch {
+                                    detailEvent = GitHubManager.getIssueEvent(context, repo.owner, repo.name, event.id) ?: event
+                                }
+                            },
+                        )
                     }
                     if (hasMore && query.isBlank()) {
                         item {
@@ -1382,10 +1392,26 @@ private fun IssueEventsScreen(
             }
         }
     }
+
+    detailEvent?.let { event ->
+        IssueEventDetailDialog(
+            event = event,
+            onDismiss = { detailEvent = null },
+            onOpenIssue = {
+                detailEvent = null
+                onOpenIssue(event.issueNumber, event.issueTitle)
+            },
+        )
+    }
 }
 
 @Composable
-private fun IssueEventRow(event: GHIssueEvent, onOpenIssue: (Int, String) -> Unit) {
+private fun IssueEventRow(
+    event: GHIssueEvent,
+    onOpenIssue: (Int, String) -> Unit,
+    onDetails: (() -> Unit)? = null,
+    showOpenIssue: Boolean = true,
+) {
     val palette = AiModuleTheme.colors
     val color = issueEventColor(event.event, palette)
     Column(
@@ -1454,6 +1480,43 @@ private fun IssueEventRow(event: GHIssueEvent, onOpenIssue: (Int, String) -> Uni
                     IssueEventChip(label = label, color = chipColor)
                 }
             }
+        }
+        if (onDetails != null || (showOpenIssue && event.issueNumber > 0)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                onDetails?.let { GitHubTerminalButton("details", onClick = it, color = palette.textSecondary) }
+                if (showOpenIssue && event.issueNumber > 0) {
+                    GitHubTerminalButton("open issue", onClick = { onOpenIssue(event.issueNumber, event.issueTitle) }, color = palette.accent)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IssueEventDetailDialog(event: GHIssueEvent, onDismiss: () -> Unit, onOpenIssue: () -> Unit) {
+    val palette = AiModuleTheme.colors
+    GitHubTerminalModal(title = "▸ issue event ${event.id}", onDismiss = onDismiss) {
+        Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            GitDataKv("event", event.event)
+            GitDataKv("issue", if (event.issueNumber > 0) "#${event.issueNumber} ${event.issueTitle}" else event.issueTitle)
+            GitDataKv("actor", event.actor.ifBlank { "github" })
+            GitDataKv("created", event.createdAt)
+            GitDataKv("label", event.label)
+            GitDataKv("assignee", event.assignee)
+            GitDataKv("milestone", event.milestone)
+            if (event.renameFrom.isNotBlank() || event.renameTo.isNotBlank()) {
+                GitDataKv("rename", "${event.renameFrom} -> ${event.renameTo}")
+            }
+            GitDataKv("commit", event.commitId)
+            GitDataKv("association", event.authorAssociation)
+            GitDataKv("state reason", event.stateReason)
+            GitDataKv("github app", event.performedViaGithubApp)
+            GitDataKv("api", event.url)
+            GitDataKv("commit api", event.commitUrl)
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (event.issueNumber > 0) GitHubTerminalButton("open issue", onClick = onOpenIssue, color = palette.accent)
+            GitHubTerminalButton("close", onClick = onDismiss, color = palette.textSecondary)
         }
     }
 }
@@ -5786,14 +5849,21 @@ private fun IssueCommentReactionsDialog(repo: GHRepo, comment: GHComment, onDism
 // Issue Timeline Dialog
 // ═══════════════════════════════════
 
+private enum class IssueActivityTab { TIMELINE, EVENTS }
+
 @Composable
 private fun IssueTimelineDialog(repo: GHRepo, issueNumber: Int, onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selectedTab by remember { mutableStateOf(IssueActivityTab.TIMELINE) }
     var events by remember { mutableStateOf<List<GHTimelineEvent>>(emptyList()) }
+    var issueEvents by remember { mutableStateOf<List<GHIssueEvent>>(emptyList()) }
+    var detailEvent by remember { mutableStateOf<GHIssueEvent?>(null) }
     var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(issueNumber) {
         events = GitHubManager.getIssueTimeline(context, repo.owner, repo.name, issueNumber)
+        issueEvents = GitHubManager.getIssueEventsForIssue(context, repo.owner, repo.name, issueNumber)
         loading = false
     }
 
@@ -5801,41 +5871,81 @@ private fun IssueTimelineDialog(repo: GHRepo, issueNumber: Int, onDismiss: () ->
         onDismissRequest = onDismiss,
         title = "Timeline",
         content = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IssueActivityTab.entries.forEach { tab ->
+                        GitHubTerminalTab(tab.name.lowercase(), selectedTab == tab) { selectedTab = tab }
+                    }
+                }
             if (loading) {
                 Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
                     AiModuleSpinner(label = "loading…")
                 }
-            } else if (events.isEmpty()) {
-                Text("No timeline events", fontSize = 13.sp, color = TextTertiary)
-            } else {
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(events) { event ->
-                        val eventText = when (event.event) {
-                            "labeled" -> "added label \"${event.label}\""
-                            "unlabeled" -> "removed label \"${event.label}\""
-                            "milestoned" -> "added to milestone \"${event.milestone}\""
-                            "demilestoned" -> "removed from milestone \"${event.milestone}\""
-                            "assigned" -> "assigned to ${event.assignee}"
-                            "unassigned" -> "unassigned ${event.assignee}"
-                            "closed" -> "closed this"
-                            "reopened" -> "reopened this"
-                            "cross-referenced" -> "referenced this"
-                            "commented" -> "commented"
-                            "committed" -> "committed"
-                            "reviewed" -> "reviewed"
-                            else -> event.event
+            } else when (selectedTab) {
+                IssueActivityTab.TIMELINE -> {
+                    if (events.isEmpty()) {
+                        Text("No timeline events", fontSize = 13.sp, color = TextTertiary)
+                    } else {
+                        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(events) { event ->
+                                val eventText = when (event.event) {
+                                    "labeled" -> "added label \"${event.label}\""
+                                    "unlabeled" -> "removed label \"${event.label}\""
+                                    "milestoned" -> "added to milestone \"${event.milestone}\""
+                                    "demilestoned" -> "removed from milestone \"${event.milestone}\""
+                                    "assigned" -> "assigned to ${event.assignee}"
+                                    "unassigned" -> "unassigned ${event.assignee}"
+                                    "closed" -> "closed this"
+                                    "reopened" -> "reopened this"
+                                    "cross-referenced" -> "referenced this"
+                                    "commented" -> "commented"
+                                    "committed" -> "committed"
+                                    "reviewed" -> "reviewed"
+                                    else -> event.event
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Box(Modifier.size(8.dp).clip(CircleShape).background(Blue))
+                                    Column {
+                                        Text("${event.actor} $eventText", fontSize = 12.sp, color = TextPrimary)
+                                        Text(event.createdAt.take(10), fontSize = 10.sp, color = TextTertiary)
+                                    }
+                                }
+                            }
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(Modifier.size(8.dp).clip(CircleShape).background(Blue))
-                            Column {
-                                Text("${event.actor} $eventText", fontSize = 12.sp, color = TextPrimary)
-                                Text(event.createdAt.take(10), fontSize = 10.sp, color = TextTertiary)
+                    }
+                }
+                IssueActivityTab.EVENTS -> {
+                    if (issueEvents.isEmpty()) {
+                        Text("No issue events", fontSize = 13.sp, color = TextTertiary)
+                    } else {
+                        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(issueEvents) { event ->
+                                IssueEventRow(
+                                    event = event,
+                                    onOpenIssue = { _, _ -> },
+                                    showOpenIssue = false,
+                                    onDetails = {
+                                        detailEvent = event
+                                        scope.launch {
+                                            detailEvent = GitHubManager.getIssueEvent(context, repo.owner, repo.name, event.id) ?: event
+                                        }
+                                    },
+                                )
                             }
                         }
                     }
                 }
             }
+            }
         },
         confirmButton = { AiModuleTextAction(label = "close", onClick = onDismiss) }
     )
+
+    detailEvent?.let { event ->
+        IssueEventDetailDialog(
+            event = event,
+            onDismiss = { detailEvent = null },
+            onOpenIssue = { detailEvent = null },
+        )
+    }
 }

@@ -953,6 +953,31 @@ object GitHubManager {
         )
     }
 
+    private fun parseIssueEvent(j: JSONObject, fallbackIssueNumber: Int = 0): GHIssueEvent {
+        val issue = j.optJSONObject("issue")
+        val rename = j.optJSONObject("rename")
+        val app = j.optJSONObject("performed_via_github_app")
+        return GHIssueEvent(
+            id = j.optLong("id"),
+            event = j.optString("event", ""),
+            actor = j.optJSONObject("actor")?.optString("login") ?: "",
+            createdAt = j.optString("created_at", ""),
+            issueNumber = issue?.optInt("number", fallbackIssueNumber) ?: fallbackIssueNumber,
+            issueTitle = issue?.optString("title", "") ?: "",
+            label = j.optJSONObject("label")?.optString("name") ?: "",
+            assignee = j.optJSONObject("assignee")?.optString("login") ?: "",
+            milestone = j.optJSONObject("milestone")?.optString("title") ?: "",
+            renameFrom = rename?.optString("from", "") ?: "",
+            renameTo = rename?.optString("to", "") ?: "",
+            commitId = j.optString("commit_id", ""),
+            url = j.optString("url", ""),
+            commitUrl = j.optString("commit_url", ""),
+            authorAssociation = issue?.optString("author_association", "") ?: "",
+            stateReason = issue?.optString("state_reason", "") ?: "",
+            performedViaGithubApp = app?.optString("name", "") ?: ""
+        )
+    }
+
     private fun parseTrafficSeries(j: JSONObject, itemKey: String): GHTrafficSeries {
         val items = j.optJSONArray(itemKey) ?: JSONArray()
         return GHTrafficSeries(
@@ -1014,26 +1039,24 @@ object GitHubManager {
         if (!r.success) return emptyList()
         return try {
             val arr = JSONArray(r.body)
-            (0 until arr.length()).map { i ->
-                val j = arr.getJSONObject(i)
-                val issue = j.optJSONObject("issue")
-                val rename = j.optJSONObject("rename")
-                GHIssueEvent(
-                    id = j.optLong("id"),
-                    event = j.optString("event", ""),
-                    actor = j.optJSONObject("actor")?.optString("login") ?: "",
-                    createdAt = j.optString("created_at", ""),
-                    issueNumber = issue?.optInt("number", 0) ?: 0,
-                    issueTitle = issue?.optString("title", "") ?: "",
-                    label = j.optJSONObject("label")?.optString("name") ?: "",
-                    assignee = j.optJSONObject("assignee")?.optString("login") ?: "",
-                    milestone = j.optJSONObject("milestone")?.optString("title") ?: "",
-                    renameFrom = rename?.optString("from", "") ?: "",
-                    renameTo = rename?.optString("to", "") ?: "",
-                    commitId = j.optString("commit_id", "")
-                )
-            }
+            (0 until arr.length()).map { i -> parseIssueEvent(arr.getJSONObject(i)) }
         } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getIssueEventsForIssue(context: Context, owner: String, repo: String, issueNumber: Int, page: Int = 1): List<GHIssueEvent> {
+        val r = request(context, "/repos/$owner/$repo/issues/$issueNumber/events?per_page=100&page=$page")
+        if (!r.success) return emptyList()
+        return try {
+            val arr = JSONArray(r.body)
+            (0 until arr.length()).map { i -> parseIssueEvent(arr.getJSONObject(i), fallbackIssueNumber = issueNumber) }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getIssueEvent(context: Context, owner: String, repo: String, eventId: Long): GHIssueEvent? {
+        if (eventId <= 0L) return null
+        val r = request(context, "/repos/$owner/$repo/issues/events/$eventId")
+        if (!r.success) return null
+        return try { parseIssueEvent(JSONObject(r.body)) } catch (e: Exception) { null }
     }
 
     suspend fun addComment(context: Context, owner: String, repo: String, number: Int, body: String): Boolean {
@@ -5444,7 +5467,12 @@ data class GHIssueEvent(
     val milestone: String,
     val renameFrom: String,
     val renameTo: String,
-    val commitId: String
+    val commitId: String,
+    val url: String = "",
+    val commitUrl: String = "",
+    val authorAssociation: String = "",
+    val stateReason: String = "",
+    val performedViaGithubApp: String = ""
 )
 
 data class GHIssueDetail(val number: Int, val title: String, val body: String, val state: String,

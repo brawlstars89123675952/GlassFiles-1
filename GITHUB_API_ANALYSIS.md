@@ -119,6 +119,8 @@ items.
 | Lock/unlock issue | `/repos/{owner}/{repo}/issues/{number}/lock` (PUT/DELETE) | ✅ | ✅ | Lock dialog with GitHub lock reasons |
 | Issue timeline | `/repos/{owner}/{repo}/issues/{number}/timeline` | ✅ | ✅ | Full history dialog |
 | Issue events | `/repos/{owner}/{repo}/issues/events` | ✅ | ✅ | Repository-wide issue event feed |
+| Issue events for issue | `/repos/{owner}/{repo}/issues/{number}/events` | ✅ | ✅ | Timeline dialog events tab |
+| Get single issue event | `/repos/{owner}/{repo}/issues/events/{event_id}` | ✅ | ✅ | Event detail dialog |
 | Update comment | `/repos/{owner}/{repo}/issues/comments/{id}` (PATCH) | ✅ | ✅ | Edit existing issue comments |
 | Delete comment | `/repos/{owner}/{repo}/issues/comments/{id}` (DELETE) | ✅ | ✅ | Delete comments with confirmation |
 
@@ -362,11 +364,6 @@ None currently tracked.
 
 ## ❌ NOT IMPLEMENTED / REMAINING BACKLOG
 
-### Issues (Advanced)
-| Feature | API Endpoint | Priority | Notes |
-|---------|-------------|----------|-------|
-| Deeper timeline event actions | Multiple issue timeline/event endpoints | Low | Timeline is readable; event-specific mutations are not modeled |
-
 ### GitHub Actions (Advanced)
 | Feature | API Endpoint | Priority | Notes |
 |---------|-------------|----------|-------|
@@ -398,7 +395,7 @@ None currently tracked.
 | Repositories / Files | ✅ Complete for core mobile flows | None tracked |
 | Branches | ✅ Complete for list/create/delete/switch/signature protection | Other advanced protection sub-resources |
 | Commits / Compare / Git Data | ✅ Complete for current mobile UI | None tracked |
-| Issues | ✅ Complete for main issue flow | Deeper timeline event actions |
+| Issues | ✅ Complete for main issue flow and event/timeline inspection | None tracked |
 | Pull Requests | ✅ Complete for PR detail/reviews/comments/merge methods/check runs/check suites | None tracked |
 | Releases | ✅ Complete | None tracked |
 | GitHub Actions | ✅ Complete for runs/logs/artifacts/dispatch/jobs/cache/secrets/variables/runners/settings/workflow detail | Enterprise runner groups |
@@ -447,10 +444,9 @@ None currently tracked.
 - None currently tracked.
 
 **Not Implemented / Early Coverage — Major Gaps:**
-- ⚠️ Deeper issue timeline event actions.
 - ⚠️ Legacy OAuth authorizations and Enterprise-only APIs.
 
 ### Recommendations for Next Implementation
 
 **Low Priority (nice to have):**
-1. **Issue timeline event actions** — only if a concrete workflow needs event-specific mutations.
+1. **Legacy OAuth / enterprise-only screens** — only if a concrete admin workflow needs them.
