@@ -1527,3 +1527,24 @@
 - Проверка:
   - локальная Android сборка не запускалась по прямой просьбе пользователя;
   - выполнены только статические проверки.
+
+### GitHub OAuth App token tools
+- Закрыт последний tracked OAuth gap из `GITHUB_API_ANALYSIS.md` без возврата к deprecated `/authorizations` username/password flow.
+- `GitHubManager.kt`:
+  - добавлен basic-auth request helper для OAuth App owner endpoints;
+  - добавлен `checkOAuthAppToken(...)` для `POST /applications/{client_id}/token`;
+  - добавлен `resetOAuthAppToken(...)` для `PATCH /applications/{client_id}/token`;
+  - добавлены `deleteOAuthAppToken(...)` и `deleteOAuthAppGrant(...)`;
+  - добавлена модель `GHOAuthTokenInfo`.
+- `GitHubEnterpriseAdminModule.kt`:
+  - добавлена вкладка `oauth app`;
+  - ручные поля: client id, client secret, access token;
+  - check/reset/delete token и delete grant;
+  - destructive actions требуют typed confirmation: `reset`, `delete`, `grant`.
+- `GITHUB_API_ANALYSIS.md`:
+  - OAuth App token management endpoints перенесены в implemented;
+  - deprecated `/authorizations` flow оставлен intentionally out of scope;
+  - tracked GitHub API backlog очищен.
+- Проверка:
+  - локальная Android сборка не запускалась по прямой просьбе пользователя;
+  - выполнены только статические проверки.

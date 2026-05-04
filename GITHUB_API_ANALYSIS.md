@@ -364,6 +364,10 @@ items.
 | Audit log | `/orgs/{org}/audit-log` | ✅ | ✅ | Admin API screen with optional phrase |
 | SAML SSO authorizations | `/orgs/{org}/credential-authorizations` | ✅ | ✅ | Admin API screen with login filter |
 | Remove SAML SSO authorization | `/orgs/{org}/credential-authorizations/{credential_id}` (DELETE) | ✅ | ✅ | Typed revoke confirmation |
+| OAuth app token check | `/applications/{client_id}/token` (POST) | ✅ | ✅ | Admin API OAuth App tools, Basic auth |
+| OAuth app token reset | `/applications/{client_id}/token` (PATCH) | ✅ | ✅ | Typed reset confirmation |
+| OAuth app token delete | `/applications/{client_id}/token` (DELETE) | ✅ | ✅ | Typed delete confirmation |
+| OAuth app grant delete | `/applications/{client_id}/grant` (DELETE) | ✅ | ✅ | Typed grant confirmation |
 
 ---
 
@@ -375,10 +379,7 @@ None currently tracked.
 
 ## ❌ NOT IMPLEMENTED / REMAINING BACKLOG
 
-### OAuth
-| Feature | API Endpoint | Priority | Notes |
-|---------|-------------|----------|-------|
-| OAuth app authorizations | `/authorizations` | Low | Legacy |
+None currently tracked. Legacy `/authorizations` username/password flows are intentionally not implemented because GitHub has deprecated/removed that OAuth Authorizations API in favor of web/app OAuth flows and OAuth App token management endpoints.
 
 ## 📊 SUMMARY
 
@@ -393,7 +394,7 @@ None currently tracked.
 | Issues | ✅ Complete for main issue flow and event/timeline inspection | None tracked |
 | Pull Requests | ✅ Complete for PR detail/reviews/comments/merge methods/check runs/check suites | None tracked |
 | Releases | ✅ Complete | None tracked |
-| GitHub Actions | ✅ Complete for runs/logs/artifacts/dispatch/jobs/cache/secrets/variables/runners/runner groups/settings/workflow detail | Enterprise runners |
+| GitHub Actions | ✅ Complete for runs/logs/artifacts/dispatch/jobs/cache/secrets/variables/runners/runner groups/settings/workflow detail | None tracked |
 | Gists | ✅ Complete | None tracked |
 | Notifications | ✅ Complete | None tracked |
 | Search | ✅ Complete | None tracked |
@@ -406,7 +407,7 @@ None currently tracked.
 | Repository Rules | ✅ Complete | None tracked |
 | User Settings | ✅ Complete for supported public APIs | Web-only settings remain out of scope |
 | GitHub Apps / Installations | ✅ Complete | None tracked for user installation flows |
-| OAuth | ❌ Backlog | Legacy OAuth app authorization views |
+| OAuth | ✅ Complete for current OAuth App token management endpoints | Deprecated `/authorizations` intentionally out of scope |
 | Enterprise / Advanced | ✅ Partial admin utilities | None tracked beyond legacy/deprecated flows |
 
 ### Overall Assessment
@@ -439,9 +440,9 @@ None currently tracked.
 - None currently tracked.
 
 **Not Implemented / Early Coverage — Major Gaps:**
-- ⚠️ Legacy OAuth authorizations.
+- None currently tracked.
 
 ### Recommendations for Next Implementation
 
 **Low Priority (nice to have):**
-1. **Legacy OAuth screens** — only if a concrete legacy enterprise workflow needs them.
+1. Keep future GitHub work focused on concrete workflows rather than deprecated endpoints.

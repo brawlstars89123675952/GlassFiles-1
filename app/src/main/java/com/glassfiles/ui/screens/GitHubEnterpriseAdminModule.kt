@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glassfiles.data.github.GHActionRunner
 import com.glassfiles.data.github.GHAuditLogEntry
+import com.glassfiles.data.github.GHOAuthTokenInfo
 import com.glassfiles.data.github.GHSamlAuthorization
 import com.glassfiles.data.github.GHScimUser
 import com.glassfiles.data.github.GHScimUsersPage
@@ -44,7 +45,7 @@ import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.launch
 
-private enum class GitHubAdminTab { ENTERPRISE_RUNNERS, AUDIT_LOG, SCIM_USERS, SAML_SSO }
+private enum class GitHubAdminTab { ENTERPRISE_RUNNERS, AUDIT_LOG, SCIM_USERS, SAML_SSO, OAUTH_APP }
 
 @Composable
 internal fun GitHubEnterpriseAdminScreen(onBack: () -> Unit) {
@@ -58,12 +59,17 @@ internal fun GitHubEnterpriseAdminScreen(onBack: () -> Unit) {
     var samlLogin by rememberSaveable { mutableStateOf("") }
     var samlRevokeId by rememberSaveable { mutableStateOf("") }
     var samlRevokeConfirm by rememberSaveable { mutableStateOf("") }
+    var oauthClientId by remember { mutableStateOf("") }
+    var oauthClientSecret by remember { mutableStateOf("") }
+    var oauthAccessToken by remember { mutableStateOf("") }
+    var oauthConfirm by remember { mutableStateOf("") }
     var scimStart by rememberSaveable { mutableIntStateOf(1) }
     var loading by remember { mutableStateOf(false) }
     var enterpriseRunners by remember { mutableStateOf<List<GHActionRunner>>(emptyList()) }
     var auditLog by remember { mutableStateOf<List<GHAuditLogEntry>>(emptyList()) }
     var scimPage by remember { mutableStateOf(GHScimUsersPage()) }
     var samlAuthorizations by remember { mutableStateOf<List<GHSamlAuthorization>>(emptyList()) }
+    var oauthTokenInfo by remember { mutableStateOf<GHOAuthTokenInfo?>(null) }
     var notice by remember { mutableStateOf("") }
 
     fun loadCurrent() {
@@ -86,6 +92,10 @@ internal fun GitHubEnterpriseAdminScreen(onBack: () -> Unit) {
                 GitHubAdminTab.SAML_SSO -> {
                     samlAuthorizations = GitHubManager.getOrgSamlAuthorizations(context, org, samlLogin)
                     notice = if (samlAuthorizations.isEmpty()) "no saml authorizations returned" else "saml authorizations=${samlAuthorizations.size}"
+                }
+                GitHubAdminTab.OAUTH_APP -> {
+                    oauthTokenInfo = GitHubManager.checkOAuthAppToken(oauthClientId, oauthClientSecret, oauthAccessToken)
+                    notice = if (oauthTokenInfo == null) "oauth token check failed" else "oauth token valid"
                 }
             }
             loading = false
@@ -110,6 +120,37 @@ internal fun GitHubEnterpriseAdminScreen(onBack: () -> Unit) {
             } else {
                 notice = "failed to revoke saml credential"
             }
+            loading = false
+        }
+    }
+
+    fun mutateOAuthToken(action: String) {
+        if (oauthConfirm.trim() != action) {
+            notice = "type $action to confirm"
+            return
+        }
+        loading = true
+        notice = ""
+        scope.launch {
+            when (action) {
+                "reset" -> {
+                    val reset = GitHubManager.resetOAuthAppToken(oauthClientId, oauthClientSecret, oauthAccessToken)
+                    oauthTokenInfo = reset
+                    if (reset?.token?.isNotBlank() == true) oauthAccessToken = reset.token
+                    notice = if (reset != null) "oauth token reset" else "failed to reset oauth token"
+                }
+                "delete" -> {
+                    val ok = GitHubManager.deleteOAuthAppToken(oauthClientId, oauthClientSecret, oauthAccessToken)
+                    if (ok) oauthTokenInfo = null
+                    notice = if (ok) "oauth token deleted" else "failed to delete oauth token"
+                }
+                "grant" -> {
+                    val ok = GitHubManager.deleteOAuthAppGrant(oauthClientId, oauthClientSecret, oauthAccessToken)
+                    if (ok) oauthTokenInfo = null
+                    notice = if (ok) "oauth grant deleted" else "failed to delete oauth grant"
+                }
+            }
+            oauthConfirm = ""
             loading = false
         }
     }
@@ -150,8 +191,21 @@ internal fun GitHubEnterpriseAdminScreen(onBack: () -> Unit) {
                     value = org,
                     onValueChange = { org = it },
                     placeholder = "organization login",
-                    enabled = tab != GitHubAdminTab.ENTERPRISE_RUNNERS,
+                    enabled = tab != GitHubAdminTab.ENTERPRISE_RUNNERS && tab != GitHubAdminTab.OAUTH_APP,
                 )
+                if (tab == GitHubAdminTab.OAUTH_APP) {
+                    GitHubAdminInput("client id", oauthClientId, { oauthClientId = it }, "OAuth/GitHub App client id")
+                    GitHubAdminInput("client secret", oauthClientSecret, { oauthClientSecret = it }, "client secret")
+                    GitHubAdminInput("access token", oauthAccessToken, { oauthAccessToken = it }, "gho_... or ghu_...")
+                    GitHubAdminInput("confirm", oauthConfirm, { oauthConfirm = it }, "reset / delete / grant")
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GitHubTerminalButton("check token", onClick = { loadCurrent() }, color = palette.accent, enabled = !loading)
+                        GitHubTerminalButton("reset token", onClick = { mutateOAuthToken("reset") }, color = palette.warning, enabled = !loading)
+                        GitHubTerminalButton("delete token", onClick = { mutateOAuthToken("delete") }, color = palette.error, enabled = !loading)
+                        GitHubTerminalButton("delete grant", onClick = { mutateOAuthToken("grant") }, color = palette.error, enabled = !loading)
+                    }
+                    Text("Uses OAuth App Basic auth. Client secret and access token are only kept in screen state.", color = palette.textMuted, fontFamily = JetBrainsMono, fontSize = 11.sp, lineHeight = 16.sp)
+                }
                 if (tab == GitHubAdminTab.AUDIT_LOG) {
                     GitHubAdminInput("phrase", auditPhrase, { auditPhrase = it }, "optional audit phrase")
                 }
@@ -211,6 +265,11 @@ internal fun GitHubEnterpriseAdminScreen(onBack: () -> Unit) {
                                     },
                                 )
                             }
+                        }
+                        GitHubAdminTab.OAUTH_APP -> {
+                            val token = oauthTokenInfo
+                            if (token == null) item { GitHubAdminEmpty("no oauth token loaded") }
+                            else item { OAuthTokenCard(token) }
                         }
                     }
                 }
@@ -288,6 +347,23 @@ private fun SamlAuthorizationCard(authorization: GHSamlAuthorization, onSelect: 
         GitHubAdminKv("expires", authorization.expiresAt)
         GitHubAdminKv("scopes", authorization.scopes.joinToString(", "))
         GitHubTerminalButton("select for revoke", onClick = onSelect, color = AiModuleTheme.colors.warning)
+    }
+}
+
+@Composable
+private fun OAuthTokenCard(token: GHOAuthTokenInfo) {
+    GitHubAdminCard(token.appName.ifBlank { "oauth token ${token.id}" }) {
+        GitHubAdminKv("token", token.tokenLastEight.takeIf { it.isNotBlank() }?.let { "****$it" } ?: "")
+        GitHubAdminKv("client", token.clientId)
+        GitHubAdminKv("note", token.note)
+        GitHubAdminKv("created", token.createdAt)
+        GitHubAdminKv("updated", token.updatedAt)
+        GitHubAdminKv("scopes", token.scopes.joinToString(", "))
+        GitHubAdminKv("fingerprint", token.fingerprint)
+        GitHubAdminKv("api", token.url)
+        if (token.token.isNotBlank()) {
+            GitHubAdminKv("new token", token.token)
+        }
     }
 }
 

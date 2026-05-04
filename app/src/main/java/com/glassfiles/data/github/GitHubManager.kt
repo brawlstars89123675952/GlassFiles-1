@@ -68,6 +68,35 @@ object GitHubManager {
             }
         }
 
+    private suspend fun requestBasic(endpoint: String, method: String, body: String?, username: String, password: String): ApiResult =
+        withContext(Dispatchers.IO) {
+            try {
+                val url = if (endpoint.startsWith("http")) endpoint else "$API$endpoint"
+                val auth = android.util.Base64.encodeToString("$username:$password".toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = method
+                    setRequestProperty("Accept", "application/vnd.github+json")
+                    setRequestProperty("User-Agent", "GlassFiles")
+                    setRequestProperty("Authorization", "Basic $auth")
+                    if (body != null) {
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/json")
+                        OutputStreamWriter(outputStream).use { it.write(body) }
+                    }
+                    connectTimeout = 15000
+                    readTimeout = 15000
+                }
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val text = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                conn.disconnect()
+                if (code in 200..299) ApiResult(true, text, code) else ApiResult(false, text, code)
+            } catch (e: Exception) {
+                Log.e(TAG, "Basic request error: ${e.message}")
+                ApiResult(false, e.message ?: "Network error", -1)
+            }
+        }
+
     private suspend fun graphql(context: Context, query: String, variables: JSONObject = JSONObject()): JSONObject? {
         val body = JSONObject().apply {
             put("query", query)
@@ -989,6 +1018,28 @@ object GitHubManager {
             status = j.optString("status"),
             busy = j.optBoolean("busy", false),
             labels = labels
+        )
+    }
+
+    private fun parseOAuthTokenInfo(j: JSONObject): GHOAuthTokenInfo {
+        val app = j.optJSONObject("app")
+        val scopes = j.optJSONArray("scopes")?.let { arr ->
+            (0 until arr.length()).mapNotNull { idx -> arr.optString(idx).takeIf { it.isNotBlank() } }
+        } ?: emptyList()
+        return GHOAuthTokenInfo(
+            id = j.optLong("id"),
+            url = j.optString("url", ""),
+            appName = app?.optString("name", "") ?: "",
+            appUrl = app?.optString("url", "") ?: "",
+            clientId = app?.optString("client_id", "") ?: "",
+            tokenLastEight = j.optString("token_last_eight", ""),
+            note = j.optString("note", ""),
+            noteUrl = j.optString("note_url", ""),
+            createdAt = j.optString("created_at", ""),
+            updatedAt = j.optString("updated_at", ""),
+            scopes = scopes,
+            fingerprint = j.optString("fingerprint", ""),
+            token = j.optString("token", "")
         )
     }
 
@@ -2332,6 +2383,30 @@ object GitHubManager {
         val cleanOrg = org.trim()
         if (cleanOrg.isBlank() || credentialId <= 0L) return false
         return request(context, "/orgs/$cleanOrg/credential-authorizations/$credentialId", "DELETE").let { it.code == 204 || it.success }
+    }
+
+    suspend fun checkOAuthAppToken(clientId: String, clientSecret: String, accessToken: String): GHOAuthTokenInfo? {
+        val body = JSONObject().apply { put("access_token", accessToken.trim()) }.toString()
+        val r = requestBasic("/applications/${clientId.trim()}/token", "POST", body, clientId.trim(), clientSecret)
+        if (!r.success) return null
+        return try { parseOAuthTokenInfo(JSONObject(r.body)) } catch (e: Exception) { null }
+    }
+
+    suspend fun resetOAuthAppToken(clientId: String, clientSecret: String, accessToken: String): GHOAuthTokenInfo? {
+        val body = JSONObject().apply { put("access_token", accessToken.trim()) }.toString()
+        val r = requestBasic("/applications/${clientId.trim()}/token", "PATCH", body, clientId.trim(), clientSecret)
+        if (!r.success) return null
+        return try { parseOAuthTokenInfo(JSONObject(r.body)) } catch (e: Exception) { null }
+    }
+
+    suspend fun deleteOAuthAppToken(clientId: String, clientSecret: String, accessToken: String): Boolean {
+        val body = JSONObject().apply { put("access_token", accessToken.trim()) }.toString()
+        return requestBasic("/applications/${clientId.trim()}/token", "DELETE", body, clientId.trim(), clientSecret).let { it.code == 204 || it.success }
+    }
+
+    suspend fun deleteOAuthAppGrant(clientId: String, clientSecret: String, accessToken: String): Boolean {
+        val body = JSONObject().apply { put("access_token", accessToken.trim()) }.toString()
+        return requestBasic("/applications/${clientId.trim()}/grant", "DELETE", body, clientId.trim(), clientSecret).let { it.code == 204 || it.success }
     }
 
     suspend fun deleteRepoSelfHostedRunner(context: Context, owner: String, repo: String, runnerId: Long): Boolean =
@@ -5951,6 +6026,22 @@ data class GHSamlAuthorization(
     val accessedAt: String,
     val expiresAt: String,
     val scopes: List<String>
+)
+
+data class GHOAuthTokenInfo(
+    val id: Long,
+    val url: String,
+    val appName: String,
+    val appUrl: String,
+    val clientId: String,
+    val tokenLastEight: String,
+    val note: String,
+    val noteUrl: String,
+    val createdAt: String,
+    val updatedAt: String,
+    val scopes: List<String>,
+    val fingerprint: String,
+    val token: String = ""
 )
 
 data class GHRunnerToken(val token: String, val expiresAt: String)
