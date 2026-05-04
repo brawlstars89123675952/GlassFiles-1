@@ -199,6 +199,7 @@ items.
 | Actions permissions read/write | `/repos/{owner}/{repo}/actions/permissions` | ✅ | ✅ | Settings panel |
 | Workflow token permissions read/write | `/repos/{owner}/{repo}/actions/permissions/workflow` | ✅ | ✅ | Settings panel |
 | Artifact/log retention read/write | `/repos/{owner}/{repo}/actions/permissions/artifact-and-log-retention` | ✅ | ✅ | Settings panel |
+| Actions troubleshooting center | Local aggregation over actions permissions, workflows, runs, jobs and API error log | - | ✅ | Read-only repo health screen with findings and problem run drilldown |
 | Matrix job grouping | Local UI over run jobs | - | ✅ | Collapsible prefix groups for large kernel matrices |
 | Kernel failure diagnostics | Local asset/cache/remote pattern catalog | - | ✅ | Remote-updatable kernel builder error summaries |
 

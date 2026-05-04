@@ -163,6 +163,7 @@ internal fun RepoDetailScreen(
     var showDiscussions by remember { mutableStateOf(false) }
     var showRulesets by remember { mutableStateOf(false) }
     var showSecurity by remember { mutableStateOf(false) }
+    var showActionsTroubleshoot by remember { mutableStateOf(false) }
     var languages by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }; var contributors by remember { mutableStateOf<List<GHContributor>>(emptyList()) }
     // Pagination
     var commitsPage by rememberSaveable(repo.fullName) { mutableIntStateOf(1) }; var commitsHasMore by rememberSaveable(repo.fullName) { mutableStateOf(true) }
@@ -218,6 +219,7 @@ internal fun RepoDetailScreen(
             showRepoOverflow -> showRepoOverflow = false
             showRepoInsights -> showRepoInsights = false
             showGitDataTools -> showGitDataTools = false
+            showActionsTroubleshoot -> showActionsTroubleshoot = false
             deleteTarget != null -> deleteTarget = null
             editingFile != null -> {
                 editingFile = null
@@ -414,6 +416,17 @@ internal fun RepoDetailScreen(
     if (showDiscussions) { DiscussionsScreen(repoOwner = repo.owner, repoName = repo.name, canWrite = canWrite) { showDiscussions = false }; return }
     if (showRulesets) { if (canAdmin) RulesetsScreen(repoOwner = repo.owner, repoName = repo.name) { showRulesets = false } else GitHubAdminRequiredScreen(title = "> rulesets", repoFullName = repo.fullName) { showRulesets = false }; return }
     if (showSecurity) { if (canAdmin) SecurityScreen(repoOwner = repo.owner, repoName = repo.name) { showSecurity = false } else GitHubAdminRequiredScreen(title = "> security", repoFullName = repo.fullName) { showSecurity = false }; return }
+    if (showActionsTroubleshoot) {
+        GitHubActionsTroubleshootScreen(
+            repo = repo,
+            onBack = { showActionsTroubleshoot = false },
+            onOpenRun = {
+                selectedRunId = it
+                showActionsTroubleshoot = false
+            },
+        )
+        return
+    }
     
     // File editor screen
     val safeEditingFile = editingFile
@@ -767,9 +780,11 @@ internal fun RepoDetailScreen(
                     GitHubPermissionHint("write required")
                 }
                 RepoTab.ACTIONS -> if (canWrite) {
+                    GitHubTerminalButton("troubleshoot", onClick = { showActionsTroubleshoot = true }, color = palette.textSecondary)
                     AiModulePillButton(label = "run \u25B6", onClick = { showDispatch = true })
-                } else if (repo.permissions != null) {
-                    GitHubPermissionHint("write required")
+                } else {
+                    GitHubTerminalButton("troubleshoot", onClick = { showActionsTroubleshoot = true }, color = palette.textSecondary)
+                    if (repo.permissions != null) GitHubPermissionHint("write required")
                 }
                 else -> {}
             }

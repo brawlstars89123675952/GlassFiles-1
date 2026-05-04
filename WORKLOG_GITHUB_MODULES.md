@@ -33,9 +33,15 @@
   - кнопки `export txt` и `export json` в Diagnostics
   - файлы сохраняются в `Downloads/GlassFiles_Git`
   - экспорт включает summary, scopes, rate limits, endpoint checks и recent API error log
+- Добавлен Actions troubleshooting center:
+  - новый repo-specific экран `GitHubActionsTroubleshootScreen`
+  - вход из Actions вкладки через кнопку `troubleshoot`
+  - собирает workflows, latest runs, Actions permissions, workflow token permissions, rate limit и recent Actions API errors
+  - показывает findings по read-only token, disabled/restricted Actions, read-only `GITHUB_TOKEN`, inactive workflows, failed/cancelled/timed-out runs
+  - отображает problem runs и failed jobs/steps, с переходом в существующий run detail
 
 ### Осталось / идеи дальше
-- Следующие улучшения делать уже вокруг конкретных GitHub workflow-сценариев: troubleshooting, массовые действия, экспорт списков/логов.
+- Следующие улучшения делать уже вокруг конкретных GitHub workflow-сценариев: массовые действия, экспорт списков/логов, deeper Actions failure analysis.
 
 ## 2026-04-23
 
