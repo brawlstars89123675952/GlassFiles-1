@@ -354,6 +354,7 @@ items.
 | Add social account | `/user/social_accounts` (POST) | ✅ | ✅ | SettingsModule |
 | Delete social account | `/user/social_accounts` (DELETE) | ✅ | ✅ | SettingsModule |
 | Rate limit check | `/rate_limit` | ✅ | ✅ | SettingsModule |
+| API diagnostics | `/user`, `/rate_limit`, `/user/repos`, `/user/orgs`, optional repo/org/enterprise checks | ✅ | ✅ | GitHubDiagnosticsScreen with scopes, rate limits, endpoint statuses and permission hints |
 | Clear cache | Local | ✅ | ✅ | SettingsModule |
 
 ### Enterprise / Admin

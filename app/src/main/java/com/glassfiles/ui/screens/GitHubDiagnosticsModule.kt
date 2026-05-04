@@ -1,0 +1,308 @@
+package com.glassfiles.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.glassfiles.data.github.GHApiDiagnosticCheck
+import com.glassfiles.data.github.GHApiDiagnostics
+import com.glassfiles.data.github.GitHubManager
+import com.glassfiles.ui.components.AiModuleSpinner
+import com.glassfiles.ui.components.AiModuleText as Text
+import com.glassfiles.ui.theme.AiModuleTheme
+import com.glassfiles.ui.theme.JetBrainsMono
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+@Composable
+internal fun GitHubDiagnosticsScreen(onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val palette = AiModuleTheme.colors
+    var owner by rememberSaveable { mutableStateOf("") }
+    var repo by rememberSaveable { mutableStateOf("") }
+    var org by rememberSaveable { mutableStateOf("") }
+    var enterprise by rememberSaveable { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+    var report by remember { mutableStateOf<GHApiDiagnostics?>(null) }
+    var notice by remember { mutableStateOf("") }
+
+    fun runChecks() {
+        if (loading) return
+        loading = true
+        notice = ""
+        scope.launch {
+            report = GitHubManager.runApiDiagnostics(context, owner, repo, org, enterprise)
+            notice = "checks=${report?.checks?.size ?: 0}"
+            loading = false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        loading = true
+        report = GitHubManager.runApiDiagnostics(context)
+        notice = "basic checks ready"
+        loading = false
+    }
+
+    GitHubScreenFrame(
+        title = "> api diagnostics",
+        subtitle = "token / scopes / rate limit / permissions",
+        onBack = onBack,
+        trailing = {
+            GitHubTopBarAction(
+                glyph = GhGlyphs.REFRESH,
+                onClick = { runChecks() },
+                tint = palette.accent,
+                enabled = !loading,
+                contentDescription = "run diagnostics",
+            )
+        },
+    ) {
+        LazyColumn(
+            Modifier.fillMaxSize().background(palette.background),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                GitHubDiagnosticPanel {
+                    Text(
+                        "Read-only diagnostics. These checks do not mutate repositories or organization settings.",
+                        color = palette.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GitHubDiagnosticInput("owner", owner, { owner = it }, "octocat", Modifier.weight(1f))
+                        GitHubDiagnosticInput("repo", repo, { repo = it }, "hello-world", Modifier.weight(1f))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GitHubDiagnosticInput("org", org, { org = it }, "optional", Modifier.weight(1f))
+                        GitHubDiagnosticInput("enterprise", enterprise, { enterprise = it }, "optional", Modifier.weight(1f))
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        GitHubTerminalButton(if (loading) "checking..." else "run checks", onClick = { runChecks() }, color = palette.accent, enabled = !loading)
+                        GitHubTerminalButton("clear target", onClick = {
+                            owner = ""
+                            repo = ""
+                            org = ""
+                            enterprise = ""
+                        }, color = palette.textSecondary, enabled = !loading)
+                        if (loading) AiModuleSpinner(label = "polling GitHub")
+                        if (notice.isNotBlank()) {
+                            Text(notice, color = palette.textMuted, fontFamily = JetBrainsMono, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+
+            report?.let { current ->
+                item { GitHubDiagnosticsSummary(current) }
+                items(current.checks, key = { "${it.title}:${it.endpoint}" }) { check ->
+                    GitHubDiagnosticCheckRow(check)
+                }
+            }
+
+            if (report == null && !loading) {
+                item {
+                    Text(
+                        "No diagnostics report yet.",
+                        color = palette.textMuted,
+                        fontFamily = JetBrainsMono,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GitHubDiagnosticsSummary(report: GHApiDiagnostics) {
+    val palette = AiModuleTheme.colors
+    val updated = remember(report.generatedAt) { githubDiagnosticsTime(report.generatedAt) }
+    GitHubDiagnosticPanel {
+        Text(
+            "summary",
+            color = palette.accent,
+            fontFamily = JetBrainsMono,
+            fontWeight = FontWeight.Medium,
+            fontSize = 13.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GitHubRateBox("core", "${report.rate.coreRemaining}/${report.rate.coreLimit}")
+            GitHubRateBox("search", "${report.rate.searchRemaining}/${report.rate.searchLimit}")
+            GitHubRateBox("graphql", "${report.rate.graphqlRemaining}/${report.rate.graphqlLimit}")
+            GitHubRateBox("reset", report.rate.resetEpoch.takeIf { it > 0L }?.toString() ?: "n/a")
+        }
+        Spacer(Modifier.height(8.dp))
+        GitHubDiagnosticKV("updated", updated)
+        GitHubDiagnosticKV("token scopes", report.scopes.ifBlank { "empty or fine-grained token" })
+        GitHubDiagnosticKV("accepted scopes", report.acceptedScopes.ifBlank { "not returned" })
+    }
+}
+
+@Composable
+private fun GitHubDiagnosticCheckRow(check: GHApiDiagnosticCheck) {
+    val palette = AiModuleTheme.colors
+    val color = when (check.status) {
+        "ok" -> GitHubSuccessGreen
+        "warn" -> GitHubWarningAmber()
+        "skip" -> palette.textMuted
+        else -> GitHubErrorRed
+    }
+    GitHubDiagnosticPanel {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GitHubDiagnosticStatus(check.status, color)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    check.title,
+                    color = palette.textPrimary,
+                    fontFamily = JetBrainsMono,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    check.endpoint,
+                    color = palette.textMuted,
+                    fontFamily = JetBrainsMono,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            val codeText = if (check.statusCode > 0) "HTTP ${check.statusCode}" else "skip"
+            Text(codeText, color = color, fontFamily = JetBrainsMono, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            check.message,
+            color = if (check.status == "ok") palette.textSecondary else color,
+            fontFamily = JetBrainsMono,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+        )
+        if (check.hint.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                check.hint,
+                color = palette.textMuted,
+                fontFamily = JetBrainsMono,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun GitHubDiagnosticInput(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+) {
+    val palette = AiModuleTheme.colors
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = palette.textMuted, fontFamily = JetBrainsMono, fontSize = 11.sp)
+        GitHubTerminalTextField(value, onValueChange, placeholder = placeholder, singleLine = true, minHeight = 38.dp)
+    }
+}
+
+@Composable
+private fun GitHubDiagnosticPanel(content: @Composable () -> Unit) {
+    val palette = AiModuleTheme.colors
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .border(1.dp, palette.border, RoundedCornerShape(4.dp))
+            .background(palette.surface.copy(alpha = 0.72f), RoundedCornerShape(4.dp))
+            .padding(12.dp),
+    ) {
+        Column(Modifier.fillMaxWidth()) { content() }
+    }
+}
+
+@Composable
+private fun GitHubRateBox(label: String, value: String) {
+    val palette = AiModuleTheme.colors
+    Column(
+        Modifier
+            .widthIn(min = 92.dp)
+            .border(1.dp, palette.border, RoundedCornerShape(3.dp))
+            .background(palette.background, RoundedCornerShape(3.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Text(label, color = palette.textMuted, fontFamily = JetBrainsMono, fontSize = 10.sp)
+        Text(value, color = palette.textPrimary, fontFamily = JetBrainsMono, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun GitHubDiagnosticStatus(status: String, color: Color) {
+    Box(
+        Modifier
+            .width(54.dp)
+            .border(1.dp, color, RoundedCornerShape(2.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(status, color = color, fontFamily = JetBrainsMono, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun GitHubDiagnosticKV(label: String, value: String) {
+    val palette = AiModuleTheme.colors
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, color = palette.textMuted, fontFamily = JetBrainsMono, fontSize = 11.sp, modifier = Modifier.width(118.dp))
+        Text(value, color = palette.textSecondary, fontFamily = JetBrainsMono, fontSize = 11.sp, modifier = Modifier.weight(1f), lineHeight = 16.sp)
+    }
+}
+
+private fun githubDiagnosticsTime(epochMillis: Long): String =
+    SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(epochMillis))

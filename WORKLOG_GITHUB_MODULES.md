@@ -1,5 +1,26 @@
 # GlassFiles GitHub Modules Progress
 
+## 2026-05-04
+
+### Завершено
+- Начат следующий этап после закрытия основной матрицы GitHub API: workflow-oriented улучшения поверх уже реализованных endpoint-групп.
+- Добавлен отдельный экран `GitHubDiagnosticsScreen` в терминальном стиле, без Material UI-компонентов.
+- В главный GitHub экран добавлена быстрая кнопка `Diagnostics`.
+- Добавлена read-only диагностика GitHub API:
+  - проверка текущего токена через `/user`
+  - чтение scopes из HTTP headers (`x-oauth-scopes`, `x-accepted-oauth-scopes`)
+  - проверка `/rate_limit` с core/search/graphql лимитами
+  - проверка доступа к `/user/repos` и `/user/orgs`
+  - опциональная проверка конкретного репозитория: metadata, Actions workflows, branches, permission текущего пользователя
+  - опциональная проверка организации: metadata и audit log
+  - опциональная проверка enterprise runners
+- Существующий сетевой слой `GitHubManager.request(...)` расширен сбором HTTP response headers без изменения публичного поведения старых вызовов.
+
+### Осталось / идеи дальше
+- Добавить журнал последних GitHub API ошибок внутри приложения.
+- Добавить подсказки по required permissions прямо рядом с disabled действиями в repo/actions/settings экранах.
+- Добавить экспорт diagnostics report в `.txt`/`.json` для отладки токенов и прав.
+
 ## 2026-04-23
 
 ### Завершено

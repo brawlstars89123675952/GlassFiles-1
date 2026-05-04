@@ -13,6 +13,7 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.Locale
 
 object GitHubManager {
 
@@ -56,17 +57,26 @@ object GitHubManager {
                 }
 
                 val code = conn.responseCode
+                val headers = responseHeaders(conn)
                 val stream = if (code in 200..299) conn.inputStream else conn.errorStream
                 val text = stream?.bufferedReader()?.use { it.readText() } ?: ""
                 conn.disconnect()
 
-                if (code in 200..299) ApiResult(true, text, code)
-                else ApiResult(false, text, code)
+                if (code in 200..299) ApiResult(true, text, code, headers)
+                else ApiResult(false, text, code, headers)
             } catch (e: Exception) {
                 Log.e(TAG, "Request error: ${e.message}")
                 ApiResult(false, e.message ?: "Network error", -1)
             }
         }
+
+    private fun responseHeaders(conn: HttpURLConnection): Map<String, String> =
+        conn.headerFields
+            .mapNotNull { (key, values) ->
+                val name = key?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                name.lowercase(Locale.US) to values.orEmpty().joinToString(",")
+            }
+            .toMap()
 
     private suspend fun requestBasic(endpoint: String, method: String, body: String?, username: String, password: String): ApiResult =
         withContext(Dispatchers.IO) {
@@ -3307,6 +3317,202 @@ object GitHubManager {
         } catch (_: Exception) { "Unavailable" }
     }
 
+    suspend fun runApiDiagnostics(
+        context: Context,
+        owner: String = "",
+        repo: String = "",
+        org: String = "",
+        enterprise: String = "",
+    ): GHApiDiagnostics {
+        val checks = mutableListOf<GHApiDiagnosticCheck>()
+        val cleanOwner = owner.trim()
+        val cleanRepo = repo.trim()
+        val cleanOrg = org.trim()
+        val cleanEnterprise = enterprise.trim()
+
+        fun addResult(
+            title: String,
+            endpoint: String,
+            result: ApiResult,
+            successMessage: String,
+            hint: String,
+        ) {
+            checks += GHApiDiagnosticCheck(
+                title = title,
+                endpoint = endpoint,
+                statusCode = result.code,
+                status = diagnosticStatus(result),
+                message = if (result.success) successMessage else apiErrorMessage(result),
+                hint = hint,
+            )
+        }
+
+        fun addSkip(title: String, endpoint: String, hint: String) {
+            checks += GHApiDiagnosticCheck(
+                title = title,
+                endpoint = endpoint,
+                statusCode = 0,
+                status = "skip",
+                message = "not checked",
+                hint = hint,
+            )
+        }
+
+        val userResult = request(context, "/user")
+        val login = parseLogin(userResult.body)
+        addResult(
+            title = "Token identity",
+            endpoint = "/user",
+            result = userResult,
+            successMessage = if (login.isBlank()) "authenticated" else "authenticated as @$login",
+            hint = "401 means token is missing, expired, or revoked.",
+        )
+
+        val rateResult = request(context, "/rate_limit")
+        val rate = parseRateLimitSummary(rateResult.body)
+        addResult(
+            title = "Rate limit",
+            endpoint = "/rate_limit",
+            result = rateResult,
+            successMessage = "core ${rate.coreRemaining}/${rate.coreLimit}, search ${rate.searchRemaining}/${rate.searchLimit}",
+            hint = "403 with zero remaining means the token has to wait for reset.",
+        )
+
+        addResult(
+            title = "Repository list",
+            endpoint = "/user/repos?type=all&per_page=1",
+            result = request(context, "/user/repos?type=all&per_page=1"),
+            successMessage = "repository list is readable",
+            hint = "Requires repository access on fine-grained tokens.",
+        )
+        addResult(
+            title = "Organizations",
+            endpoint = "/user/orgs?per_page=1",
+            result = request(context, "/user/orgs?per_page=1"),
+            successMessage = "organization list is readable",
+            hint = "Some organizations may be hidden by SSO or token restrictions.",
+        )
+
+        if (cleanOwner.isNotBlank() && cleanRepo.isNotBlank()) {
+            val encodedOwner = URLEncoder.encode(cleanOwner, "UTF-8")
+            val encodedRepo = URLEncoder.encode(cleanRepo, "UTF-8")
+            addResult(
+                title = "Repository access",
+                endpoint = "/repos/$cleanOwner/$cleanRepo",
+                result = request(context, "/repos/$encodedOwner/$encodedRepo"),
+                successMessage = "repository metadata is readable",
+                hint = "404 can mean the repo is private or the token has no repository permission.",
+            )
+            addResult(
+                title = "Actions workflows",
+                endpoint = "/repos/$cleanOwner/$cleanRepo/actions/workflows?per_page=1",
+                result = request(context, "/repos/$encodedOwner/$encodedRepo/actions/workflows?per_page=1"),
+                successMessage = "Actions workflows are readable",
+                hint = "Requires Actions access for the selected repository.",
+            )
+            addResult(
+                title = "Branches",
+                endpoint = "/repos/$cleanOwner/$cleanRepo/branches?per_page=1",
+                result = request(context, "/repos/$encodedOwner/$encodedRepo/branches?per_page=1"),
+                successMessage = "branches are readable",
+                hint = "Branch reads should work for any visible repository.",
+            )
+            if (login.isNotBlank()) {
+                addResult(
+                    title = "Your repo permission",
+                    endpoint = "/repos/$cleanOwner/$cleanRepo/collaborators/$login/permission",
+                    result = request(context, "/repos/$encodedOwner/$encodedRepo/collaborators/${URLEncoder.encode(login, "UTF-8")}/permission"),
+                    successMessage = "permission endpoint is readable",
+                    hint = "This helps explain why write/admin buttons are disabled.",
+                )
+            } else {
+                addSkip("Your repo permission", "/repos/$cleanOwner/$cleanRepo/collaborators/{login}/permission", "Login was not available from /user.")
+            }
+        } else {
+            addSkip("Repository access", "/repos/{owner}/{repo}", "Enter owner and repo to check repo-specific permissions.")
+            addSkip("Actions workflows", "/repos/{owner}/{repo}/actions/workflows", "Enter owner and repo to check Actions visibility.")
+            addSkip("Your repo permission", "/repos/{owner}/{repo}/collaborators/{login}/permission", "Enter owner and repo to check the current token permission.")
+        }
+
+        if (cleanOrg.isNotBlank()) {
+            val encodedOrg = URLEncoder.encode(cleanOrg, "UTF-8")
+            addResult(
+                title = "Organization access",
+                endpoint = "/orgs/$cleanOrg",
+                result = request(context, "/orgs/$encodedOrg"),
+                successMessage = "organization metadata is readable",
+                hint = "404/403 can mean private org membership, SSO, or missing org permission.",
+            )
+            addResult(
+                title = "Organization audit log",
+                endpoint = "/orgs/$cleanOrg/audit-log?per_page=1",
+                result = request(context, "/orgs/$encodedOrg/audit-log?per_page=1"),
+                successMessage = "audit log is readable",
+                hint = "Usually requires org owner/admin permissions.",
+            )
+        } else {
+            addSkip("Organization access", "/orgs/{org}", "Enter org login to check organization visibility.")
+            addSkip("Organization audit log", "/orgs/{org}/audit-log", "Enter org login to check admin-only audit log access.")
+        }
+
+        if (cleanEnterprise.isNotBlank()) {
+            val encodedEnterprise = URLEncoder.encode(cleanEnterprise, "UTF-8")
+            addResult(
+                title = "Enterprise runners",
+                endpoint = "/enterprises/$cleanEnterprise/actions/runners?per_page=1",
+                result = request(context, "/enterprises/$encodedEnterprise/actions/runners?per_page=1"),
+                successMessage = "enterprise runners are readable",
+                hint = "Requires enterprise owner/admin permissions.",
+            )
+        } else {
+            addSkip("Enterprise runners", "/enterprises/{enterprise}/actions/runners", "Enter enterprise slug to check enterprise admin access.")
+        }
+
+        return GHApiDiagnostics(
+            generatedAt = System.currentTimeMillis(),
+            scopes = userResult.headers["x-oauth-scopes"].orEmpty(),
+            acceptedScopes = userResult.headers["x-accepted-oauth-scopes"].orEmpty(),
+            rate = rate,
+            checks = checks,
+        )
+    }
+
+    private fun parseLogin(body: String): String =
+        try {
+            JSONObject(body).optString("login", "")
+        } catch (_: Exception) {
+            ""
+        }
+
+    private fun diagnosticStatus(result: ApiResult): String =
+        when {
+            result.success -> "ok"
+            result.code == 403 -> "warn"
+            result.code == 404 -> "warn"
+            result.code == 0 -> "skip"
+            else -> "fail"
+        }
+
+    private fun parseRateLimitSummary(body: String): GHApiRateSummary =
+        try {
+            val root = JSONObject(body)
+            val resources = root.optJSONObject("resources")
+            val core = resources?.optJSONObject("core")
+            val search = resources?.optJSONObject("search")
+            val graphql = resources?.optJSONObject("graphql")
+            GHApiRateSummary(
+                coreLimit = core?.optInt("limit") ?: 0,
+                coreRemaining = core?.optInt("remaining") ?: 0,
+                searchLimit = search?.optInt("limit") ?: 0,
+                searchRemaining = search?.optInt("remaining") ?: 0,
+                graphqlLimit = graphql?.optInt("limit") ?: 0,
+                graphqlRemaining = graphql?.optInt("remaining") ?: 0,
+                resetEpoch = core?.optLong("reset") ?: 0L,
+            )
+        } catch (_: Exception) {
+            GHApiRateSummary()
+        }
+
     // ═══════════════════════════════════
     // Repository Settings
     // ═══════════════════════════════════
@@ -5579,7 +5785,12 @@ object GitHubManager {
             .toList()
     }
 
-    data class ApiResult(val success: Boolean, val body: String, val code: Int)
+    data class ApiResult(
+        val success: Boolean,
+        val body: String,
+        val code: Int,
+        val headers: Map<String, String> = emptyMap(),
+    )
 
     private fun apiErrorMessage(result: ApiResult): String {
         val fallback = if (result.code > 0) "HTTP ${result.code}" else "Network error"
@@ -5609,6 +5820,33 @@ object GitHubManager {
         }
     }
 }
+
+data class GHApiDiagnostics(
+    val generatedAt: Long,
+    val scopes: String,
+    val acceptedScopes: String,
+    val rate: GHApiRateSummary,
+    val checks: List<GHApiDiagnosticCheck>,
+)
+
+data class GHApiRateSummary(
+    val coreLimit: Int = 0,
+    val coreRemaining: Int = 0,
+    val searchLimit: Int = 0,
+    val searchRemaining: Int = 0,
+    val graphqlLimit: Int = 0,
+    val graphqlRemaining: Int = 0,
+    val resetEpoch: Long = 0L,
+)
+
+data class GHApiDiagnosticCheck(
+    val title: String,
+    val endpoint: String,
+    val statusCode: Int,
+    val status: String,
+    val message: String,
+    val hint: String,
+)
 
 data class GHUser(val login: String, val name: String, val avatarUrl: String, val bio: String,
     val publicRepos: Int, val privateRepos: Int, val followers: Int, val following: Int)
