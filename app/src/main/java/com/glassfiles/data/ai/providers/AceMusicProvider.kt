@@ -25,7 +25,7 @@ import java.util.UUID
  *
  * Music generation is a separate flow from chat/image/video.
  * The current ACEMusic engine endpoint is form-urlencoded:
- * `/release_task` receives Ai_token + task ids and returns the web client payload.
+ * `/release_task` receives ai_token + task ids and returns the web client payload.
  */
 object AceMusicProvider : AiProvider {
     override val id: AiProviderId = AiProviderId.ACEMUSIC
@@ -99,7 +99,7 @@ object AceMusicProvider : AiProvider {
         val repo = repository(auth)
         val taskId = UUID.randomUUID().toString()
         val aiToken = auth.aiToken.ifBlank { auth.apiKey }
-        val formDebug = "Ai_token=<hidden>&task_id_list=${JSONArray(listOf(taskId))}&app=studio-web"
+        val formDebug = "ai_token=<hidden>&task_id_list=${JSONArray(listOf(taskId))}&app=studio-web"
         val release = try {
             repo.releaseTaskResultOrThrow(aiToken, listOf(taskId))
         } catch (e: AceMusicHttpDebugException) {

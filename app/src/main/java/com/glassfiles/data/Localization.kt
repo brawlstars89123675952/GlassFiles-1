@@ -222,8 +222,8 @@ object Strings {
     val aiKeyClear get() = s("Очистить", "Clear")
     val aiKeyGetHere get() = s("Получить ключ", "Get a key")
     val aiAceMusicKeyHint get() = s(
-        "ACEMusic: ключ или https://host/engine/api/engine|ключ|Ai_token; используется только release_task",
-        "ACEMusic: key or https://host/engine/api/engine|key|Ai_token; release_task only",
+        "ACEMusic: ключ или https://host/engine/api/engine|ключ|ai_token; используется только release_task",
+        "ACEMusic: key or https://host/engine/api/engine|key|ai_token; release_task only",
     )
     val aiRefresh get() = s("Обновить", "Refresh")
     val aiRefreshing get() = s("Обновляем…", "Refreshing…")

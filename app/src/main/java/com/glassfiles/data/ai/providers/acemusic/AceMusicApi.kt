@@ -11,7 +11,7 @@ interface AceMusicApi {
     @FormUrlEncoded
     @POST("release_task")
     suspend fun releaseTask(
-        @Field("Ai_token") aiToken: String,
+        @Field("ai_token") aiToken: String,
         @Field("task_id_list") taskIdList: String,
         @Field("app") app: String = "studio-web",
     ): JsonElement
