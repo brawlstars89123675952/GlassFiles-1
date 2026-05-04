@@ -8,20 +8,9 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 
 interface AceMusicApi {
-    @GET("token")
-    suspend fun fetchTokenRaw(): JsonElement
-
     @FormUrlEncoded
     @POST("release_task")
     suspend fun releaseTask(
-        @Field("Ai_token") aiToken: String,
-        @Field("task_id_list") taskIdList: String,
-        @Field("app") app: String = "studio-web",
-    ): JsonElement
-
-    @FormUrlEncoded
-    @POST("query_result")
-    suspend fun queryResult(
         @Field("Ai_token") aiToken: String,
         @Field("task_id_list") taskIdList: String,
         @Field("app") app: String = "studio-web",
@@ -49,17 +38,4 @@ data class AceMusicEnvelope<T>(
     @SerializedName("error") val error: JsonElement? = null,
     @SerializedName("timestamp") val timestamp: Long? = null,
     @SerializedName("extra") val extra: JsonElement? = null,
-)
-
-data class AceMusicReleaseTaskData(
-    @SerializedName("task_id") val taskId: String? = null,
-    @SerializedName("status") val status: String? = null,
-    @SerializedName("queue_position") val queuePosition: Int? = null,
-)
-
-data class AceMusicTaskRecord(
-    @SerializedName("task_id") val taskId: String? = null,
-    @SerializedName("status") val status: Int? = null,
-    @SerializedName("result") val result: String? = null,
-    @SerializedName("error") val error: JsonElement? = null,
 )

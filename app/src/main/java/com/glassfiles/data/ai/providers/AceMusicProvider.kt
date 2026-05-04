@@ -10,8 +10,6 @@ import com.glassfiles.data.ai.providers.acemusic.AceMusicHttpDebugException
 import com.glassfiles.data.ai.providers.acemusic.AceMusicNetwork
 import com.glassfiles.data.ai.providers.acemusic.AceMusicModelData
 import com.glassfiles.data.ai.providers.acemusic.AceMusicRepository
-import com.glassfiles.data.ai.providers.acemusic.AceMusicTaskRecord
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -27,15 +25,12 @@ import java.util.UUID
  *
  * Music generation is a separate flow from chat/image/video.
  * The current ACEMusic engine endpoint is form-urlencoded:
- * `/token` creates Ai_token, `/release_task` submits task ids,
- * `/query_result` polls them, and `/v1/audio` downloads returned files.
+ * `/release_task` receives Ai_token + task ids and returns the web client payload.
  */
 object AceMusicProvider : AiProvider {
     override val id: AiProviderId = AiProviderId.ACEMUSIC
 
     private const val DEFAULT_BASE_URL = "https://ai-api.acemusic.ai/engine/api/engine"
-    private const val POLL_INTERVAL_MS = 3_000L
-    private const val GENERATION_TIMEOUT_MS = 11 * 60_000L
     private val fallbackModels = listOf(
         "acestep-v15-turbo",
         "acestep-v15-turbo-shift3",
@@ -70,7 +65,7 @@ object AceMusicProvider : AiProvider {
         apiKey: String,
         onProgress: (String) -> Unit,
     ): List<AiMusicResult> = withContext(Dispatchers.IO) {
-        onProgress("token")
+        onProgress("release_task")
         val taskResult = createMusicTaskResult(apiKey, onProgress)
         val taskId = taskResult.optString("id", "acemusic-${System.currentTimeMillis()}")
         val records = parseTaskAudio(taskResult, request)
@@ -103,11 +98,10 @@ object AceMusicProvider : AiProvider {
         val auth = parseAuth(apiKey)
         val repo = repository(auth)
         val taskId = UUID.randomUUID().toString()
-        val formDebug = "Ai_token=<jwt>&task_id_list=${JSONArray(listOf(taskId))}&app=studio-web"
-        val aiToken = repo.fetchAiTokenOrThrow()
-        onProgress("submit")
+        val aiToken = auth.aiToken.ifBlank { auth.apiKey }
+        val formDebug = "Ai_token=<hidden>&task_id_list=${JSONArray(listOf(taskId))}&app=studio-web"
         val release = try {
-            repo.releaseTaskOrThrow(aiToken, listOf(taskId))
+            repo.releaseTaskResultOrThrow(aiToken, listOf(taskId))
         } catch (e: AceMusicHttpDebugException) {
             throw RuntimeException(
                 buildString {
@@ -125,45 +119,9 @@ object AceMusicProvider : AiProvider {
                 e,
             )
         }
-        val releasedTaskId = release.taskId.orEmpty().ifBlank { taskId }
-        if (releasedTaskId.isBlank()) throw RuntimeException("${id.displayName}: release_task returned empty task_id")
-        onProgress("queued")
-        return pollTaskResult(repo, aiToken, releasedTaskId, onProgress)
+        if (!release.has("id")) release.put("id", taskId)
+        return release
     }
-
-    private suspend fun pollTaskResult(
-        repo: AceMusicRepository,
-        aiToken: String,
-        taskId: String,
-        onProgress: (String) -> Unit,
-    ): JSONObject {
-        val deadline = System.currentTimeMillis() + GENERATION_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
-            delay(POLL_INTERVAL_MS)
-            val records = repo.queryResultOrThrow(aiToken, listOf(taskId))
-            val record = records.firstOrNull { it.taskId == taskId } ?: records.firstOrNull()
-            if (record == null) {
-                onProgress("poll:empty")
-                continue
-            }
-            when (record.status) {
-                1 -> return taskRecordToJson(taskId, record)
-                2 -> throw RuntimeException("${id.displayName}: task failed: ${taskErrorText(record)}")
-                else -> onProgress("poll:${record.status ?: 0}")
-            }
-        }
-        throw RuntimeException("${id.displayName}: generation timed out for task $taskId")
-    }
-
-    private fun taskRecordToJson(taskId: String, record: AceMusicTaskRecord): JSONObject =
-        JSONObject()
-            .put("id", taskId)
-            .put("result", record.result.orEmpty())
-
-    private fun taskErrorText(record: AceMusicTaskRecord): String =
-        record.error?.takeIf { !it.isJsonNull }?.toString().orEmpty()
-            .ifBlank { record.result.orEmpty() }
-            .ifBlank { "unknown error" }
 
     private fun downloadAudio(fileValue: String, auth: AceMusicAuth, target: File) {
         val url = when {
@@ -364,6 +322,7 @@ object AceMusicProvider : AiProvider {
     private fun parseAuth(raw: String): AceMusicAuth {
         val clean = raw.trim()
         var key = clean
+        var aiToken = ""
         var baseUrl = DEFAULT_BASE_URL
         var authMode = AceMusicAuthMode.BEARER
 
@@ -375,6 +334,11 @@ object AceMusicProvider : AiProvider {
         fun acceptKey(value: String) {
             val v = value.unquote().trim()
             if (v.isNotBlank()) key = v.removePrefix("Bearer ").removePrefix("bearer ").trim()
+        }
+
+        fun acceptAiToken(value: String) {
+            val v = value.unquote().trim()
+            if (v.isNotBlank()) aiToken = v.removePrefix("Bearer ").removePrefix("bearer ").trim()
         }
 
         fun acceptAuthMode(value: String) {
@@ -389,7 +353,8 @@ object AceMusicProvider : AiProvider {
             if (clean.startsWith("{")) {
                 val obj = JSONTokener(clean).nextValue() as? JSONObject ?: return@runCatching
                 firstPresentString(obj, "base_url", "baseUrl", "api_url", "apiUrl", "url").takeIf { it.isNotBlank() }?.let(::acceptBase)
-                firstPresentString(obj, "api_key", "apiKey", "key", "token", "ai_token", "aiToken").takeIf { it.isNotBlank() }?.let(::acceptKey)
+                firstPresentString(obj, "api_key", "apiKey", "key", "token").takeIf { it.isNotBlank() }?.let(::acceptKey)
+                firstPresentString(obj, "ai_token", "aiToken", "Ai_token", "jwt").takeIf { it.isNotBlank() }?.let(::acceptAiToken)
                 firstPresentString(obj, "x_api_key", "x-api-key", "xApiKey").takeIf { it.isNotBlank() }?.let {
                     acceptKey(it)
                     authMode = AceMusicAuthMode.X_API_KEY
@@ -409,7 +374,8 @@ object AceMusicProvider : AiProvider {
             val value = normalized.substringAfter(separator).trim()
             when (name) {
                 "base_url", "baseurl", "api_url", "apiurl", "url" -> acceptBase(value)
-                "api_key", "apikey", "key", "token", "ai_token", "aitoken" -> acceptKey(value)
+                "api_key", "apikey", "key", "token" -> acceptKey(value)
+                "ai_token", "aitoken", "jwt" -> acceptAiToken(value)
                 "x_api_key", "xapikey" -> {
                     acceptKey(value)
                     authMode = AceMusicAuthMode.X_API_KEY
@@ -428,9 +394,30 @@ object AceMusicProvider : AiProvider {
                 acceptBase(parts[1])
             }
         }
+        val threeParts = clean.split('|', limit = 3).map { it.trim() }
+        if (threeParts.size == 3) {
+            when {
+                threeParts[0].startsWith("http://") || threeParts[0].startsWith("https://") -> {
+                    acceptBase(threeParts[0])
+                    acceptKey(threeParts[1])
+                    acceptAiToken(threeParts[2])
+                }
+                threeParts[1].startsWith("http://") || threeParts[1].startsWith("https://") -> {
+                    acceptKey(threeParts[0])
+                    acceptBase(threeParts[1])
+                    acceptAiToken(threeParts[2])
+                }
+                else -> {
+                    acceptKey(threeParts[0])
+                    acceptAiToken(threeParts[1])
+                    acceptBase(threeParts[2])
+                }
+            }
+        }
 
         return AceMusicAuth(
             apiKey = key.removePrefix("Bearer ").removePrefix("bearer ").trim(),
+            aiToken = aiToken.removePrefix("Bearer ").removePrefix("bearer ").trim(),
             baseUrl = baseUrl,
             authMode = authMode,
         )
@@ -478,6 +465,7 @@ object AceMusicProvider : AiProvider {
 
     private data class AceMusicAuth(
         val apiKey: String,
+        val aiToken: String,
         val baseUrl: String,
         val authMode: AceMusicAuthMode,
     )
