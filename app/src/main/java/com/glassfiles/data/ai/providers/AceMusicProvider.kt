@@ -71,7 +71,7 @@ object AceMusicProvider : AiProvider {
         onProgress: (String) -> Unit,
     ): List<AiMusicResult> = withContext(Dispatchers.IO) {
         onProgress("token")
-        val taskResult = createMusicTaskResult(apiKey, onProgress)
+        val taskResult = createMusicTaskResult(apiKey, modelId, request, onProgress)
         val taskId = taskResult.optString("id", "acemusic-${System.currentTimeMillis()}")
         val records = parseTaskAudio(taskResult, request)
         val outDir = File(context.cacheDir, "ai_music").apply { mkdirs() }
@@ -98,16 +98,27 @@ object AceMusicProvider : AiProvider {
 
     private suspend fun createMusicTaskResult(
         apiKey: String,
+        modelId: String,
+        request: AiMusicRequest,
         onProgress: (String) -> Unit,
     ): JSONObject {
         val auth = parseAuth(apiKey)
         val repo = repository(auth)
         val taskId = UUID.randomUUID().toString()
         val aiToken = auth.aiToken.ifBlank { repo.fetchAiTokenOrThrow() }
-        val formDebug = "ai_token=<hidden>&task_id_list=${JSONArray(listOf(taskId))}&app=studio-web"
+        val generationFields = releaseGenerationFields(modelId, request)
+        val formDebug = buildString {
+            append("ai_token=<hidden>&task_id_list=${JSONArray(listOf(taskId))}&app=studio-web")
+            generationFields.forEach { (key, value) ->
+                append('&')
+                append(key)
+                append('=')
+                append(value.take(160))
+            }
+        }
         onProgress("release_task")
         val release = try {
-            repo.releaseTaskOrThrow(aiToken, listOf(taskId))
+            repo.releaseTaskOrThrow(aiToken, listOf(taskId), generationFields)
         } catch (e: AceMusicHttpDebugException) {
             throw RuntimeException(
                 buildString {
@@ -129,6 +140,71 @@ object AceMusicProvider : AiProvider {
         if (releasedTaskId.isBlank()) throw RuntimeException("${id.displayName}: release_task returned empty task_id")
         onProgress("queued")
         return pollTaskResult(repo, aiToken, releasedTaskId, onProgress)
+    }
+
+    private fun releaseGenerationFields(modelId: String, request: AiMusicRequest): Map<String, String> {
+        val fields = linkedMapOf<String, String>()
+        val promptText = request.prompt.ifBlank { request.sampleQuery }.trim()
+
+        fun putString(key: String, value: String) {
+            val clean = value.trim()
+            if (clean.isNotBlank()) fields[key] = clean
+        }
+
+        fun putNumber(key: String, value: Number?) {
+            if (value != null) fields[key] = value.toString()
+        }
+
+        fun putBool(key: String, value: Boolean) {
+            fields[key] = value.toString()
+        }
+
+        putString("model", modelId)
+        putString("model_name", modelId)
+        putString("task_type", "text2music")
+        putString("prompt", promptText)
+        putString("caption", promptText)
+        putString("lyrics", request.lyrics)
+        if (request.sampleMode) {
+            putString("sample_query", promptText)
+            putString("description", promptText)
+        }
+        putBool("use_format", request.useFormat)
+        putBool("useFormat", request.useFormat)
+        putBool("thinking", request.thinking)
+        putString("vocal_language", request.vocalLanguage)
+        putString("language", request.vocalLanguage)
+        putString("format", request.audioFormat)
+        putNumber("audio_duration", request.durationSec)
+        putNumber("duration", request.durationSec)
+        putNumber("bpm", request.bpm)
+        putString("key_scale", request.keyScale)
+        putString("keyscale", request.keyScale)
+        putString("time_signature", request.timeSignature)
+        putString("timesignature", request.timeSignature)
+        putNumber("inference_steps", request.inferenceSteps)
+        putNumber("guidance_scale", request.guidanceScale)
+        putBool("use_random_seed", request.useRandomSeed)
+        if (!request.useRandomSeed) putNumber("seed", request.seed)
+        putNumber("batch_size", request.batchSize)
+        putNumber("shift", request.shift)
+        putString("infer_method", request.inferMethod)
+        putString("timesteps", request.timesteps)
+        putBool("use_adg", request.useAdg)
+        putNumber("cfg_interval_start", request.cfgIntervalStart)
+        putNumber("cfg_interval_end", request.cfgIntervalEnd)
+        putBool("use_cot_caption", request.useCotCaption)
+        putBool("use_cot_language", request.useCotLanguage)
+        putBool("constrained_decoding", request.constrainedDecoding)
+        putBool("allow_lm_batch", request.allowLmBatch)
+        putNumber("lm_temperature", request.lmTemperature)
+        putNumber("lm_cfg_scale", request.lmCfgScale)
+        putString("lm_negative_prompt", request.lmNegativePrompt)
+        putNumber("lm_top_k", request.lmTopK)
+        putNumber("lm_top_p", request.lmTopP)
+        putNumber("lm_repetition_penalty", request.lmRepetitionPenalty)
+
+        return fields
     }
 
     private suspend fun pollTaskResult(

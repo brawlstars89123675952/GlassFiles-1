@@ -32,13 +32,22 @@ class AceMusicRepository(
     suspend fun releaseTaskOrThrow(
         aiToken: String,
         taskIds: List<String>,
+        generationFields: Map<String, String> = emptyMap(),
     ): String = withContext(ioDispatcher) {
         val requestedTaskId = taskIds.firstOrNull().orEmpty()
+        val fields = linkedMapOf(
+            "ai_token" to aiToken,
+            "task_id_list" to JSONArray(taskIds).toString(),
+            "app" to "studio-web",
+        ).apply {
+            generationFields.forEach { (key, value) ->
+                if (key.isNotBlank() && value.isNotBlank() && key !in keys) {
+                    put(key, value)
+                }
+            }
+        }
         val raw = callOrThrow("release_task") {
-            api.releaseTask(
-                aiToken = aiToken,
-                taskIdList = JSONArray(taskIds).toString(),
-            )
+            api.releaseTask(fields)
         }
         val parsed = raw.toJsonValue()
         (parsed as? JSONObject)?.requireEngineOk("release_task")

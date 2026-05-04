@@ -3,6 +3,7 @@ package com.glassfiles.data.ai.providers.acemusic
 import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 import retrofit2.http.Field
+import retrofit2.http.FieldMap
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -15,9 +16,7 @@ interface AceMusicApi {
     @FormUrlEncoded
     @POST("engine/release_task")
     suspend fun releaseTask(
-        @Field("ai_token") aiToken: String,
-        @Field("task_id_list") taskIdList: String,
-        @Field("app") app: String = "studio-web",
+        @FieldMap fields: Map<String, String>,
     ): JsonElement
 
     @FormUrlEncoded

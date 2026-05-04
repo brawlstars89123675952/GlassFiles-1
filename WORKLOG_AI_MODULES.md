@@ -38,6 +38,9 @@
   - `Cookie: ...` / `Authorization: Bearer ...` lines in the ACEMusic API key field;
   - JSON `headers` object support;
   - direct temporary `ai_token` support to skip token preflight.
+- Expanded `release_task` form payload with generation parameters instead of submitting only task ids:
+  - `prompt`, `caption`, `lyrics`, `model`, `model_name`, `task_type=text2music`;
+  - duration/BPM/key/time signature, thinking/use_format, seed/batch, diffusion and LM controls.
 - Re-enabled Music Generation in the AI hub after the previous ACEMusic pause.
 - Updated ACEMusic API key hint and music screen subtitle to the engine endpoint.
 
