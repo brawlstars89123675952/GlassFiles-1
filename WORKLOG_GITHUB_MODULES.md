@@ -69,6 +69,10 @@
   - входящие repository invitations через `GET /user/repository_invitations`
   - accept/decline invitation через `PATCH`/`DELETE /user/repository_invitations/{id}`
   - `GITHUB_SETTINGS_API.md` обновлен разделами watched repositories и user repository invitations
+- Исправлен системный back/gesture navigation для всего GitHub UI:
+  - общий `GitHubPageBar` теперь регистрирует `BackHandler` на тот же callback, что и верхняя стрелка назад
+  - все экраны и подэкраны, построенные через `GitHubScreenFrame` или `GitHubPageBar`, получают одинаковое поведение кнопки/жеста назад
+  - это предотвращает выброс на главный GitHub экран, когда пользователь находится внутри вложенного раздела
 
 ### Осталось / идеи дальше
 - Следующие GitHub settings шаги: Pages, Environments, repository interaction limits, autolinks, custom properties, immutable releases, затем оставшиеся account settings gaps.

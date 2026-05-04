@@ -2,6 +2,7 @@ package com.glassfiles.ui.screens
 
 import android.os.Environment
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -191,6 +192,7 @@ internal fun GitHubPageBar(
     subtitle: String? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
+    BackHandler(onBack = onBack)
     val colors = AiModuleTheme.colors
     Column(
         Modifier
