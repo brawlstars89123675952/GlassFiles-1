@@ -29,9 +29,13 @@
   - request body не сохраняется, чтобы не писать токены/секреты
   - Diagnostics screen показывает `recent api errors`, поддерживает refresh и clear
   - диагностические probe-запросы не пишутся в журнал, чтобы не засорять его ожидаемыми `403/404`
+- Добавлен экспорт GitHub diagnostics report:
+  - кнопки `export txt` и `export json` в Diagnostics
+  - файлы сохраняются в `Downloads/GlassFiles_Git`
+  - экспорт включает summary, scopes, rate limits, endpoint checks и recent API error log
 
 ### Осталось / идеи дальше
-- Добавить экспорт diagnostics report в `.txt`/`.json` для отладки токенов и прав.
+- Следующие улучшения делать уже вокруг конкретных GitHub workflow-сценариев: troubleshooting, массовые действия, экспорт списков/логов.
 
 ## 2026-04-23
 

@@ -1,5 +1,8 @@
 package com.glassfiles.ui.screens
 
+import android.content.Context
+import android.os.Environment
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -33,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.glassfiles.data.Strings
 import com.glassfiles.data.github.GHApiDiagnosticCheck
 import com.glassfiles.data.github.GHApiDiagnostics
 import com.glassfiles.data.github.GHApiErrorLogEntry
@@ -42,6 +46,9 @@ import com.glassfiles.ui.components.AiModuleText as Text
 import com.glassfiles.ui.theme.AiModuleTheme
 import com.glassfiles.ui.theme.JetBrainsMono
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -132,6 +139,16 @@ internal fun GitHubDiagnosticsScreen(onBack: () -> Unit) {
                             enterprise = ""
                         }, color = palette.textSecondary, enabled = !loading)
                         if (loading) AiModuleSpinner(label = "polling GitHub")
+                        report?.let { current ->
+                            GitHubTerminalButton("export txt", onClick = {
+                                val file = saveGitHubDiagnosticsExport(context, current, errorLog, "txt")
+                                Toast.makeText(context, if (file != null) "${Strings.done}: ${file.name}" else Strings.error, Toast.LENGTH_SHORT).show()
+                            }, color = palette.textSecondary)
+                            GitHubTerminalButton("export json", onClick = {
+                                val file = saveGitHubDiagnosticsExport(context, current, errorLog, "json")
+                                Toast.makeText(context, if (file != null) "${Strings.done}: ${file.name}" else Strings.error, Toast.LENGTH_SHORT).show()
+                            }, color = palette.textSecondary)
+                        }
                         if (notice.isNotBlank()) {
                             Text(notice, color = palette.textMuted, fontFamily = JetBrainsMono, fontSize = 11.sp)
                         }
@@ -395,3 +412,109 @@ private fun GitHubDiagnosticKV(label: String, value: String) {
 
 private fun githubDiagnosticsTime(epochMillis: Long): String =
     SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(epochMillis))
+
+private fun githubDiagnosticsFileStamp(epochMillis: Long): String =
+    SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date(epochMillis))
+
+private fun saveGitHubDiagnosticsExport(
+    context: Context,
+    report: GHApiDiagnostics,
+    errors: List<GHApiErrorLogEntry>,
+    format: String,
+): File? =
+    try {
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git")
+        dir.mkdirs()
+        val extension = if (format == "json") "json" else "txt"
+        val file = File(dir, "github_diagnostics_${githubDiagnosticsFileStamp(report.generatedAt)}.$extension")
+        val content = if (extension == "json") {
+            githubDiagnosticsJson(report, errors).toString(2)
+        } else {
+            githubDiagnosticsText(report, errors)
+        }
+        file.writeText(content)
+        file
+    } catch (_: Exception) {
+        null
+    }
+
+private fun githubDiagnosticsText(report: GHApiDiagnostics, errors: List<GHApiErrorLogEntry>): String =
+    buildString {
+        appendLine("GlassFiles GitHub API Diagnostics")
+        appendLine("generated: ${githubDiagnosticsTime(report.generatedAt)}")
+        appendLine()
+        appendLine("[rate]")
+        appendLine("core: ${report.rate.coreRemaining}/${report.rate.coreLimit}")
+        appendLine("search: ${report.rate.searchRemaining}/${report.rate.searchLimit}")
+        appendLine("graphql: ${report.rate.graphqlRemaining}/${report.rate.graphqlLimit}")
+        appendLine("reset_epoch: ${report.rate.resetEpoch}")
+        appendLine()
+        appendLine("[scopes]")
+        appendLine("token_scopes: ${report.scopes.ifBlank { "empty or fine-grained token" }}")
+        appendLine("accepted_scopes: ${report.acceptedScopes.ifBlank { "not returned" }}")
+        appendLine()
+        appendLine("[checks]")
+        report.checks.forEach { check ->
+            appendLine("- ${check.status.uppercase(Locale.US)} ${check.title} · ${if (check.statusCode > 0) "HTTP ${check.statusCode}" else "skip"}")
+            appendLine("  endpoint: ${check.endpoint}")
+            appendLine("  message: ${check.message}")
+            if (check.hint.isNotBlank()) appendLine("  hint: ${check.hint}")
+        }
+        appendLine()
+        appendLine("[recent_api_errors]")
+        if (errors.isEmpty()) {
+            appendLine("none")
+        } else {
+            errors.forEach { item ->
+                appendLine("- ${githubDiagnosticsTime(item.timestamp)} ${item.method} HTTP ${item.statusCode}")
+                appendLine("  endpoint: ${item.endpoint}")
+                appendLine("  message: ${item.message.ifBlank { item.body.ifBlank { "no error body" } }}")
+                if (item.requestId.isNotBlank()) appendLine("  request_id: ${item.requestId}")
+                if (item.rateRemaining.isNotBlank()) appendLine("  rate_remaining: ${item.rateRemaining}")
+            }
+        }
+    }
+
+private fun githubDiagnosticsJson(report: GHApiDiagnostics, errors: List<GHApiErrorLogEntry>): JSONObject =
+    JSONObject().apply {
+        put("generated_at", report.generatedAt)
+        put("generated_at_text", githubDiagnosticsTime(report.generatedAt))
+        put("scopes", report.scopes)
+        put("accepted_scopes", report.acceptedScopes)
+        put("rate", JSONObject().apply {
+            put("core_limit", report.rate.coreLimit)
+            put("core_remaining", report.rate.coreRemaining)
+            put("search_limit", report.rate.searchLimit)
+            put("search_remaining", report.rate.searchRemaining)
+            put("graphql_limit", report.rate.graphqlLimit)
+            put("graphql_remaining", report.rate.graphqlRemaining)
+            put("reset_epoch", report.rate.resetEpoch)
+        })
+        put("checks", JSONArray().apply {
+            report.checks.forEach { check ->
+                put(JSONObject().apply {
+                    put("title", check.title)
+                    put("endpoint", check.endpoint)
+                    put("status_code", check.statusCode)
+                    put("status", check.status)
+                    put("message", check.message)
+                    put("hint", check.hint)
+                })
+            }
+        })
+        put("recent_api_errors", JSONArray().apply {
+            errors.forEach { item ->
+                put(JSONObject().apply {
+                    put("timestamp", item.timestamp)
+                    put("timestamp_text", githubDiagnosticsTime(item.timestamp))
+                    put("method", item.method)
+                    put("endpoint", item.endpoint)
+                    put("status_code", item.statusCode)
+                    put("message", item.message)
+                    put("body", item.body)
+                    put("request_id", item.requestId)
+                    put("rate_remaining", item.rateRemaining)
+                })
+            }
+        })
+    }

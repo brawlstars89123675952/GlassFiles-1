@@ -356,6 +356,7 @@ items.
 | Rate limit check | `/rate_limit` | ✅ | ✅ | SettingsModule |
 | API diagnostics | `/user`, `/rate_limit`, `/user/repos`, `/user/orgs`, optional repo/org/enterprise checks | ✅ | ✅ | GitHubDiagnosticsScreen with scopes, rate limits, endpoint statuses and permission hints |
 | Recent API error log | Local REST error journal | ✅ | ✅ | Last 30 failed GitHub API calls in GitHubDiagnosticsScreen, no request bodies stored |
+| Diagnostics export | Local `.txt` / `.json` report | ✅ | ✅ | Exports summary, scopes, checks and recent API errors to Downloads/GlassFiles_Git |
 | Clear cache | Local | ✅ | ✅ | SettingsModule |
 
 ### Enterprise / Admin
