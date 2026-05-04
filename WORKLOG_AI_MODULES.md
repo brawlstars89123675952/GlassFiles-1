@@ -24,8 +24,8 @@
 - Switched ACEMusic default base URL to `https://ai-api.acemusic.ai/engine/api/`.
 - Implemented the Eruda-observed engine flow:
   - `GET /token` before every generation;
-  - `POST /release_task`
-  - `POST /query_result` polling until `audio_url`
+  - `POST /engine/release_task`
+  - `POST /engine/query_result` polling until `audio_url`
 - `token` response is mapped from `data.token` to the release form `ai_token`.
 - `release_task` uses `application/x-www-form-urlencoded` with:
   - `ai_token=<jwt>`

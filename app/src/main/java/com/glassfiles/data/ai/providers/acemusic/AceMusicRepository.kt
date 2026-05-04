@@ -78,6 +78,7 @@ class AceMusicRepository(
             val rawError = e.response()?.errorBody()?.string().orEmpty()
             Log.e(REPOSITORY_LOG_TAG, "ACEMusic $label HTTP ${e.code()} raw error: $rawError", e)
             throw AceMusicHttpDebugException(
+                label = label,
                 statusCode = e.code(),
                 rawErrorBody = rawError,
                 cause = e,
@@ -248,10 +249,11 @@ class AceMusicRepository(
 }
 
 class AceMusicHttpDebugException(
+    val label: String,
     val statusCode: Int,
     val rawErrorBody: String,
     cause: Throwable?,
 ) : RuntimeException(
-    "ACEMusic HTTP $statusCode: ${rawErrorBody.ifBlank { "empty error body" }.take(800)}",
+    "ACEMusic $label HTTP $statusCode: ${rawErrorBody.ifBlank { "empty error body" }.take(800)}",
     cause,
 )

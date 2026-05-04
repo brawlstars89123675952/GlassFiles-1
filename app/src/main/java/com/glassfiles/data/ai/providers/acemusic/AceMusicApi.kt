@@ -12,7 +12,7 @@ interface AceMusicApi {
     suspend fun fetchTokenRaw(): JsonElement
 
     @FormUrlEncoded
-    @POST("release_task")
+    @POST("engine/release_task")
     suspend fun releaseTask(
         @Field("ai_token") aiToken: String,
         @Field("task_id_list") taskIdList: String,
@@ -20,7 +20,7 @@ interface AceMusicApi {
     ): JsonElement
 
     @FormUrlEncoded
-    @POST("query_result")
+    @POST("engine/query_result")
     suspend fun queryResult(
         @Field("ai_token") aiToken: String,
         @Field("task_id_list") taskIdList: String,

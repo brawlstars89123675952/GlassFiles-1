@@ -113,7 +113,7 @@ object AceMusicProvider : AiProvider {
                 buildString {
                     append(e.message ?: "${id.displayName} HTTP ${e.statusCode}")
                     if (e.statusCode == 404 && auth.baseUrl == DEFAULT_BASE_URL) {
-                        append("\n${id.displayName}: engine release_task endpoint returned 404 for the default ACEMusic base URL.")
+                        append("\n${id.displayName}: ${e.label} endpoint returned 404 for the default ACEMusic base URL.")
                     }
                     append("\nendpoint=/release_task")
                     append("\nbase_url=")
