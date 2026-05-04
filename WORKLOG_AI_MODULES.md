@@ -31,6 +31,7 @@
   - `ai_token=<jwt>`
   - `task_id_list=["<uuid>"]`
   - `app=studio-web`
+- `query_result` uses form field `Ai_token` and reads audio URL from the first `data` array item.
 - Generation now creates a fresh UUID task id before submit.
 - Kept raw HTTP body logging/error extraction for debugging 500 responses.
 - Re-enabled Music Generation in the AI hub after the previous ACEMusic pause.

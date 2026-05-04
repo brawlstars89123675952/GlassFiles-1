@@ -22,7 +22,7 @@ interface AceMusicApi {
     @FormUrlEncoded
     @POST("engine/query_result")
     suspend fun queryResult(
-        @Field("ai_token") aiToken: String,
+        @Field("Ai_token") aiToken: String,
         @Field("task_id_list") taskIdList: String,
         @Field("app") app: String = "studio-web",
     ): JsonElement
