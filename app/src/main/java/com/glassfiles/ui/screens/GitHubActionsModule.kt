@@ -824,6 +824,30 @@ private fun ActionsRunsHistoryScreen(
                     ActionsTerminalFilterChip(event, selectedEvent == event) { selectedEvent = event }
                 }
             }
+            ActionsTerminalFilterRow {
+                GitHubTerminalButton(
+                    "export visible",
+                    onClick = {
+                        val workflowName = workflows.firstOrNull { it.id == selectedWorkflowId }?.name ?: "all"
+                        val file = saveActionsRunsExport(
+                            repo = repo,
+                            runs = visibleRuns,
+                            filterSummary = listOf(
+                                "query=${query.text.trim().ifBlank { "all" }}",
+                                "filter=${filter.name.lowercase(Locale.US)}",
+                                "workflow=$workflowName",
+                                "branch=${selectedBranch ?: "all"}",
+                                "event=${selectedEvent ?: "all"}",
+                                "mine=$onlyMine",
+                                "loaded=${runs.size}",
+                            ).joinToString(", ")
+                        )
+                        Toast.makeText(context, file?.let { "${Strings.done}: ${it.name}" } ?: Strings.error, Toast.LENGTH_SHORT).show()
+                    },
+                    enabled = visibleRuns.isNotEmpty(),
+                    color = Blue,
+                )
+            }
 
             Spacer(Modifier.height(4.dp))
 
@@ -1495,8 +1519,17 @@ private fun RepositoryArtifactsPanel(repo: GHRepo) {
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GitHubTerminalButton("apply", onClick = { scope.launch { load(true) } }, enabled = !loading, color = Blue)
+                GitHubTerminalButton(
+                    "export visible",
+                    onClick = {
+                        val file = saveActionsArtifactsExport(repo, artifacts, "repository-artifacts")
+                        Toast.makeText(context, file?.let { "${Strings.done}: ${it.name}" } ?: Strings.error, Toast.LENGTH_SHORT).show()
+                    },
+                    enabled = artifacts.isNotEmpty() && !loading,
+                    color = Blue,
+                )
             }
             ActionsBulkToolbar(
                 selectedCount = selectedArtifactIds.size,
@@ -1605,6 +1638,17 @@ private fun ActionsCachesPanel(repo: GHRepo) {
                     StatCard("Caches", it.activeCachesCount.toString(), Icons.Rounded.Timeline, Blue)
                     StatCard("Size", formatArtifactSize(it.activeCachesSizeInBytes), Icons.Rounded.Article, Green)
                 }
+            }
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GitHubTerminalButton(
+                    "export caches",
+                    onClick = {
+                        val file = saveActionsCachesExport(repo, usage, caches)
+                        Toast.makeText(context, file?.let { "${Strings.done}: ${it.name}" } ?: Strings.error, Toast.LENGTH_SHORT).show()
+                    },
+                    enabled = caches.isNotEmpty() && !loading,
+                    color = Blue,
+                )
             }
             ActionsBulkToolbar(
                 selectedCount = selectedCacheIds.size,
@@ -2986,6 +3030,40 @@ internal fun WorkflowRunDetailScreen(
                     selectedSection == RunDetailSection.CHECKS
                 ) { selectedSection = RunDetailSection.CHECKS }
             }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                GitHubTerminalButton(
+                    "export report",
+                    onClick = {
+                        val file = saveWorkflowRunReport(
+                            repo = repo,
+                            run = run,
+                            jobs = jobs,
+                            artifacts = artifacts,
+                            checkRuns = checkRuns,
+                            pendingDeployments = pendingDeployments,
+                            reviewHistory = reviewHistory,
+                            usage = usage,
+                            jobLogs = jobLogs,
+                        )
+                        Toast.makeText(context, file?.let { "${Strings.done}: ${it.name}" } ?: Strings.error, Toast.LENGTH_SHORT).show()
+                    },
+                    enabled = run != null,
+                    color = Blue,
+                )
+                GitHubTerminalButton(
+                    "export loaded logs",
+                    onClick = {
+                        val file = saveWorkflowRunLoadedLogsExport(repo, run, jobs, jobLogs, jobLogMeta)
+                        Toast.makeText(context, file?.let { "${Strings.done}: ${it.name}" } ?: Strings.error, Toast.LENGTH_SHORT).show()
+                    },
+                    enabled = run != null && jobLogs.isNotEmpty(),
+                    color = Blue,
+                )
+            }
 
             detailNotice?.let { notice ->
                 Row(
@@ -4344,6 +4422,224 @@ private fun actionsFriendlyError(message: String?): String {
 
 private fun safeLogFileName(job: GHJob): String =
     "job-${job.id}-${job.name.replace(Regex("""[\\/:*?"<>|]+"""), "_").trim().ifBlank { "log" }}"
+
+private fun actionsExportDir(): File =
+    File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "GlassFiles_Git")
+
+private fun actionsExportTimestamp(): String =
+    SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(java.util.Date())
+
+private fun safeActionsFilePart(value: String): String =
+    value.replace(Regex("""[\\/:*?"<>|\s]+"""), "-").trim('-').ifBlank { "github" }
+
+private fun saveActionsRunsExport(
+    repo: GHRepo,
+    runs: List<GHWorkflowRun>,
+    filterSummary: String,
+): File? {
+    if (runs.isEmpty()) return null
+    val file = File(actionsExportDir(), "actions-runs-${safeActionsFilePart(repo.fullName)}-${actionsExportTimestamp()}.txt")
+    val text = buildString {
+        appendLine("GlassFiles GitHub Actions runs export")
+        appendLine("repo: ${repo.fullName}")
+        appendLine("filters: $filterSummary")
+        appendLine("exported: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(java.util.Date())}")
+        appendLine("count: ${runs.size}")
+        appendLine()
+        appendLine("run\tworkflow\tstatus\tbranch\tevent\tactor\tsha\tcreated\tupdated")
+        runs.forEach { run ->
+            appendLine(
+                listOf(
+                    "#${run.runNumber}",
+                    run.name.ifBlank { "workflow" },
+                    displayRunStatus(run),
+                    run.branch.ifBlank { "-" },
+                    run.event.ifBlank { "-" },
+                    run.actor.ifBlank { "-" },
+                    run.headSha.take(12).ifBlank { "-" },
+                    run.createdAt.ifBlank { "-" },
+                    run.updatedAt.ifBlank { "-" },
+                ).joinToString("\t")
+            )
+        }
+    }
+    return if (saveTextFile(file, text)) file else null
+}
+
+private fun saveActionsArtifactsExport(repo: GHRepo, artifacts: List<GHArtifact>, label: String): File? {
+    if (artifacts.isEmpty()) return null
+    val file = File(actionsExportDir(), "actions-${safeActionsFilePart(label)}-${safeActionsFilePart(repo.fullName)}-${actionsExportTimestamp()}.txt")
+    val text = buildString {
+        appendLine("GlassFiles GitHub Actions artifacts export")
+        appendLine("repo: ${repo.fullName}")
+        appendLine("scope: $label")
+        appendLine("count: ${artifacts.size}")
+        appendLine()
+        appendLine("id\tname\tsize\texpired\tcreated\texpires\trun\tbranch\tsha\tdigest")
+        artifacts.forEach { artifact ->
+            appendLine(
+                listOf(
+                    artifact.id.toString(),
+                    artifact.name,
+                    formatArtifactSize(artifact.sizeInBytes),
+                    artifact.expired.toString(),
+                    artifact.createdAt.ifBlank { "-" },
+                    artifact.expiresAt.ifBlank { "-" },
+                    artifact.workflowRunId.takeIf { it > 0 }?.toString() ?: "-",
+                    artifact.workflowRunBranch.ifBlank { "-" },
+                    artifact.workflowRunSha.take(12).ifBlank { "-" },
+                    artifact.digest.ifBlank { "-" },
+                ).joinToString("\t")
+            )
+        }
+    }
+    return if (saveTextFile(file, text)) file else null
+}
+
+private fun saveActionsCachesExport(
+    repo: GHRepo,
+    usage: GHActionsCacheUsage?,
+    caches: List<GHActionsCacheEntry>,
+): File? {
+    if (caches.isEmpty()) return null
+    val file = File(actionsExportDir(), "actions-caches-${safeActionsFilePart(repo.fullName)}-${actionsExportTimestamp()}.txt")
+    val text = buildString {
+        appendLine("GlassFiles GitHub Actions caches export")
+        appendLine("repo: ${repo.fullName}")
+        usage?.let {
+            appendLine("active caches: ${it.activeCachesCount}")
+            appendLine("active size: ${formatArtifactSize(it.activeCachesSizeInBytes)}")
+        }
+        appendLine("count: ${caches.size}")
+        appendLine()
+        appendLine("id\tkey\tsize\tref\tcreated\tlast_used\tversion")
+        caches.forEach { cache ->
+            appendLine(
+                listOf(
+                    cache.id.toString(),
+                    cache.key,
+                    formatArtifactSize(cache.sizeInBytes),
+                    cache.ref.ifBlank { "-" },
+                    cache.createdAt.ifBlank { "-" },
+                    cache.lastAccessedAt.ifBlank { "-" },
+                    cache.version.ifBlank { "-" },
+                ).joinToString("\t")
+            )
+        }
+    }
+    return if (saveTextFile(file, text)) file else null
+}
+
+private fun saveWorkflowRunReport(
+    repo: GHRepo,
+    run: GHWorkflowRun?,
+    jobs: List<GHJob>,
+    artifacts: List<GHArtifact>,
+    checkRuns: List<GHCheckRun>,
+    pendingDeployments: List<GHPendingDeployment>,
+    reviewHistory: List<GHWorkflowRunReview>,
+    usage: GHActionsUsage?,
+    jobLogs: Map<Long, String>,
+): File? {
+    val currentRun = run ?: return null
+    val file = File(actionsExportDir(), "actions-run-${currentRun.runNumber}-${safeActionsFilePart(repo.fullName)}-${actionsExportTimestamp()}.txt")
+    val text = buildString {
+        appendLine("GlassFiles GitHub Actions run report")
+        appendLine("repo: ${repo.fullName}")
+        appendLine("run: #${currentRun.runNumber} (${currentRun.id})")
+        appendLine("workflow: ${currentRun.name.ifBlank { "workflow" }}")
+        appendLine("title: ${currentRun.displayTitle.ifBlank { "-" }}")
+        appendLine("status: ${displayRunStatus(currentRun)}")
+        appendLine("branch: ${currentRun.branch.ifBlank { "-" }}")
+        appendLine("event: ${currentRun.event.ifBlank { "-" }}")
+        appendLine("actor: ${currentRun.actor.ifBlank { "-" }}")
+        appendLine("sha: ${currentRun.headSha.ifBlank { "-" }}")
+        appendLine("attempt: ${currentRun.runAttempt}")
+        appendLine("created: ${currentRun.createdAt.ifBlank { "-" }}")
+        appendLine("updated: ${currentRun.updatedAt.ifBlank { "-" }}")
+        appendLine("url: ${currentRun.htmlUrl.ifBlank { "-" }}")
+        usage?.let {
+            appendLine()
+            appendLine("usage")
+            appendLine("duration: ${formatDuration(it.runDurationMs)}")
+            it.billableMs.forEach { (os, ms) -> appendLine("$os: ${formatDuration(ms)}") }
+        }
+        appendLine()
+        appendLine("jobs (${jobs.size})")
+        jobs.forEach { job ->
+            appendLine("- ${job.name} [${displayJobStatus(job)}] id=${job.id} duration=${calcJobDuration(job, System.currentTimeMillis())}")
+            job.steps.forEach { step ->
+                appendLine("  - step ${step.number}: ${step.name} [${displayStepStatus(step)}]")
+            }
+        }
+        appendLine()
+        appendLine("loaded logs: ${jobLogs.size}")
+        jobLogs.keys.forEach { jobId -> appendLine("- job $jobId") }
+        appendLine()
+        appendLine("artifacts (${artifacts.size})")
+        artifacts.forEach { artifact ->
+            appendLine("- ${artifact.name} id=${artifact.id} size=${formatArtifactSize(artifact.sizeInBytes)} expired=${artifact.expired}")
+        }
+        appendLine()
+        appendLine("checks (${checkRuns.size})")
+        checkRuns.forEach { checkRun ->
+            appendLine("- ${checkRun.name.ifBlank { checkRun.title.ifBlank { "check ${checkRun.id}" } }} [${displayCheckStatus(checkRun)}] annotations=${checkRun.annotationsCount}")
+        }
+        appendLine()
+        appendLine("pending deployments (${pendingDeployments.size})")
+        pendingDeployments.forEach { deployment ->
+            appendLine("- ${deployment.environmentName.ifBlank { "environment ${deployment.environmentId}" }} reviewers=${deployment.reviewers.joinToString(", ").ifBlank { "-" }}")
+        }
+        appendLine()
+        appendLine("deployment reviews (${reviewHistory.size})")
+        reviewHistory.forEach { review ->
+            appendLine("- ${review.state.ifBlank { "reviewed" }} by ${review.user.ifBlank { "GitHub" }} env=${review.environments.joinToString(", ").ifBlank { "-" }}")
+            if (review.comment.isNotBlank()) appendLine("  ${review.comment}")
+        }
+    }
+    return if (saveTextFile(file, text)) file else null
+}
+
+private fun saveWorkflowRunLoadedLogsExport(
+    repo: GHRepo,
+    run: GHWorkflowRun?,
+    jobs: List<GHJob>,
+    jobLogs: Map<Long, String>,
+    jobLogMeta: Map<Long, JobLogMeta>,
+): File? {
+    val currentRun = run ?: return null
+    val loadedJobs = jobs.filter { jobLogs.containsKey(it.id) }
+    if (loadedJobs.isEmpty()) return null
+    return try {
+        val file = File(actionsExportDir(), "actions-run-${currentRun.runNumber}-loaded-logs-${safeActionsFilePart(repo.fullName)}-${actionsExportTimestamp()}.txt")
+        file.parentFile?.mkdirs()
+        file.bufferedWriter().use { writer ->
+            writer.appendLine("GlassFiles GitHub Actions loaded logs export")
+            writer.appendLine("repo: ${repo.fullName}")
+            writer.appendLine("run: #${currentRun.runNumber} (${currentRun.id})")
+            writer.appendLine("workflow: ${currentRun.name.ifBlank { "workflow" }}")
+            writer.appendLine("jobs: ${loadedJobs.size}")
+            writer.appendLine()
+            loadedJobs.forEach { job ->
+                writer.appendLine("===== job ${job.id}: ${job.name} [${displayJobStatus(job)}] =====")
+                val cacheFile = jobLogMeta[job.id]?.cacheFile
+                if (cacheFile != null && cacheFile.exists()) {
+                    writer.appendLine("source: cached full log ${cacheFile.name}")
+                    cacheFile.bufferedReader().useLines { lines ->
+                        lines.forEach { writer.appendLine(it) }
+                    }
+                } else {
+                    writer.appendLine(jobLogs[job.id].orEmpty())
+                }
+                writer.appendLine()
+            }
+        }
+        file
+    } catch (t: Throwable) {
+        Log.e(ACTIONS_JOB_LOG_TAG, "save loaded logs export failed", t)
+        null
+    }
+}
 
 private fun saveTextFile(file: File, text: String): Boolean = try {
     file.parentFile?.mkdirs()

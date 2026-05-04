@@ -46,9 +46,14 @@
   - repository artifacts поддерживают выбор элементов, `select visible`, `select expired`, clear и typed confirmation `delete N`
   - repository caches поддерживают выбор элементов, `select visible`, clear и typed confirmation `delete N`
   - bulk delete выполняется последовательно и показывает результат `Deleted X/N`, затем обновляет список
+- Добавлен GitHub Actions export pass:
+  - history screen экспортирует текущие видимые workflow runs с активными фильтрами
+  - repository artifacts и caches экспортируются в txt из текущих загруженных списков
+  - run detail экспортирует полный run report и отдельный bundle уже загруженных job logs
+  - все файлы сохраняются в `Downloads/GlassFiles_Git`, UI остается terminal-style
 
 ### Осталось / идеи дальше
-- Следующие улучшения делать уже вокруг конкретных GitHub workflow-сценариев: экспорт списков/логов, deeper Actions failure analysis.
+- Следующие улучшения делать уже вокруг конкретных GitHub workflow-сценариев: deeper Actions failure analysis.
 
 ## 2026-04-23
 

@@ -192,6 +192,7 @@ items.
 | Pending deployments | `/repos/{owner}/{repo}/actions/runs/{id}/pending_deployments` | ✅ | ✅ | Deployment review section |
 | Actions cache usage/list/delete | `/repos/{owner}/{repo}/actions/cache/*` | ✅ | ✅ | Caches panel |
 | Actions bulk cleanup | Local UI over artifacts/cache delete endpoints | - | ✅ | Select visible/expired artifacts, select visible caches, typed bulk delete confirmation |
+| Actions exports | Local export over loaded runs/artifacts/caches/jobs/logs | - | ✅ | TXT exports to `Downloads/GlassFiles_Git` for visible lists, run reports and loaded job logs |
 | Actions variables CRUD | `/repos/{owner}/{repo}/actions/variables` | ✅ | ✅ | Variables panel |
 | Actions secrets CRUD | `/repos/{owner}/{repo}/actions/secrets` | ✅ | ✅ | Secrets panel with public-key encryption |
 | Self-hosted runners | `/repos/{owner}/{repo}/actions/runners` | ✅ | ✅ | List/delete plus registration/remove tokens |
