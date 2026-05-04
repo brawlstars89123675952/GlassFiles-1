@@ -76,11 +76,10 @@ fun AiHubScreen(
                     AiHubItem(
                         icon = null,
                         title = Strings.aiMusicGen,
-                        subtitle = Strings.aiMusicGenPausedSubtitle,
+                        subtitle = Strings.aiMusicGenSubtitle,
                         soon = false,
                         onClick = onMusic,
                         glyph = "♪",
-                        disabled = true,
                     ),
                     AiHubItem(Icons.Rounded.Image, Strings.aiImageGen, Strings.aiImageGenSubtitle, soon = false, onImage),
                     AiHubItem(Icons.Rounded.Movie, Strings.aiVideoGen, Strings.aiVideoGenSubtitle, soon = false, onVideo),

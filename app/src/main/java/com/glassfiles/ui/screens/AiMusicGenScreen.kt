@@ -318,7 +318,7 @@ fun AiMusicGenScreen(onBack: () -> Unit) {
     TerminalScreenScaffold(
         title = "> ai/music",
         onBack = onBack,
-        subtitle = "ACEMusic · api.acemusic.ai · build ${BuildConfig.GIT_SHA}",
+        subtitle = "ACEMusic · ai-api.acemusic.ai/engine · build ${BuildConfig.GIT_SHA}",
         trailing = {
             TerminalPillButton(
                 label = "history",

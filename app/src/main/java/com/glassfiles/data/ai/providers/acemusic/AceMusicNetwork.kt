@@ -9,7 +9,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
-private const val DEFAULT_ACEMUSIC_BASE_URL = "https://api.acemusic.ai/"
+private const val DEFAULT_ACEMUSIC_BASE_URL = "https://ai-api.acemusic.ai/engine/api/engine/"
 private const val HTTP_LOG_TAG = "ACEMusicHttp"
 
 enum class AceMusicAuthMode {
@@ -24,8 +24,13 @@ class AceMusicAuthInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val apiKey = apiKeyProvider().trim()
         val builder = chain.request().newBuilder()
-            .header("Content-Type", "application/json")
             .header("Accept", "application/json")
+            .header("Origin", "https://acemusic.ai")
+            .header("Referer", "https://acemusic.ai/")
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36",
+            )
 
         if (apiKey.isNotBlank()) {
             when (authMode) {
