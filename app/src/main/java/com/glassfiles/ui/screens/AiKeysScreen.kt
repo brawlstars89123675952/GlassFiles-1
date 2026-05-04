@@ -377,7 +377,7 @@ private fun AceMusicSessionWebViewScreen(
     onCaptured: (authorization: String, cookie: String, userAgent: String) -> Unit,
 ) {
     val colors = AiModuleTheme.colors
-    var status by remember { mutableStateOf("loading https://acemusic.ai/playground/create") }
+    var status by remember { mutableStateOf("loading https://acemusic.ai/") }
     var webView: WebView? by remember { mutableStateOf(null) }
 
     DisposableEffect(Unit) {
@@ -506,7 +506,7 @@ private fun AceMusicSessionWebViewScreen(
                                     }
                                 }
                             }
-                            loadUrl("https://acemusic.ai/playground/create")
+                            loadUrl("https://acemusic.ai/")
                         }
                     },
                 )
