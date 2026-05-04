@@ -20,6 +20,7 @@ enum class AceMusicAuthMode {
 class AceMusicAuthInterceptor(
     private val apiKeyProvider: () -> String,
     private val authMode: AceMusicAuthMode = AceMusicAuthMode.BEARER,
+    private val extraHeadersProvider: () -> Map<String, String> = { emptyMap() },
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val apiKey = apiKeyProvider().trim()
@@ -39,7 +40,19 @@ class AceMusicAuthInterceptor(
             }
         }
 
+        extraHeadersProvider().forEach { (name, value) ->
+            if (name.isSafeHeaderName() && value.isNotBlank()) {
+                builder.header(name, value)
+            }
+        }
+
         return chain.proceed(builder.build())
+    }
+
+    private fun String.isSafeHeaderName(): Boolean {
+        if (isBlank()) return false
+        if (!all { it.isLetterOrDigit() || it == '-' }) return false
+        return lowercase() !in setOf("host", "content-length", "connection")
     }
 }
 
@@ -47,6 +60,7 @@ object AceMusicNetwork {
     fun createOkHttpClient(
         apiKeyProvider: () -> String,
         authMode: AceMusicAuthMode = AceMusicAuthMode.BEARER,
+        extraHeadersProvider: () -> Map<String, String> = { emptyMap() },
         logBodies: Boolean = true,
     ): OkHttpClient {
         val logging = HttpLoggingInterceptor { message -> Log.d(HTTP_LOG_TAG, message) }.apply {
@@ -57,13 +71,15 @@ object AceMusicNetwork {
             }
             redactHeader("Authorization")
             redactHeader("x-api-key")
+            redactHeader("Cookie")
+            redactHeader("Set-Cookie")
         }
 
         return OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(2, TimeUnit.MINUTES)
             .readTimeout(11, TimeUnit.MINUTES)
-            .addInterceptor(AceMusicAuthInterceptor(apiKeyProvider, authMode))
+            .addInterceptor(AceMusicAuthInterceptor(apiKeyProvider, authMode, extraHeadersProvider))
             .addInterceptor(logging)
             .build()
     }
@@ -72,11 +88,12 @@ object AceMusicNetwork {
         baseUrl: String,
         apiKeyProvider: () -> String,
         authMode: AceMusicAuthMode = AceMusicAuthMode.BEARER,
+        extraHeadersProvider: () -> Map<String, String> = { emptyMap() },
         logBodies: Boolean = true,
     ): AceMusicApi {
         return Retrofit.Builder()
             .baseUrl(baseUrl.normalizedRetrofitBaseUrl())
-            .client(createOkHttpClient(apiKeyProvider, authMode, logBodies))
+            .client(createOkHttpClient(apiKeyProvider, authMode, extraHeadersProvider, logBodies))
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(AceMusicApi::class.java)

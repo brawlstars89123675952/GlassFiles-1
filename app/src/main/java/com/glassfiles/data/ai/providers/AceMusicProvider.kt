@@ -103,7 +103,7 @@ object AceMusicProvider : AiProvider {
         val auth = parseAuth(apiKey)
         val repo = repository(auth)
         val taskId = UUID.randomUUID().toString()
-        val aiToken = repo.fetchAiTokenOrThrow()
+        val aiToken = auth.aiToken.ifBlank { repo.fetchAiTokenOrThrow() }
         val formDebug = "ai_token=<hidden>&task_id_list=${JSONArray(listOf(taskId))}&app=studio-web"
         onProgress("release_task")
         val release = try {
@@ -178,6 +178,7 @@ object AceMusicProvider : AiProvider {
         val client = AceMusicNetwork.createOkHttpClient(
             apiKeyProvider = { auth.apiKey },
             authMode = auth.authMode,
+            extraHeadersProvider = { auth.extraHeaders },
         )
         val request = Request.Builder().url(url).get().build()
         client.newCall(request).execute().use { response ->
@@ -361,6 +362,7 @@ object AceMusicProvider : AiProvider {
                 baseUrl = auth.baseUrl,
                 apiKeyProvider = { auth.apiKey },
                 authMode = auth.authMode,
+                extraHeadersProvider = { auth.extraHeaders },
             ),
         )
 
@@ -370,23 +372,33 @@ object AceMusicProvider : AiProvider {
         var aiToken = ""
         var baseUrl = DEFAULT_BASE_URL
         var authMode = AceMusicAuthMode.BEARER
+        val extraHeaders = linkedMapOf<String, String>()
+        var sawStructuredConfig = false
+        var keyWasSet = false
 
         fun acceptBase(value: String) {
+            sawStructuredConfig = true
             val v = value.unquote().trim().trimEnd('/')
             if (v.startsWith("http://") || v.startsWith("https://")) baseUrl = v
         }
 
         fun acceptKey(value: String) {
+            sawStructuredConfig = true
             val v = value.unquote().trim()
-            if (v.isNotBlank()) key = v.removePrefix("Bearer ").removePrefix("bearer ").trim()
+            if (v.isNotBlank()) {
+                key = v.removePrefix("Bearer ").removePrefix("bearer ").trim()
+                keyWasSet = true
+            }
         }
 
         fun acceptAiToken(value: String) {
+            sawStructuredConfig = true
             val v = value.unquote().trim()
             if (v.isNotBlank()) aiToken = v.removePrefix("Bearer ").removePrefix("bearer ").trim()
         }
 
         fun acceptAuthMode(value: String) {
+            sawStructuredConfig = true
             val v = value.unquote().trim().lowercase().replace("-", "_")
             authMode = when (v) {
                 "x_api_key", "x-api-key", "xapikey", "api_key", "apikey" -> AceMusicAuthMode.X_API_KEY
@@ -394,70 +406,117 @@ object AceMusicProvider : AiProvider {
             }
         }
 
+        fun acceptHeader(name: String, value: String) {
+            val headerName = name.trim().split('-', '_', ' ')
+                .filter { it.isNotBlank() }
+                .joinToString("-") { part ->
+                    part.lowercase().replaceFirstChar { ch -> ch.uppercase() }
+                }
+            val headerValue = value.unquote().trim()
+            if (headerName.isBlank() || headerValue.isBlank()) return
+            if (!headerName.all { it.isLetterOrDigit() || it == '-' }) return
+            if (headerName.lowercase() in setOf("host", "content-length", "connection")) return
+            extraHeaders[headerName] = headerValue
+            sawStructuredConfig = true
+        }
+
+        fun acceptCookie(value: String) {
+            acceptHeader("Cookie", value)
+        }
+
+        fun JSONObject.readHeadersObject() {
+            optJSONObject("headers")?.let { headers ->
+                val keys = headers.keys()
+                while (keys.hasNext()) {
+                    val name = keys.next()
+                    if (!headers.isNull(name)) acceptHeader(name, headers.optString(name, ""))
+                }
+            }
+        }
+
         runCatching {
             if (clean.startsWith("{")) {
                 val obj = JSONTokener(clean).nextValue() as? JSONObject ?: return@runCatching
+                sawStructuredConfig = true
                 firstPresentString(obj, "base_url", "baseUrl", "api_url", "apiUrl", "url").takeIf { it.isNotBlank() }?.let(::acceptBase)
                 firstPresentString(obj, "api_key", "apiKey", "key", "token").takeIf { it.isNotBlank() }?.let(::acceptKey)
                 firstPresentString(obj, "ai_token", "aiToken", "Ai_token", "jwt").takeIf { it.isNotBlank() }?.let(::acceptAiToken)
+                firstPresentString(obj, "cookie", "Cookie", "session_cookie", "sessionCookie").takeIf { it.isNotBlank() }?.let(::acceptCookie)
+                firstPresentString(obj, "authorization", "Authorization").takeIf { it.isNotBlank() }?.let {
+                    acceptHeader("Authorization", it)
+                }
                 firstPresentString(obj, "x_api_key", "x-api-key", "xApiKey").takeIf { it.isNotBlank() }?.let {
                     acceptKey(it)
                     authMode = AceMusicAuthMode.X_API_KEY
                 }
                 firstPresentString(obj, "auth_mode", "authMode", "auth_header", "authHeader", "header").takeIf { it.isNotBlank() }?.let(::acceptAuthMode)
+                obj.readHeadersObject()
             }
         }
 
-        clean.lines().forEach { line ->
-            val normalized = line.trim()
-            val separator = when {
-                "=" in normalized -> "="
-                ":" in normalized -> ":"
-                else -> return@forEach
-            }
-            val name = normalized.substringBefore(separator).trim().lowercase().replace("-", "_").replace(" ", "_")
-            val value = normalized.substringAfter(separator).trim()
-            when (name) {
-                "base_url", "baseurl", "api_url", "apiurl", "url" -> acceptBase(value)
-                "api_key", "apikey", "key", "token" -> acceptKey(value)
-                "ai_token", "aitoken", "jwt" -> acceptAiToken(value)
-                "x_api_key", "xapikey" -> {
-                    acceptKey(value)
-                    authMode = AceMusicAuthMode.X_API_KEY
+        if (!clean.startsWith("{")) {
+            clean.lines().forEach { line ->
+                val normalized = line.trim()
+                val separator = when {
+                    "=" in normalized -> "="
+                    ":" in normalized -> ":"
+                    else -> return@forEach
                 }
-                "auth_mode", "authmode", "auth_header", "authheader", "header" -> acceptAuthMode(value)
+                val rawName = normalized.substringBefore(separator).trim()
+                val name = rawName.lowercase().replace("-", "_").replace(" ", "_")
+                val value = normalized.substringAfter(separator).trim()
+                when (name) {
+                    "base_url", "baseurl", "api_url", "apiurl", "url" -> acceptBase(value)
+                    "api_key", "apikey", "key", "token" -> acceptKey(value)
+                    "ai_token", "aitoken", "jwt" -> acceptAiToken(value)
+                    "cookie", "session_cookie", "sessioncookie" -> acceptCookie(value)
+                    "authorization" -> acceptHeader("Authorization", value)
+                    "x_api_key", "xapikey" -> {
+                        acceptKey(value)
+                        authMode = AceMusicAuthMode.X_API_KEY
+                    }
+                    "auth_mode", "authmode", "auth_header", "authheader", "header" -> acceptAuthMode(value)
+                    else -> if (separator == ":" && rawName.all { it.isLetterOrDigit() || it == '-' }) {
+                        acceptHeader(rawName, value)
+                    }
+                }
             }
         }
 
-        val parts = clean.split('|', limit = 2).map { it.trim() }
-        if (parts.size == 2) {
-            if (parts[0].startsWith("http://") || parts[0].startsWith("https://")) {
-                acceptBase(parts[0])
-                acceptKey(parts[1])
-            } else if (parts[1].startsWith("http://") || parts[1].startsWith("https://")) {
-                acceptKey(parts[0])
-                acceptBase(parts[1])
+        if (!clean.startsWith("{") && '\n' !in clean) {
+            val parts = clean.split('|', limit = 2).map { it.trim() }
+            if (parts.size == 2) {
+                if (parts[0].startsWith("http://") || parts[0].startsWith("https://")) {
+                    acceptBase(parts[0])
+                    acceptKey(parts[1])
+                } else if (parts[1].startsWith("http://") || parts[1].startsWith("https://")) {
+                    acceptKey(parts[0])
+                    acceptBase(parts[1])
+                }
+            }
+            val threeParts = clean.split('|', limit = 3).map { it.trim() }
+            if (threeParts.size == 3) {
+                when {
+                    threeParts[0].startsWith("http://") || threeParts[0].startsWith("https://") -> {
+                        acceptBase(threeParts[0])
+                        acceptKey(threeParts[1])
+                        acceptAiToken(threeParts[2])
+                    }
+                    threeParts[1].startsWith("http://") || threeParts[1].startsWith("https://") -> {
+                        acceptKey(threeParts[0])
+                        acceptBase(threeParts[1])
+                        acceptAiToken(threeParts[2])
+                    }
+                    else -> {
+                        acceptKey(threeParts[0])
+                        acceptAiToken(threeParts[1])
+                        acceptBase(threeParts[2])
+                    }
+                }
             }
         }
-        val threeParts = clean.split('|', limit = 3).map { it.trim() }
-        if (threeParts.size == 3) {
-            when {
-                threeParts[0].startsWith("http://") || threeParts[0].startsWith("https://") -> {
-                    acceptBase(threeParts[0])
-                    acceptKey(threeParts[1])
-                    acceptAiToken(threeParts[2])
-                }
-                threeParts[1].startsWith("http://") || threeParts[1].startsWith("https://") -> {
-                    acceptKey(threeParts[0])
-                    acceptBase(threeParts[1])
-                    acceptAiToken(threeParts[2])
-                }
-                else -> {
-                    acceptKey(threeParts[0])
-                    acceptAiToken(threeParts[1])
-                    acceptBase(threeParts[2])
-                }
-            }
+        if (sawStructuredConfig && !keyWasSet) {
+            key = ""
         }
 
         return AceMusicAuth(
@@ -465,6 +524,7 @@ object AceMusicProvider : AiProvider {
             aiToken = aiToken.removePrefix("Bearer ").removePrefix("bearer ").trim(),
             baseUrl = baseUrl,
             authMode = authMode,
+            extraHeaders = extraHeaders.toMap(),
         )
     }
 
@@ -513,6 +573,7 @@ object AceMusicProvider : AiProvider {
         val aiToken: String,
         val baseUrl: String,
         val authMode: AceMusicAuthMode,
+        val extraHeaders: Map<String, String>,
     )
 
     private data class AudioPayload(

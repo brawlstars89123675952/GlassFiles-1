@@ -34,6 +34,10 @@
 - `query_result` uses form field `ai_token` and reads audio from the first `data` array item, including JSON-stringified `result` payloads.
 - Generation now creates a fresh UUID task id before submit.
 - Kept raw HTTP body logging/error extraction for debugging 500 responses.
+- Added manual ACEMusic session header injection for account-session testing:
+  - `Cookie: ...` / `Authorization: Bearer ...` lines in the ACEMusic API key field;
+  - JSON `headers` object support;
+  - direct temporary `ai_token` support to skip token preflight.
 - Re-enabled Music Generation in the AI hub after the previous ACEMusic pause.
 - Updated ACEMusic API key hint and music screen subtitle to the engine endpoint.
 
