@@ -650,10 +650,11 @@ private fun GitHubFloatingWindow(
             offsetY = offsetY.coerceIn(with(density) { 32.dp.toPx() }, screenH - windowH + m)
         }
 
-        LaunchedEffect(screenW, screenH) { clamp() }
-        LaunchedEffect(windowW, windowH, offsetX, offsetY, expanded) {
-            if (!expanded) onGeometryChange(windowW, windowH, offsetX, offsetY)
+        fun persistGeometry() {
+            onGeometryChange(windowW, windowH, offsetX, offsetY)
         }
+
+        LaunchedEffect(screenW, screenH) { clamp() }
 
         val targetW = if (expanded) screenW else windowW
         val targetH = if (expanded) screenH else windowH
@@ -661,21 +662,16 @@ private fun GitHubFloatingWindow(
         val targetY = if (expanded) 0f else offsetY
         val animatedX by animateFloatAsState(targetX, tween(260), label = "github-window-x")
         val animatedY by animateFloatAsState(targetY, tween(260), label = "github-window-y")
-        val animatedW by animateDpAsState(with(density) { targetW.toDp() }, tween(260), label = "github-window-w")
-        val animatedH by animateDpAsState(with(density) { targetH.toDp() }, tween(260), label = "github-window-h")
+        val targetWidthDp = with(density) { targetW.toDp() }
+        val targetHeightDp = with(density) { targetH.toDp() }
         val animatedCorner by animateDpAsState(if (expanded) 0.dp else 16.dp, tween(240), label = "github-window-corner")
         val animatedShadow by animateDpAsState(if (expanded) 0.dp else 16.dp, tween(240), label = "github-window-shadow")
-        val animatedScale by animateFloatAsState(if (expanded) 1f else 0.985f, tween(240), label = "github-window-scale")
         val chromeAlpha by animateFloatAsState(if (expanded) 0f else 1f, tween(180), label = "github-window-chrome")
 
         Box(
             Modifier
                 .offset { IntOffset(animatedX.toInt(), animatedY.toInt()) }
-                .size(width = animatedW, height = animatedH)
-                .graphicsLayer {
-                    scaleX = animatedScale
-                    scaleY = animatedScale
-                }
+                .size(width = targetWidthDp, height = targetHeightDp)
                 .shadow(animatedShadow, RoundedCornerShape(animatedCorner))
                 .clip(RoundedCornerShape(animatedCorner))
                 .background(SurfaceLight)
@@ -692,7 +688,11 @@ private fun GitHubFloatingWindow(
                             .then(
                                 if (!expanded) {
                                     Modifier.pointerInput(Unit) {
-                                        detectDragGestures { _, d ->
+                                        detectDragGestures(
+                                            onDragEnd = { persistGeometry() },
+                                            onDragCancel = { persistGeometry() },
+                                        ) { change, d ->
+                                            change.consume()
                                             offsetX += d.x
                                             offsetY += d.y
                                             clamp()
@@ -708,7 +708,7 @@ private fun GitHubFloatingWindow(
                         Icon(Icons.Rounded.Code, null, Modifier.size(14.dp), tint = Blue)
                         Spacer(Modifier.width(4.dp))
                         Text("GitHub", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, modifier = Modifier.weight(1f))
-                        Box(Modifier.size(26.dp).clip(CircleShape).background(Color(0xFFFF9500).copy(0.1f)).clickable(enabled = !expanded) { onCollapse() }, contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(26.dp).clip(CircleShape).background(Color(0xFFFF9500).copy(0.1f)).clickable(enabled = !expanded) { persistGeometry(); onCollapse() }, contentAlignment = Alignment.Center) {
                             Icon(Icons.Rounded.RemoveCircleOutline, null, Modifier.size(13.dp), tint = Color(0xFFFF9500))
                         }
                         Spacer(Modifier.width(4.dp))
@@ -727,13 +727,13 @@ private fun GitHubFloatingWindow(
                 }
             }
             if (!expanded) {
-                Box(Modifier.align(Alignment.BottomEnd).size(28.dp).pointerInput(Unit) { detectDragGestures { _, d -> windowW = (windowW + d.x).coerceIn(minW, maxW); windowH = (windowH + d.y).coerceIn(minH, maxH); clamp() } }.padding(4.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.align(Alignment.BottomEnd).size(28.dp).pointerInput(Unit) { detectDragGestures(onDragEnd = { persistGeometry() }, onDragCancel = { persistGeometry() }) { change, d -> change.consume(); windowW = (windowW + d.x).coerceIn(minW, maxW); windowH = (windowH + d.y).coerceIn(minH, maxH); clamp() } }.padding(4.dp), contentAlignment = Alignment.Center) {
                     Icon(Icons.Rounded.DragHandle, null, Modifier.size(14.dp).graphicsLayer { rotationZ = -45f }, tint = TextTertiary)
                 }
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.4f).height(12.dp).pointerInput(Unit) { detectDragGestures { _, d -> windowH = (windowH + d.y).coerceIn(minH, maxH); clamp() } }, contentAlignment = Alignment.Center) {
+                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.4f).height(12.dp).pointerInput(Unit) { detectDragGestures(onDragEnd = { persistGeometry() }, onDragCancel = { persistGeometry() }) { change, d -> change.consume(); windowH = (windowH + d.y).coerceIn(minH, maxH); clamp() } }, contentAlignment = Alignment.Center) {
                     Box(Modifier.width(40.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(TextTertiary.copy(0.5f)))
                 }
-                Box(Modifier.align(Alignment.CenterEnd).width(12.dp).fillMaxHeight(0.4f).pointerInput(Unit) { detectDragGestures { _, d -> windowW = (windowW + d.x).coerceIn(minW, maxW); clamp() } }, contentAlignment = Alignment.Center) {
+                Box(Modifier.align(Alignment.CenterEnd).width(12.dp).fillMaxHeight(0.4f).pointerInput(Unit) { detectDragGestures(onDragEnd = { persistGeometry() }, onDragCancel = { persistGeometry() }) { change, d -> change.consume(); windowW = (windowW + d.x).coerceIn(minW, maxW); clamp() } }, contentAlignment = Alignment.Center) {
                     Box(Modifier.width(3.dp).height(40.dp).clip(RoundedCornerShape(2.dp)).background(TextTertiary.copy(0.5f)))
                 }
             }

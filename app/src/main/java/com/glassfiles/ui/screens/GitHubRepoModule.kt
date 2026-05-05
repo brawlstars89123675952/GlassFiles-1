@@ -164,6 +164,7 @@ internal fun RepoDetailScreen(
     var showRulesets by remember { mutableStateOf(false) }
     var showSecurity by remember { mutableStateOf(false) }
     var showActionsTroubleshoot by remember { mutableStateOf(false) }
+    var returnToRepoSettings by remember { mutableStateOf(false) }
     var languages by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }; var contributors by remember { mutableStateOf<List<GHContributor>>(emptyList()) }
     // Pagination
     var commitsPage by rememberSaveable(repo.fullName) { mutableIntStateOf(1) }; var commitsHasMore by rememberSaveable(repo.fullName) { mutableStateOf(true) }
@@ -206,6 +207,13 @@ internal fun RepoDetailScreen(
         onInitialTargetConsumed()
     }
 
+    fun restoreRepoSettingsIfNeeded() {
+        if (returnToRepoSettings) {
+            returnToRepoSettings = false
+            showRepoSettings = true
+        }
+    }
+
     fun handleRepoBack() {
         when {
             showUpload -> showUpload = false
@@ -235,19 +243,30 @@ internal fun RepoDetailScreen(
             selectedPullNumber != null -> selectedPullNumber = null
             selectedRunId != null -> selectedRunId = null
             showRepoSettings -> showRepoSettings = false
-            showBranchProtection -> showBranchProtection = false
-            showCollaborators -> showCollaborators = false
-            showTeams -> showTeams = false
+            showBranchProtection -> { showBranchProtection = false; restoreRepoSettingsIfNeeded() }
+            showCollaborators -> { showCollaborators = false; restoreRepoSettingsIfNeeded() }
+            showTeams -> { showTeams = false; restoreRepoSettingsIfNeeded() }
             showCompare -> showCompare = false
-            showWebhooks -> showWebhooks = false
-            showDiscussions -> showDiscussions = false
-            showRulesets -> showRulesets = false
-            showSecurity -> showSecurity = false
+            showWebhooks -> { showWebhooks = false; restoreRepoSettingsIfNeeded() }
+            showDiscussions -> { showDiscussions = false; restoreRepoSettingsIfNeeded() }
+            showRulesets -> { showRulesets = false; restoreRepoSettingsIfNeeded() }
+            showSecurity -> { showSecurity = false; restoreRepoSettingsIfNeeded() }
             currentPath.isNotBlank() && selectedTab == RepoTab.FILES -> currentPath = currentPath.substringBeforeLast("/", "")
             else -> onBack()
         }
     }
     BackHandler(onBack = ::handleRepoBack)
+
+    fun openRepoSettingsChild(openChild: () -> Unit) {
+        returnToRepoSettings = true
+        showRepoSettings = false
+        openChild()
+    }
+
+    fun closeRepoSettingsChild(closeChild: () -> Unit) {
+        closeChild()
+        restoreRepoSettingsIfNeeded()
+    }
 
     LaunchedEffect(Unit) {
         isStarred = GitHubManager.isStarred(context, repo.owner, repo.name)
@@ -402,20 +421,31 @@ internal fun RepoDetailScreen(
     }
     if (showRepoSettings) {
         if (canAdmin) {
-            RepoSettingsScreen(repoOwner = repo.owner, repoName = repo.name, onBack = { showRepoSettings = false }, onBranchProtection = { showRepoSettings = false; showBranchProtection = true }, onCollaborators = { showRepoSettings = false; showCollaborators = true }, onTeams = { showRepoSettings = false; showTeams = true }, onWebhooks = { showRepoSettings = false; showWebhooks = true }, onDiscussions = { showRepoSettings = false; showDiscussions = true }, onRulesets = { showRepoSettings = false; showRulesets = true }, onSecurity = { showRepoSettings = false; showSecurity = true })
+            RepoSettingsScreen(
+                repoOwner = repo.owner,
+                repoName = repo.name,
+                onBack = { showRepoSettings = false },
+                onBranchProtection = { openRepoSettingsChild { showBranchProtection = true } },
+                onCollaborators = { openRepoSettingsChild { showCollaborators = true } },
+                onTeams = { openRepoSettingsChild { showTeams = true } },
+                onWebhooks = { openRepoSettingsChild { showWebhooks = true } },
+                onDiscussions = { openRepoSettingsChild { showDiscussions = true } },
+                onRulesets = { openRepoSettingsChild { showRulesets = true } },
+                onSecurity = { openRepoSettingsChild { showSecurity = true } },
+            )
         } else {
             GitHubAdminRequiredScreen(title = "> settings", repoFullName = repo.fullName) { showRepoSettings = false }
         }
         return
     }
-    if (showBranchProtection) { if (canAdmin) BranchProtectionScreen(repoOwner = repo.owner, repoName = repo.name, branches = branches, onBack = { showBranchProtection = false }) else GitHubAdminRequiredScreen(title = "> branch protection", repoFullName = repo.fullName) { showBranchProtection = false } ; return }
-    if (showCollaborators) { if (canAdmin) CollaboratorsScreen(repoOwner = repo.owner, repoName = repo.name) { showCollaborators = false } else GitHubAdminRequiredScreen(title = "> collaborators", repoFullName = repo.fullName) { showCollaborators = false }; return }
-    if (showTeams) { if (canAdmin) RepoTeamsScreen(repoOwner = repo.owner, repoName = repo.name) { showTeams = false } else GitHubAdminRequiredScreen(title = "> teams", repoFullName = repo.fullName) { showTeams = false }; return }
+    if (showBranchProtection) { if (canAdmin) BranchProtectionScreen(repoOwner = repo.owner, repoName = repo.name, branches = branches, onBack = { closeRepoSettingsChild { showBranchProtection = false } }) else GitHubAdminRequiredScreen(title = "> branch protection", repoFullName = repo.fullName) { closeRepoSettingsChild { showBranchProtection = false } } ; return }
+    if (showCollaborators) { if (canAdmin) CollaboratorsScreen(repoOwner = repo.owner, repoName = repo.name) { closeRepoSettingsChild { showCollaborators = false } } else GitHubAdminRequiredScreen(title = "> collaborators", repoFullName = repo.fullName) { closeRepoSettingsChild { showCollaborators = false } }; return }
+    if (showTeams) { if (canAdmin) RepoTeamsScreen(repoOwner = repo.owner, repoName = repo.name) { closeRepoSettingsChild { showTeams = false } } else GitHubAdminRequiredScreen(title = "> teams", repoFullName = repo.fullName) { closeRepoSettingsChild { showTeams = false } }; return }
     if (showCompare) { CompareCommitsScreen(repoOwner = repo.owner, repoName = repo.name, initialBase = selectedBranch) { showCompare = false }; return }
-    if (showWebhooks) { WebhooksScreen(repoOwner = repo.owner, repoName = repo.name, canAdmin = canAdmin) { showWebhooks = false }; return }
-    if (showDiscussions) { DiscussionsScreen(repoOwner = repo.owner, repoName = repo.name, canWrite = canWrite) { showDiscussions = false }; return }
-    if (showRulesets) { if (canAdmin) RulesetsScreen(repoOwner = repo.owner, repoName = repo.name) { showRulesets = false } else GitHubAdminRequiredScreen(title = "> rulesets", repoFullName = repo.fullName) { showRulesets = false }; return }
-    if (showSecurity) { if (canAdmin) SecurityScreen(repoOwner = repo.owner, repoName = repo.name) { showSecurity = false } else GitHubAdminRequiredScreen(title = "> security", repoFullName = repo.fullName) { showSecurity = false }; return }
+    if (showWebhooks) { WebhooksScreen(repoOwner = repo.owner, repoName = repo.name, canAdmin = canAdmin) { closeRepoSettingsChild { showWebhooks = false } }; return }
+    if (showDiscussions) { DiscussionsScreen(repoOwner = repo.owner, repoName = repo.name, canWrite = canWrite) { closeRepoSettingsChild { showDiscussions = false } }; return }
+    if (showRulesets) { if (canAdmin) RulesetsScreen(repoOwner = repo.owner, repoName = repo.name) { closeRepoSettingsChild { showRulesets = false } } else GitHubAdminRequiredScreen(title = "> rulesets", repoFullName = repo.fullName) { closeRepoSettingsChild { showRulesets = false } }; return }
+    if (showSecurity) { if (canAdmin) SecurityScreen(repoOwner = repo.owner, repoName = repo.name) { closeRepoSettingsChild { showSecurity = false } } else GitHubAdminRequiredScreen(title = "> security", repoFullName = repo.fullName) { closeRepoSettingsChild { showSecurity = false } }; return }
     if (showActionsTroubleshoot) {
         GitHubActionsTroubleshootScreen(
             repo = repo,

@@ -85,9 +85,8 @@ fun GitHubScreen(
                     onInitialTargetConsumed()
                 }
             }
-            BackHandler(enabled = isLoggedIn) {
+            BackHandler(enabled = isLoggedIn && selectedRepo == null) {
                 when {
-                    selectedRepo != null -> selectedRepo = null
                     showProfile != null -> showProfile = null
                     showNotifications -> showNotifications = false
                     showSettings -> showSettings = false

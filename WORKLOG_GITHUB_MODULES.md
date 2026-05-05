@@ -77,6 +77,11 @@
   - GitHub теперь живет в одном mounted host при переключении full ↔ mini, а не в двух отдельных animated branches
   - minimize/restore больше не должен сбрасывать внутренний GitHub navigation state
   - добавлена анимация изменения геометрии окна: позиция, размер, scale, shadow, corner radius и chrome fade
+- Исправлен следующий back/performance pass:
+  - root `GitHubScreen` больше не перехватывает системный back, пока открыт repository detail; back внутри репозитория обрабатывает сам `RepoDetailScreen`
+  - repo settings child screens (webhooks, collaborators, teams, branch protection, discussions, rulesets, security) возвращают back/gesture обратно в repo settings, если были открыты из repo settings
+  - mini-window drag больше не пишет geometry state в родительский app state на каждый пиксель движения; геометрия сохраняется на drag end/cancel и перед collapse
+  - full/mini переключение больше не анимирует тяжелый `size` hosted GitHub UI на каждом кадре, чтобы снизить фризы
 
 ### Осталось / идеи дальше
 - Следующие GitHub settings шаги: Pages, Environments, repository interaction limits, autolinks, custom properties, immutable releases, затем оставшиеся account settings gaps.
