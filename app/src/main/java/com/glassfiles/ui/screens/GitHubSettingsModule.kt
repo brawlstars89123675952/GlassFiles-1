@@ -101,6 +101,14 @@ private enum class SettingsSection(val title: String, val subtitle: String) {
 
 private enum class KeyMode { SSH, SSH_SIGNING, GPG }
 
+private data class SettingsConfirmation(
+    val title: String,
+    val body: String,
+    val confirmLabel: String,
+    val danger: Boolean = true,
+    val onConfirm: () -> Unit,
+)
+
 @Composable
 internal fun GitHubSettingsScreen(
     onBack: () -> Unit,
@@ -155,6 +163,15 @@ internal fun GitHubSettingsScreen(
     var rateLimitSummary by remember { mutableStateOf("Unavailable") }
     var showChangeToken by remember { mutableStateOf(false) }
     var newToken by remember { mutableStateOf("") }
+    var emailQuery by remember { mutableStateOf("") }
+    var notificationQuery by remember { mutableStateOf("") }
+    var keyQuery by remember { mutableStateOf("") }
+    var socialQuery by remember { mutableStateOf("") }
+    var peopleQuery by remember { mutableStateOf("") }
+    var blockedQuery by remember { mutableStateOf("") }
+    var organizationQuery by remember { mutableStateOf("") }
+    var repositoryQuery by remember { mutableStateOf("") }
+    var pendingConfirmation by remember { mutableStateOf<SettingsConfirmation?>(null) }
     val actionLog = remember { mutableStateListOf<String>() }
 
     fun addLog(line: String) {
@@ -164,10 +181,21 @@ internal fun GitHubSettingsScreen(
 
     fun handleBack() {
         when {
+            pendingConfirmation != null -> pendingConfirmation = null
             showChangeToken -> showChangeToken = false
             currentSection == null -> onBack()
             else -> currentSection = null
         }
+    }
+
+    fun confirmAction(
+        title: String,
+        body: String,
+        confirmLabel: String,
+        danger: Boolean = true,
+        onConfirm: () -> Unit,
+    ) {
+        pendingConfirmation = SettingsConfirmation(title, body, confirmLabel, danger, onConfirm)
     }
 
     suspend fun refreshSection(section: SettingsSection?) {
@@ -217,6 +245,39 @@ internal fun GitHubSettingsScreen(
 
     LaunchedEffect(currentSection) { refreshSection(currentSection) }
     BackHandler(onBack = ::handleBack)
+
+    val visibleEmails = emails.filter { email ->
+        matchesSettingsQuery(emailQuery, email.email, email.visibility, if (email.primary) "primary" else "", if (email.verified) "verified" else "")
+    }
+    val visibleNotifications = notifications.filter { item ->
+        matchesSettingsQuery(notificationQuery, item.title, item.repoName, item.reason, item.id)
+    }
+    val currentKeys = when (keyMode) {
+        KeyMode.SSH -> sshKeys
+        KeyMode.SSH_SIGNING -> sshSigningKeys
+        KeyMode.GPG -> gpgKeys
+    }
+    val visibleKeys = currentKeys.filter { key ->
+        matchesSettingsQuery(keyQuery, key.title, key.key, key.kind, key.createdAt, key.id.toString())
+    }
+    val visibleSocialAccounts = socialAccounts.filter { acc ->
+        matchesSettingsQuery(socialQuery, acc.provider, acc.url)
+    }
+    val visibleFollowers = followers.filter { person -> matchesSettingsQuery(peopleQuery, person.login) }
+    val visibleFollowing = following.filter { person -> matchesSettingsQuery(peopleQuery, person.login) }
+    val visibleBlockedUsers = blockedUsers.filter { blocked -> matchesSettingsQuery(blockedQuery, blocked.login) }
+    val visibleOrganizations = organizations.filter { org ->
+        matchesSettingsQuery(organizationQuery, org.login, org.description)
+    }
+    val visibleInvitations = repoInvitations.filter { invitation ->
+        matchesSettingsQuery(repositoryQuery, invitation.repoFullName, invitation.inviter, invitation.permissions, invitation.id.toString())
+    }
+    val visibleWatchedRepos = watchedRepos.filter { repo ->
+        matchesSettingsQuery(repositoryQuery, repo.fullName, repo.name, repo.owner, repo.language, repo.description)
+    }
+    val visibleStarredRepos = starredRepos.filter { repo ->
+        matchesSettingsQuery(repositoryQuery, repo.fullName, repo.name, repo.owner, repo.language, repo.description)
+    }
 
     GitHubScreenFrame(
         title = "> ${(currentSection?.title ?: "settings").lowercase()}",
@@ -290,6 +351,8 @@ internal fun GitHubSettingsScreen(
                             }
                         }
                         SettingsSection.EMAILS -> SectionCard("Emails") {
+                            CompactField("Filter emails", emailQuery) { emailQuery = it }
+                            SettingsCountLine("showing ${visibleEmails.size} / ${emails.size}")
                             VisibilityChooser(emailVisibility) { emailVisibility = it }
                             ActionRow(Icons.Rounded.Check, "Apply visibility") {
                                 scope.launch {
@@ -301,16 +364,22 @@ internal fun GitHubSettingsScreen(
                             }
                             CompactField("Add email", newEmail) { newEmail = it }
                             ActionRow(Icons.Rounded.Add, "Add email") {
-                                scope.launch {
-                                    val ok = GitHubManager.addEmailAddress(context, newEmail)
-                                    addLog("Add email: $ok")
-                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                    if (ok) newEmail = ""
-                                    refreshSection(SettingsSection.EMAILS)
+                                val email = newEmail.trim()
+                                if (email.isNotBlank()) {
+                                    scope.launch {
+                                        val ok = GitHubManager.addEmailAddress(context, email)
+                                        addLog("Add email: $ok")
+                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                        if (ok) newEmail = ""
+                                        refreshSection(SettingsSection.EMAILS)
+                                    }
                                 }
                             }
+                            if (visibleEmails.isEmpty()) SettingsEmptyLine(if (emails.isEmpty()) "No emails returned" else "No emails match the filter")
                         }
                         SettingsSection.NOTIFICATIONS -> SectionCard("Notifications") {
+                            CompactField("Filter notifications", notificationQuery) { notificationQuery = it }
+                            SettingsCountLine("showing ${visibleNotifications.size} / ${notifications.size}")
                             Row(
                                 Modifier
                                     .fillMaxWidth()
@@ -343,77 +412,112 @@ internal fun GitHubSettingsScreen(
                                     refreshSection(SettingsSection.NOTIFICATIONS)
                                 }
                             }
+                            if (visibleNotifications.isEmpty()) SettingsEmptyLine(if (notifications.isEmpty()) "No notifications" else "No notifications match the filter")
                         }
                         SettingsSection.KEYS -> SectionCard("Keys") {
                             KeyModeRow(keyMode) { keyMode = it }
+                            CompactField("Filter keys", keyQuery) { keyQuery = it }
+                            SettingsCountLine("showing ${visibleKeys.size} / ${currentKeys.size}")
                             CompactField(if (keyMode == KeyMode.GPG) "Name" else "Title", keyTitle) { keyTitle = it }
                             CompactField(if (keyMode == KeyMode.GPG) "ASCII-armored key" else "Public key", keyValue, singleLine = false, minLines = 4) { keyValue = it }
                             ActionRow(Icons.Rounded.Add, "Add key") {
-                                scope.launch {
-                                    val ok = when (keyMode) {
-                                        KeyMode.SSH -> GitHubManager.addSshKeyNative(context, keyTitle, keyValue)
-                                        KeyMode.SSH_SIGNING -> GitHubManager.addSshSigningKeyNative(context, keyTitle, keyValue)
-                                        KeyMode.GPG -> GitHubManager.addGpgKeyNative(context, keyValue)
+                                val title = keyTitle.trim()
+                                val publicKey = keyValue.trim()
+                                if (publicKey.isNotBlank() && (keyMode == KeyMode.GPG || title.isNotBlank())) {
+                                    scope.launch {
+                                        val ok = when (keyMode) {
+                                            KeyMode.SSH -> GitHubManager.addSshKeyNative(context, title, publicKey)
+                                            KeyMode.SSH_SIGNING -> GitHubManager.addSshSigningKeyNative(context, title, publicKey)
+                                            KeyMode.GPG -> GitHubManager.addGpgKeyNative(context, publicKey)
+                                        }
+                                        addLog("Add key: $ok")
+                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                        if (ok) {
+                                            keyTitle = ""
+                                            keyValue = ""
+                                        }
+                                        refreshSection(SettingsSection.KEYS)
                                     }
-                                    addLog("Add key: $ok")
-                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                    if (ok) {
-                                        keyTitle = ""
-                                        keyValue = ""
-                                    }
-                                    refreshSection(SettingsSection.KEYS)
                                 }
                             }
+                            if (visibleKeys.isEmpty()) SettingsEmptyLine(if (currentKeys.isEmpty()) "No ${keyMode.name.lowercase()} keys" else "No keys match the filter")
                         }
                         SettingsSection.SOCIAL -> SectionCard("Social accounts") {
+                            CompactField("Filter social accounts", socialQuery) { socialQuery = it }
+                            SettingsCountLine("showing ${visibleSocialAccounts.size} / ${socialAccounts.size}")
                             CompactField("Add social URL", newSocialUrl) { newSocialUrl = it }
                             ActionRow(Icons.Rounded.Add, "Add social account") {
-                                scope.launch {
-                                    val ok = GitHubManager.addSocialAccountNative(context, newSocialUrl)
-                                    addLog("Add social account: $ok")
-                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                    if (ok) newSocialUrl = ""
-                                    refreshSection(SettingsSection.SOCIAL)
+                                val url = newSocialUrl.trim()
+                                if (url.isNotBlank()) {
+                                    scope.launch {
+                                        val ok = GitHubManager.addSocialAccountNative(context, url)
+                                        addLog("Add social account: $ok")
+                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                        if (ok) newSocialUrl = ""
+                                        refreshSection(SettingsSection.SOCIAL)
+                                    }
                                 }
                             }
+                            if (visibleSocialAccounts.isEmpty()) SettingsEmptyLine(if (socialAccounts.isEmpty()) "No social accounts" else "No social accounts match the filter")
                         }
                         SettingsSection.PEOPLE -> SectionCard("People") {
+                            CompactField("Filter people", peopleQuery) { peopleQuery = it }
+                            SettingsCountLine("followers ${visibleFollowers.size} / ${followers.size} • following ${visibleFollowing.size} / ${following.size}")
                             Text("Followers", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            if (followers.isEmpty()) Text("No followers", color = AiModuleTheme.colors.textMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                            followers.forEach { person ->
+                            if (visibleFollowers.isEmpty()) SettingsEmptyLine(if (followers.isEmpty()) "No followers" else "No followers match the filter")
+                            visibleFollowers.forEach { person ->
                                 CompactPersonRow(person.login, person.avatarUrl, "Follow") {
                                     scope.launch {
                                         val ok = GitHubManager.followUser(context, person.login)
                                         addLog("Follow ${person.login}: $ok")
                                         Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                        refreshSection(SettingsSection.PEOPLE)
                                     }
                                 }
                             }
                             Spacer(Modifier.height(8.dp))
                             Text("Following", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            if (following.isEmpty()) Text("Not following anyone", color = AiModuleTheme.colors.textMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                            following.forEach { person ->
+                            if (visibleFollowing.isEmpty()) SettingsEmptyLine(if (following.isEmpty()) "Not following anyone" else "No following users match the filter")
+                            visibleFollowing.forEach { person ->
                                 CompactPersonRow(person.login, person.avatarUrl, "Unfollow") {
-                                    scope.launch {
-                                        val ok = GitHubManager.unfollowUser(context, person.login)
-                                        addLog("Unfollow ${person.login}: $ok")
-                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                        refreshSection(SettingsSection.PEOPLE)
+                                    confirmAction(
+                                        title = "unfollow user",
+                                        body = "Stop following @${person.login}?",
+                                        confirmLabel = "unfollow",
+                                    ) {
+                                        scope.launch {
+                                            val ok = GitHubManager.unfollowUser(context, person.login)
+                                            addLog("Unfollow ${person.login}: $ok")
+                                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                            refreshSection(SettingsSection.PEOPLE)
+                                        }
                                     }
                                 }
                             }
                         }
                         SettingsSection.BLOCKED -> SectionCard("Blocked users") {
+                            CompactField("Filter blocked users", blockedQuery) { blockedQuery = it }
+                            SettingsCountLine("showing ${visibleBlockedUsers.size} / ${blockedUsers.size}")
                             CompactField("Block username", blockUsername) { blockUsername = it }
                             ActionRow(Icons.Rounded.Block, "Block user") {
-                                scope.launch {
-                                    val ok = GitHubManager.blockUserNative(context, blockUsername)
-                                    addLog("Block ${blockUsername}: $ok")
-                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                    if (ok) blockUsername = ""
-                                    refreshSection(SettingsSection.BLOCKED)
+                                val username = blockUsername.trim()
+                                if (username.isNotBlank()) {
+                                    confirmAction(
+                                        title = "block user",
+                                        body = "Block @$username from interacting with you?",
+                                        confirmLabel = "block",
+                                    ) {
+                                        scope.launch {
+                                            val ok = GitHubManager.blockUserNative(context, username)
+                                            addLog("Block $username: $ok")
+                                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                            if (ok) blockUsername = ""
+                                            refreshSection(SettingsSection.BLOCKED)
+                                        }
+                                    }
                                 }
                             }
+                            if (visibleBlockedUsers.isEmpty()) SettingsEmptyLine(if (blockedUsers.isEmpty()) "No blocked users" else "No blocked users match the filter")
                         }
                         SettingsSection.INTERACTION -> SectionCard("Interaction limits") {
                             Text(interactionLimit?.let { "Current: ${it.limit}${it.expiry?.let { exp -> " • $exp" } ?: ""}" } ?: "No active interaction limit", color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp)
@@ -442,29 +546,38 @@ internal fun GitHubSettingsScreen(
                                 }
                             }
                             ActionRow(Icons.Rounded.Delete, "Remove interaction limit", tint = AiModuleTheme.colors.error) {
-                                scope.launch {
-                                    val ok = GitHubManager.removeInteractionLimitNative(context)
-                                    addLog("Remove interaction limit: $ok")
-                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                    refreshSection(SettingsSection.INTERACTION)
+                                confirmAction(
+                                    title = "remove interaction limit",
+                                    body = "Remove the active public interaction limit from your account?",
+                                    confirmLabel = "remove",
+                                ) {
+                                    scope.launch {
+                                        val ok = GitHubManager.removeInteractionLimitNative(context)
+                                        addLog("Remove interaction limit: $ok")
+                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                        refreshSection(SettingsSection.INTERACTION)
+                                    }
                                 }
                             }
                         }
                         SettingsSection.ORGANIZATIONS -> SectionCard("Organizations") {
-                            if (organizations.isEmpty()) Text("No organizations", color = AiModuleTheme.colors.textMuted, fontSize = 12.sp)
-                            organizations.forEach { org -> CompactOrgRow(org) }
+                            CompactField("Filter organizations", organizationQuery) { organizationQuery = it }
+                            SettingsCountLine("showing ${visibleOrganizations.size} / ${organizations.size}")
+                            if (visibleOrganizations.isEmpty()) SettingsEmptyLine(if (organizations.isEmpty()) "No organizations" else "No organizations match the filter")
+                            visibleOrganizations.forEach { org -> CompactOrgRow(org) }
                         }
                         SettingsSection.REPOSITORIES -> SectionCard("Repositories") {
+                            CompactField("Filter repositories", repositoryQuery) { repositoryQuery = it }
                             Text(
-                                "stars ${starredRepos.size} • watched ${watchedRepos.size} • invites ${repoInvitations.size}",
+                                "stars ${visibleStarredRepos.size} / ${starredRepos.size} • watched ${visibleWatchedRepos.size} / ${watchedRepos.size} • invites ${visibleInvitations.size} / ${repoInvitations.size}",
                                 color = AiModuleTheme.colors.textMuted,
                                 fontSize = 11.sp,
                                 fontFamily = JetBrainsMono,
                             )
-                            if (repoInvitations.isNotEmpty()) {
+                            if (visibleInvitations.isNotEmpty()) {
                                 Spacer(Modifier.height(10.dp))
                                 SectionHeader("Repository invitations")
-                                repoInvitations.forEach { invitation ->
+                                visibleInvitations.forEach { invitation ->
                                     UserRepositoryInvitationRow(
                                         invitation = invitation,
                                         onAccept = {
@@ -476,11 +589,17 @@ internal fun GitHubSettingsScreen(
                                             }
                                         },
                                         onDecline = {
-                                            scope.launch {
-                                                val ok = GitHubManager.declineUserRepositoryInvitation(context, invitation.id)
-                                                addLog("Decline invitation ${invitation.id}: $ok")
-                                                Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                                refreshSection(SettingsSection.REPOSITORIES)
+                                            confirmAction(
+                                                title = "decline invitation",
+                                                body = "Decline invitation to ${invitation.repoFullName.ifBlank { "repository ${invitation.id}" }}?",
+                                                confirmLabel = "decline",
+                                            ) {
+                                                scope.launch {
+                                                    val ok = GitHubManager.declineUserRepositoryInvitation(context, invitation.id)
+                                                    addLog("Decline invitation ${invitation.id}: $ok")
+                                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                                    refreshSection(SettingsSection.REPOSITORIES)
+                                                }
                                             }
                                         },
                                     )
@@ -488,27 +607,39 @@ internal fun GitHubSettingsScreen(
                             }
                             Spacer(Modifier.height(10.dp))
                             SectionHeader("Watched repositories")
-                            if (watchedRepos.isEmpty()) Text("No watched repositories", color = AiModuleTheme.colors.textMuted, fontSize = 12.sp)
-                            watchedRepos.forEach { repo ->
+                            if (visibleWatchedRepos.isEmpty()) SettingsEmptyLine(if (watchedRepos.isEmpty()) "No watched repositories" else "No watched repositories match the filter")
+                            visibleWatchedRepos.forEach { repo ->
                                 CompactRepoRow(repo, action = "unwatch") {
-                                    scope.launch {
-                                        val ok = GitHubManager.unwatchRepo(context, repo.owner, repo.name)
-                                        addLog("Unwatch ${repo.fullName}: $ok")
-                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                        refreshSection(SettingsSection.REPOSITORIES)
+                                    confirmAction(
+                                        title = "unwatch repository",
+                                        body = "Stop watching ${repo.fullName}?",
+                                        confirmLabel = "unwatch",
+                                    ) {
+                                        scope.launch {
+                                            val ok = GitHubManager.unwatchRepo(context, repo.owner, repo.name)
+                                            addLog("Unwatch ${repo.fullName}: $ok")
+                                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                            refreshSection(SettingsSection.REPOSITORIES)
+                                        }
                                     }
                                 }
                             }
                             Spacer(Modifier.height(10.dp))
                             SectionHeader("Starred repositories")
-                            if (starredRepos.isEmpty()) Text("No starred repositories", color = AiModuleTheme.colors.textMuted, fontSize = 12.sp)
-                            starredRepos.forEach { repo ->
+                            if (visibleStarredRepos.isEmpty()) SettingsEmptyLine(if (starredRepos.isEmpty()) "No starred repositories" else "No starred repositories match the filter")
+                            visibleStarredRepos.forEach { repo ->
                                 CompactRepoRow(repo, action = "unstar") {
-                                    scope.launch {
-                                        val ok = GitHubManager.unstarRepo(context, repo.owner, repo.name)
-                                        addLog("Unstar ${repo.fullName}: $ok")
-                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                        refreshSection(SettingsSection.REPOSITORIES)
+                                    confirmAction(
+                                        title = "unstar repository",
+                                        body = "Remove star from ${repo.fullName}?",
+                                        confirmLabel = "unstar",
+                                    ) {
+                                        scope.launch {
+                                            val ok = GitHubManager.unstarRepo(context, repo.owner, repo.name)
+                                            addLog("Unstar ${repo.fullName}: $ok")
+                                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                            refreshSection(SettingsSection.REPOSITORIES)
+                                        }
                                     }
                                 }
                             }
@@ -518,13 +649,25 @@ internal fun GitHubSettingsScreen(
                             InfoLine("Rate limit", rateLimitSummary)
                             ActionRow(Icons.Rounded.Key, "Change token") { showChangeToken = true }
                             ActionRow(Icons.Rounded.Delete, "Clear GitHub cache") {
-                                GitHubManager.clearGitHubUserCache(context)
-                                addLog("Cleared GitHub cache")
-                                Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                                confirmAction(
+                                    title = "clear github cache",
+                                    body = "Clear cached GitHub user and settings data from this device?",
+                                    confirmLabel = "clear",
+                                ) {
+                                    GitHubManager.clearGitHubUserCache(context)
+                                    addLog("Cleared GitHub cache")
+                                    Toast.makeText(context, Strings.done, Toast.LENGTH_SHORT).show()
+                                }
                             }
                             ActionRow(Icons.Rounded.Logout, "Sign out", tint = AiModuleTheme.colors.error) {
-                                GitHubManager.logout(context)
-                                onLogout()
+                                confirmAction(
+                                    title = "sign out",
+                                    body = "Remove the GitHub token from this device and leave the GitHub module?",
+                                    confirmLabel = "sign out",
+                                ) {
+                                    GitHubManager.logout(context)
+                                    onLogout()
+                                }
                             }
                             if (actionLog.isNotEmpty()) {
                                 Spacer(Modifier.height(12.dp))
@@ -553,19 +696,25 @@ internal fun GitHubSettingsScreen(
                 }
 
                 when (currentSection) {
-                    SettingsSection.EMAILS -> items(emails) { email ->
+                    SettingsSection.EMAILS -> items(visibleEmails) { email ->
                         CompactCard {
                             EmailRow(email) {
-                                scope.launch {
-                                    val ok = GitHubManager.deleteEmailAddress(context, email.email)
-                                    addLog("Delete email ${email.email}: $ok")
-                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                    refreshSection(SettingsSection.EMAILS)
+                                confirmAction(
+                                    title = "delete email",
+                                    body = "Delete ${email.email} from your GitHub account?",
+                                    confirmLabel = "delete",
+                                ) {
+                                    scope.launch {
+                                        val ok = GitHubManager.deleteEmailAddress(context, email.email)
+                                        addLog("Delete email ${email.email}: $ok")
+                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                        refreshSection(SettingsSection.EMAILS)
+                                    }
                                 }
                             }
                         }
                     }
-                    SettingsSection.NOTIFICATIONS -> items(notifications) { item ->
+                    SettingsSection.NOTIFICATIONS -> items(visibleNotifications) { item ->
                         CompactCard {
                             NotificationRow(item) {
                                 scope.launch {
@@ -578,48 +727,62 @@ internal fun GitHubSettingsScreen(
                         }
                     }
                     SettingsSection.KEYS -> {
-                        val currentKeys = when (keyMode) {
-                            KeyMode.SSH -> sshKeys
-                            KeyMode.SSH_SIGNING -> sshSigningKeys
-                            KeyMode.GPG -> gpgKeys
-                        }
-                        items(currentKeys) { key ->
+                        items(visibleKeys) { key ->
                             CompactCard {
                                 KeyRow(key) {
-                                    scope.launch {
-                                        val ok = when (keyMode) {
-                                            KeyMode.SSH -> GitHubManager.deleteSshKeyNative(context, key.id)
-                                            KeyMode.SSH_SIGNING -> GitHubManager.deleteSshSigningKeyNative(context, key.id)
-                                            KeyMode.GPG -> GitHubManager.deleteGpgKeyNative(context, key.id)
+                                    confirmAction(
+                                        title = "delete key",
+                                        body = "Delete ${key.kind} key ${key.title.ifBlank { key.id.toString() }}?",
+                                        confirmLabel = "delete",
+                                    ) {
+                                        scope.launch {
+                                            val ok = when (keyMode) {
+                                                KeyMode.SSH -> GitHubManager.deleteSshKeyNative(context, key.id)
+                                                KeyMode.SSH_SIGNING -> GitHubManager.deleteSshSigningKeyNative(context, key.id)
+                                                KeyMode.GPG -> GitHubManager.deleteGpgKeyNative(context, key.id)
+                                            }
+                                            addLog("Delete key ${key.id}: $ok")
+                                            Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                            refreshSection(SettingsSection.KEYS)
                                         }
-                                        addLog("Delete key ${key.id}: $ok")
-                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                        refreshSection(SettingsSection.KEYS)
                                     }
                                 }
                             }
                         }
                     }
-                    SettingsSection.SOCIAL -> items(socialAccounts) { acc ->
+                    SettingsSection.SOCIAL -> items(visibleSocialAccounts) { acc ->
                         CompactCard {
                             SocialRow(acc) {
-                                scope.launch {
-                                    val ok = GitHubManager.deleteSocialAccountNative(context, acc.url)
-                                    addLog("Delete social ${acc.url}: $ok")
-                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                    refreshSection(SettingsSection.SOCIAL)
+                                confirmAction(
+                                    title = "delete social account",
+                                    body = "Delete ${acc.url} from your GitHub social accounts?",
+                                    confirmLabel = "delete",
+                                ) {
+                                    scope.launch {
+                                        val ok = GitHubManager.deleteSocialAccountNative(context, acc.url)
+                                        addLog("Delete social ${acc.url}: $ok")
+                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                        refreshSection(SettingsSection.SOCIAL)
+                                    }
                                 }
                             }
                         }
                     }
-                    SettingsSection.BLOCKED -> items(blockedUsers) { blocked ->
+                    SettingsSection.BLOCKED -> items(visibleBlockedUsers) { blocked ->
                         CompactCard {
                             BlockedRow(blocked) {
-                                scope.launch {
-                                    val ok = GitHubManager.unblockUserNative(context, blocked.login)
-                                    addLog("Unblock ${blocked.login}: $ok")
-                                    Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
-                                    refreshSection(SettingsSection.BLOCKED)
+                                confirmAction(
+                                    title = "unblock user",
+                                    body = "Unblock @${blocked.login}?",
+                                    confirmLabel = "unblock",
+                                    danger = false,
+                                ) {
+                                    scope.launch {
+                                        val ok = GitHubManager.unblockUserNative(context, blocked.login)
+                                        addLog("Unblock ${blocked.login}: $ok")
+                                        Toast.makeText(context, if (ok) Strings.done else Strings.error, Toast.LENGTH_SHORT).show()
+                                        refreshSection(SettingsSection.BLOCKED)
+                                    }
                                 }
                             }
                         }
@@ -646,6 +809,39 @@ internal fun GitHubSettingsScreen(
             },
             dismissButton = {
                 AiModuleTextAction(label = Strings.cancel.lowercase(), onClick = { showChangeToken = false }, tint = AiModuleTheme.colors.textSecondary)
+            },
+        )
+    }
+
+    pendingConfirmation?.let { request ->
+        AiModuleAlertDialog(
+            onDismissRequest = { pendingConfirmation = null },
+            title = request.title,
+            content = {
+                Text(
+                    request.body,
+                    color = AiModuleTheme.colors.textSecondary,
+                    fontSize = 13.sp,
+                    fontFamily = JetBrainsMono,
+                )
+            },
+            confirmButton = {
+                AiModuleTextAction(
+                    label = request.confirmLabel.lowercase(),
+                    onClick = {
+                        val action = request.onConfirm
+                        pendingConfirmation = null
+                        action()
+                    },
+                    tint = if (request.danger) AiModuleTheme.colors.error else AiModuleTheme.colors.accent,
+                )
+            },
+            dismissButton = {
+                AiModuleTextAction(
+                    label = Strings.cancel.lowercase(),
+                    onClick = { pendingConfirmation = null },
+                    tint = AiModuleTheme.colors.textSecondary,
+                )
             },
         )
     }
@@ -751,6 +947,28 @@ private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Un
 private fun SectionHeader(title: String) {
     Text(title, color = AiModuleTheme.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(6.dp))
+}
+
+@Composable
+private fun SettingsCountLine(text: String) {
+    Text(
+        text,
+        color = AiModuleTheme.colors.textMuted,
+        fontSize = 11.sp,
+        fontFamily = JetBrainsMono,
+        modifier = Modifier.padding(top = 2.dp, bottom = 6.dp),
+    )
+}
+
+@Composable
+private fun SettingsEmptyLine(text: String) {
+    Text(
+        text,
+        color = AiModuleTheme.colors.textMuted,
+        fontSize = 12.sp,
+        fontFamily = JetBrainsMono,
+        modifier = Modifier.padding(top = 6.dp, bottom = 4.dp),
+    )
 }
 
 @Composable
@@ -1121,4 +1339,10 @@ private fun formatGitHubKilobytes(kb: Long): String = when {
     kb < 1024L -> "$kb KB"
     kb < 1024L * 1024L -> "${kb / 1024L} MB"
     else -> "${kb / (1024L * 1024L)} GB"
+}
+
+private fun matchesSettingsQuery(query: String, vararg values: String): Boolean {
+    val q = query.trim()
+    if (q.isBlank()) return true
+    return values.any { it.contains(q, ignoreCase = true) }
 }
