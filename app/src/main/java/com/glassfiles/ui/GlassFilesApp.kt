@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -643,6 +644,7 @@ private fun GitHubFloatingWindow(
         var windowH by remember { mutableFloatStateOf(if (winH > 0) winH else screenH * 0.55f) }
         var offsetX by remember { mutableFloatStateOf(if (winX >= 0) winX else screenW * 0.35f) }
         var offsetY by remember { mutableFloatStateOf(if (winY >= 0) winY else screenH * 0.35f) }
+        var draggingWindow by remember { mutableStateOf(false) }
 
         fun clamp() {
             val m = with(density) { 8.dp.toPx() }
@@ -660,8 +662,9 @@ private fun GitHubFloatingWindow(
         val targetH = if (expanded) screenH else windowH
         val targetX = if (expanded) 0f else offsetX
         val targetY = if (expanded) 0f else offsetY
-        val animatedX by animateFloatAsState(targetX, tween(260), label = "github-window-x")
-        val animatedY by animateFloatAsState(targetY, tween(260), label = "github-window-y")
+        val windowMoveSpec = if (!expanded && draggingWindow) snap<Float>() else tween(260)
+        val animatedX by animateFloatAsState(targetX, windowMoveSpec, label = "github-window-x")
+        val animatedY by animateFloatAsState(targetY, windowMoveSpec, label = "github-window-y")
         val targetWidthDp = with(density) { targetW.toDp() }
         val targetHeightDp = with(density) { targetH.toDp() }
         val animatedCorner by animateDpAsState(if (expanded) 0.dp else 16.dp, tween(240), label = "github-window-corner")
@@ -689,8 +692,15 @@ private fun GitHubFloatingWindow(
                                 if (!expanded) {
                                     Modifier.pointerInput(Unit) {
                                         detectDragGestures(
-                                            onDragEnd = { persistGeometry() },
-                                            onDragCancel = { persistGeometry() },
+                                            onDragStart = { draggingWindow = true },
+                                            onDragEnd = {
+                                                draggingWindow = false
+                                                persistGeometry()
+                                            },
+                                            onDragCancel = {
+                                                draggingWindow = false
+                                                persistGeometry()
+                                            },
                                         ) { change, d ->
                                             change.consume()
                                             offsetX += d.x
