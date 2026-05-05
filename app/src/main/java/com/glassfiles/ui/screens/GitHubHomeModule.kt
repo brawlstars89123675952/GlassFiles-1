@@ -214,7 +214,7 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
     var showAdvancedSearch by rememberSaveable { mutableStateOf(false) }
     var reposPage by rememberSaveable { mutableIntStateOf(1) }; var reposHasMore by rememberSaveable { mutableStateOf(true) }
     val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState(0, 0) }
-    BackHandler(enabled = showStarred || showOrgs || showPackages || showApps || showEnterpriseAdmin || showDiagnostics || showAdvancedSearch || showCreate) {
+    fun handleReposBack() {
         when {
             showCreate -> showCreate = false
             showStarred -> showStarred = false
@@ -224,7 +224,11 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
             showEnterpriseAdmin -> showEnterpriseAdmin = false
             showDiagnostics -> showDiagnostics = false
             showAdvancedSearch -> showAdvancedSearch = false
+            else -> onBack()
         }
+    }
+    BackHandler(enabled = showStarred || showOrgs || showPackages || showApps || showEnterpriseAdmin || showDiagnostics || showAdvancedSearch || showCreate) {
+        handleReposBack()
     }
     LaunchedEffect(Unit) { val r = GitHubManager.getRepos(context, 1); repos = r; reposHasMore = r.size >= 30; loading = false }
     LaunchedEffect(query, searchPublic) { if (searchPublic && query.length >= 2) publicResults = GitHubManager.searchRepos(context, query) }
@@ -243,7 +247,7 @@ internal fun ReposScreen(user: GHUser?, onBack: () -> Unit, onMinimize: () -> Un
     Column(Modifier.fillMaxSize().background(palette.background)) {
         GitHubPageBar(
             title = "> github",
-            onBack = onBack,
+            onBack = ::handleReposBack,
             trailing = {
                 GitHubTopBarAction(GhGlyphs.NOTIFY, onNotifications, palette.accent, contentDescription = "notifications")
                 GitHubTopBarAction(GhGlyphs.FILE, onGists, palette.accent, contentDescription = "gists")

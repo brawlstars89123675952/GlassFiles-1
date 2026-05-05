@@ -79,6 +79,18 @@ internal fun WebhooksScreen(
         }
     }
 
+    fun handleWebhooksBack() {
+        when {
+            createNew -> createNew = false
+            showEditor != null -> showEditor = null
+            detailHook != null -> detailHook = null
+            configHook != null -> configHook = null
+            deleteTarget != null -> deleteTarget = null
+            deliveriesHook != null -> deliveriesHook = null
+            else -> onBack()
+        }
+    }
+
     LaunchedEffect(repoOwner, repoName, canAdmin) { loadWebhooks() }
 
     deliveriesHook?.let { hook ->
@@ -86,7 +98,7 @@ internal fun WebhooksScreen(
             repoOwner = repoOwner,
             repoName = repoName,
             hook = hook,
-            onBack = { deliveriesHook = null }
+            onBack = ::handleWebhooksBack
         )
         return
     }
@@ -94,7 +106,7 @@ internal fun WebhooksScreen(
     GitHubScreenFrame(
         title = "> webhooks",
         subtitle = "$repoOwner/$repoName",
-        onBack = onBack,
+        onBack = ::handleWebhooksBack,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 GitHubTopBarAction(
@@ -634,10 +646,14 @@ private fun WebhookDeliveriesScreen(
 
     LaunchedEffect(hook.id) { loadDeliveries() }
 
+    fun handleDeliveriesBack() {
+        if (selectedDelivery != null) selectedDelivery = null else onBack()
+    }
+
     GitHubScreenFrame(
         title = "> webhook deliveries",
         subtitle = hook.url.ifBlank { "$repoOwner/$repoName" },
-        onBack = onBack,
+        onBack = ::handleDeliveriesBack,
         trailing = {
             GitHubTopBarAction(
                 glyph = GhGlyphs.REFRESH,

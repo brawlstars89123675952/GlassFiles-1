@@ -65,6 +65,10 @@ fun NotificationsScreen(onBack: () -> Unit) {
     var showAll by remember { mutableStateOf(false) }
     var selectedSubscription by remember { mutableStateOf<GHNotification?>(null) }
 
+    fun handleNotificationsBack() {
+        if (selectedSubscription != null) selectedSubscription = null else onBack()
+    }
+
     LaunchedEffect(showAll) {
         loading = true
         notifications = GitHubManager.getNotifications(context, showAll)
@@ -75,7 +79,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
 
     GitHubScreenFrame(
         title = "> notifications",
-        onBack = onBack,
+        onBack = ::handleNotificationsBack,
         subtitle = if (showAll) "scope: all" else "scope: unread",
         trailing = {
             GitHubTopBarAction(

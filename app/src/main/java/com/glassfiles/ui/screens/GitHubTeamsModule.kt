@@ -103,10 +103,19 @@ internal fun RepoTeamsScreen(
 
     LaunchedEffect(repoOwner, repoName) { loadTeams() }
 
+    fun handleTeamsBack() {
+        when {
+            showAddDialog -> showAddDialog = false
+            teamToEdit != null -> teamToEdit = null
+            teamToRemove != null -> teamToRemove = null
+            else -> onBack()
+        }
+    }
+
     GitHubScreenFrame(
         title = "> teams",
         subtitle = "$repoOwner/$repoName",
-        onBack = onBack,
+        onBack = ::handleTeamsBack,
         trailing = {
             GitHubTopBarAction(
                 glyph = GhGlyphs.PLUS,

@@ -67,6 +67,17 @@ internal fun GistsScreen(
     var gistContent by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val palette = AiModuleTheme.colors
 
+    fun handleGistsBack() {
+        when {
+            showCreate -> showCreate = false
+            viewingGist != null -> {
+                viewingGist = null
+                gistContent = emptyMap()
+            }
+            else -> onBack()
+        }
+    }
+
     LaunchedEffect(Unit) {
         gists = GitHubManager.getGists(context)
         loading = false
@@ -79,7 +90,7 @@ internal fun GistsScreen(
                 GitHubPageBar(
                     title = "> ${current.description.ifBlank { "gist" }.lowercase()}",
                     subtitle = "${current.files.size} file${if (current.files.size == 1) "" else "s"}",
-                    onBack = { viewingGist = null; gistContent = emptyMap() },
+                    onBack = ::handleGistsBack,
                     trailing = {
                         GitHubTopBarAction(
                             glyph = GhGlyphs.DELETE,
@@ -142,7 +153,7 @@ internal fun GistsScreen(
             GitHubPageBar(
                 title = "> gists",
                 subtitle = if (loading) "loading…" else "${gists.size} gist${if (gists.size == 1) "" else "s"}",
-                onBack = onBack,
+                onBack = ::handleGistsBack,
                 trailing = {
                     GitHubTopBarAction(GhGlyphs.PLUS, { showCreate = true }, palette.accent, contentDescription = "create gist")
                     GitHubTopBarAction(GhGlyphs.PIP, onMinimize, palette.textSecondary, contentDescription = "minimize")

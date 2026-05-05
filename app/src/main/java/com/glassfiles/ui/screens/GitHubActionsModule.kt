@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Environment
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -294,6 +295,10 @@ internal fun ActionsTab(
     val latestRun = remember(liveRuns) { liveRuns.firstOrNull() }
     val missingRequiredInputs = remember(dispatchSchema, dispatchInputValues) {
         missingDispatchInputs(dispatchSchema, dispatchInputValues)
+    }
+
+    BackHandler(enabled = workflowDetailId != null) {
+        workflowDetailId = null
     }
 
     workflowDetailId?.let { workflowId ->
@@ -2912,13 +2917,17 @@ internal fun WorkflowRunDetailScreen(
         1 + (if (maxAttempt > 1) 1 else 0) + (if (firstFailedJob != null) 1 else 0)
     }
 
+    fun handleRunDetailBack() {
+        if (showPublishRelease) showPublishRelease = false else onBack()
+    }
+
     AiModuleSurface {
     val palette = AiModuleTheme.colors
     Column(Modifier.fillMaxSize().background(palette.background)) {
         GitHubPageBar(
             title = "> ${run?.name?.ifBlank { "run" } ?: "run"} #${run?.runNumber ?: runId}",
             subtitle = run?.let { displayRunStatus(it) },
-            onBack = onBack,
+            onBack = ::handleRunDetailBack,
             trailing = {
                 if (refreshing) {
                     Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {

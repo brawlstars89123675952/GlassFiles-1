@@ -175,10 +175,19 @@ private fun FileDiffScreen(
     var commentActionInFlight by remember { mutableStateOf(false) }
     val canMutateComments = repoOwner != null && repoName != null && pullNumber != null
 
+    fun handleFileDiffBack() {
+        when {
+            showCommentDialog -> showCommentDialog = false
+            editComment != null -> editComment = null
+            deleteComment != null -> deleteComment = null
+            else -> onBack()
+        }
+    }
+
     GitHubScreenFrame(
         title = "> ${file.filename.substringAfterLast("/")}",
         subtitle = "${file.status} +${file.additions} -${file.deletions}",
-        onBack = onBack,
+        onBack = ::handleFileDiffBack,
         trailing = {
                 GitHubTopBarAction(
                     glyph = if (viewMode == DiffViewMode.UNIFIED) GhGlyphs.LIST else GhGlyphs.LINES,
@@ -457,10 +466,18 @@ fun PRReviewCommentsScreen(
     var deleteComment by remember { mutableStateOf<GHReviewComment?>(null) }
     var commentActionInFlight by remember { mutableStateOf(false) }
 
+    fun handleReviewCommentsBack() {
+        when {
+            editComment != null -> editComment = null
+            deleteComment != null -> deleteComment = null
+            else -> onBack()
+        }
+    }
+
     GitHubScreenFrame(
         title = "> review comments",
         subtitle = "#$pullNumber · ${comments.size} comments",
-        onBack = onBack,
+        onBack = ::handleReviewCommentsBack,
     ) {
 
         if (comments.isEmpty()) {

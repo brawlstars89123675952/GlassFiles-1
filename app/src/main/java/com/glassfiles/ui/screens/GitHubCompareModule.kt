@@ -85,6 +85,14 @@ internal fun CompareCommitsScreen(
         if (headBranch.isBlank()) headBranch = branches.firstOrNull { it != baseBranch }.orEmpty()
     }
 
+    fun handleCompareBack() {
+        when {
+            showCreatePr -> showCreatePr = false
+            showDiff -> showDiff = false
+            else -> onBack()
+        }
+    }
+
     val result = compareResult
     if (showDiff && result != null) {
         DiffViewerScreen(
@@ -93,7 +101,7 @@ internal fun CompareCommitsScreen(
             files = result.files,
             totalAdditions = result.files.sumOf { it.additions },
             totalDeletions = result.files.sumOf { it.deletions },
-            onBack = { showDiff = false }
+            onBack = ::handleCompareBack
         )
         return
     }
@@ -101,7 +109,7 @@ internal fun CompareCommitsScreen(
     GitHubScreenFrame(
         title = "> compare",
         subtitle = "$repoOwner/$repoName",
-        onBack = onBack,
+        onBack = ::handleCompareBack,
         trailing = {
             GitHubTopBarAction(
                 glyph = GhGlyphs.COMPARE,

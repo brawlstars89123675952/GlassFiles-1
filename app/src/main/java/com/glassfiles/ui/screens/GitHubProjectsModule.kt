@@ -3,6 +3,7 @@ package com.glassfiles.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -105,10 +106,21 @@ internal fun ProjectsTab(repo: GHRepo) {
 
     LaunchedEffect(repo.owner, repo.name) { loadProjects() }
 
+    fun handleProjectsTabBack() {
+        when {
+            showCreateDialog -> showCreateDialog = false
+            selectedProject != null -> selectedProject = null
+            selectedProjectV2 != null -> selectedProjectV2 = null
+        }
+    }
+    BackHandler(enabled = showCreateDialog || selectedProject != null || selectedProjectV2 != null) {
+        handleProjectsTabBack()
+    }
+
     selectedProject?.let { project ->
         ClassicProjectDetail(
             project = project,
-            onBack = { selectedProject = null },
+            onBack = ::handleProjectsTabBack,
             onDeleted = {
                 selectedProject = null
                 loadProjects()
@@ -122,7 +134,7 @@ internal fun ProjectsTab(repo: GHRepo) {
     }
 
     selectedProjectV2?.let { project ->
-        ProjectV2DetailScreen(project = project, onBack = { selectedProjectV2 = null })
+        ProjectV2DetailScreen(project = project, onBack = ::handleProjectsTabBack)
         return
     }
 
@@ -302,10 +314,24 @@ private fun ProjectV2DetailScreen(project: GHProjectV2, onBack: () -> Unit) {
 
     LaunchedEffect(project.id) { loadDetail() }
 
+    fun handleProjectV2Back() {
+        when {
+            showEditProject -> showEditProject = false
+            showAddDraft -> showAddDraft = false
+            showAddField -> showAddField = false
+            editSchemaField != null -> editSchemaField = null
+            deleteSchemaField != null -> deleteSchemaField = null
+            editDraft != null -> editDraft = null
+            editField != null -> editField = null
+            deleteItem != null -> deleteItem = null
+            else -> onBack()
+        }
+    }
+
     GitHubScreenFrame(
         title = "> ${(detail?.title ?: project.title).lowercase()}",
         subtitle = "project v2 #${project.number}",
-        onBack = onBack,
+        onBack = ::handleProjectV2Back,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 GitHubTopBarAction(
@@ -1028,10 +1054,21 @@ private fun ClassicProjectDetail(
 
     LaunchedEffect(project.id) { loadProject() }
 
+    fun handleClassicProjectBack() {
+        when {
+            showEditDialog -> showEditDialog = false
+            showDeleteDialog -> showDeleteDialog = false
+            showColumnDialog -> showColumnDialog = false
+            cardTargetColumn != null -> cardTargetColumn = null
+            moveTarget != null -> moveTarget = null
+            else -> onBack()
+        }
+    }
+
     GitHubScreenFrame(
         title = "> ${currentProject.name.lowercase()}",
         subtitle = "classic project #${currentProject.number}",
-        onBack = onBack,
+        onBack = ::handleClassicProjectBack,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (currentProject.htmlUrl.isNotBlank()) {

@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.OpenableColumns
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -73,7 +74,7 @@ fun ReleasesScreen(
     GitHubScreenFrame(
         title = "> releases",
         subtitle = repoName,
-        onBack = onBack,
+        onBack = { if (showCreate) showCreate = false else onBack() },
         trailing = if (canWrite) {
                 {
                     GitHubTopBarAction(
@@ -177,6 +178,13 @@ private fun ReleaseCard(
             } else {
                 Toast.makeText(context, Strings.error, Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+    BackHandler(enabled = showEdit || showDelete || deletingAsset != null) {
+        when {
+            deletingAsset != null -> deletingAsset = null
+            showEdit -> showEdit = false
+            showDelete -> showDelete = false
         }
     }
 

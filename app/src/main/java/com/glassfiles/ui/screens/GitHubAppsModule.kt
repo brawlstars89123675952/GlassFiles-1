@@ -83,10 +83,14 @@ internal fun GitHubAppsScreen(
 
     LaunchedEffect(Unit) { load(reset = true) }
 
+    fun handleAppsBack() {
+        if (selected != null) selected = null else onBack()
+    }
+
     selected?.let { installation ->
         GitHubAppInstallationDetailScreen(
             installation = installation,
-            onBack = { selected = null },
+            onBack = ::handleAppsBack,
             onRepoClick = onRepoClick,
         )
         return
@@ -94,7 +98,7 @@ internal fun GitHubAppsScreen(
 
     GitHubScreenFrame(
         title = "> apps",
-        onBack = onBack,
+        onBack = ::handleAppsBack,
         subtitle = when {
             loading -> "loading installations..."
             error.isNotBlank() -> "github apps unavailable"

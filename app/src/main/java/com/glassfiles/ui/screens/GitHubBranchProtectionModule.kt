@@ -196,7 +196,7 @@ internal fun BranchProtectionScreen(
     GitHubScreenFrame(
         title = "> branch protection",
         subtitle = "$repoOwner/$repoName",
-        onBack = onBack,
+        onBack = { if (showDisableConfirm) showDisableConfirm = false else onBack() },
         trailing = {
                 if (saving) {
                     AiModuleSpinner()

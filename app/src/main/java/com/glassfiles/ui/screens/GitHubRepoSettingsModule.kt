@@ -1,6 +1,7 @@
 package com.glassfiles.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -182,10 +183,21 @@ internal fun RepoSettingsScreen(
             topics.map(::normalizeRepoTopic).filter { it.isNotBlank() }.distinct() != s.topics.map(::normalizeRepoTopic).filter { it.isNotBlank() }.distinct()
     } ?: false
 
+    fun handleRepoSettingsBack() {
+        when {
+            deployKeyDeleteTarget != null -> deployKeyDeleteTarget = null
+            showArchiveConfirm != null -> showArchiveConfirm = null
+            else -> onBack()
+        }
+    }
+    BackHandler(enabled = deployKeyDeleteTarget != null || showArchiveConfirm != null) {
+        handleRepoSettingsBack()
+    }
+
     GitHubScreenFrame(
         title = "> repo settings",
         subtitle = "$repoOwner/$repoName",
-        onBack = onBack,
+        onBack = ::handleRepoSettingsBack,
         trailing = {
                 if (saving) {
                     AiModuleSpinner()

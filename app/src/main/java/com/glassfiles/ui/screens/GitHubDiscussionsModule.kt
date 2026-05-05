@@ -92,6 +92,14 @@ internal fun DiscussionsScreen(
         }
     }
 
+    fun handleDiscussionsBack() {
+        when {
+            showCreateDialog -> showCreateDialog = false
+            selectedDiscussion != null -> selectedDiscussion = null
+            else -> onBack()
+        }
+    }
+
     LaunchedEffect(repoOwner, repoName) { loadDiscussions() }
 
     selectedDiscussion?.let { discussion ->
@@ -100,7 +108,7 @@ internal fun DiscussionsScreen(
             repoName = repoName,
             initialDiscussion = discussion,
             categories = categories,
-            onBack = { selectedDiscussion = null },
+            onBack = ::handleDiscussionsBack,
             onDeleted = {
                 selectedDiscussion = null
                 loadDiscussions()
@@ -116,7 +124,7 @@ internal fun DiscussionsScreen(
     GitHubScreenFrame(
         title = "> discussions",
         subtitle = "$repoOwner/$repoName",
-        onBack = onBack,
+        onBack = ::handleDiscussionsBack,
         trailing = if (canWrite) {
                 {
                     GitHubTopBarAction(
@@ -303,10 +311,18 @@ private fun DiscussionDetailScreen(
 
     LaunchedEffect(initialDiscussion.number) { loadDetail() }
 
+    fun handleDiscussionDetailBack() {
+        when {
+            showEditDialog -> showEditDialog = false
+            showDeleteDialog -> showDeleteDialog = false
+            else -> onBack()
+        }
+    }
+
     GitHubScreenFrame(
         title = "> #${discussion.number}",
         subtitle = discussion.title,
-        onBack = onBack,
+        onBack = ::handleDiscussionDetailBack,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (discussion.htmlUrl.isNotBlank()) {

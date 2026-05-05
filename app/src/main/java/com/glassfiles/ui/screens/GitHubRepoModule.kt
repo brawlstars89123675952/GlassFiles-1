@@ -2627,6 +2627,19 @@ private fun PullRequestDetailScreen(
 
     LaunchedEffect(pullNumber) { refreshPull() }
 
+    fun handlePullDetailBack() {
+        when {
+            showReview -> showReview = false
+            showChecks -> showChecks = false
+            showEdit -> showEdit = false
+            showReviewers -> showReviewers = false
+            showReviews -> showReviews = false
+            showMerge -> showMerge = false
+            aiSummaryShown -> aiSummaryShown = false
+            else -> onBack()
+        }
+    }
+
     val current = pr
     val currentHtmlUrl = current?.htmlUrl.orEmpty()
     if (showChecks && current != null) {
@@ -2634,7 +2647,7 @@ private fun PullRequestDetailScreen(
             repoOwner = repo.owner,
             repoName = repo.name,
             ref = current.headSha.ifBlank { current.head },
-            onBack = { showChecks = false }
+            onBack = ::handlePullDetailBack
         )
         return
     }
@@ -2645,7 +2658,7 @@ private fun PullRequestDetailScreen(
         GitHubPageBar(
             title = "> pr #$pullNumber",
             subtitle = repo.name,
-            onBack = onBack,
+            onBack = ::handlePullDetailBack,
             trailing = {
                 AiModuleGlyphAction(
                     glyph = GhGlyphs.REFRESH,
@@ -4721,13 +4734,26 @@ internal fun IssueDetailScreen(repo: GHRepo, issueNumber: Int, onBack: () -> Uni
         refreshIssueDetail(showLoader = true)
     }
 
+    fun handleIssueBack() {
+        when {
+            showMetaDialog -> showMetaDialog = false
+            showReactions -> showReactions = false
+            showTimeline -> showTimeline = false
+            commentReactionTarget != null -> commentReactionTarget = null
+            editingComment != null -> editingComment = null
+            deleteCommentTarget != null -> deleteCommentTarget = null
+            showLockDialog -> showLockDialog = false
+            else -> onBack()
+        }
+    }
+
     AiModuleSurface {
     val issuePalette = AiModuleTheme.colors
     Column(Modifier.fillMaxSize().background(issuePalette.background)) {
         GitHubPageBar(
             title = "> issue #$issueNumber",
             subtitle = detail?.title,
-            onBack = onBack,
+            onBack = ::handleIssueBack,
             trailing = {
                 if (detail != null) {
                     AiModuleGlyphAction(

@@ -1634,3 +1634,23 @@
 - Проверка:
   - локальная Android сборка не запускалась по прямой просьбе пользователя;
   - выполнены только статические проверки.
+
+### GitHub nested back navigation audit
+- Проведен дополнительный проход по GitHub экранам с вложенными состояниями и диалогами.
+- Нормализован back flow: общий terminal top bar теперь сначала закрывает локальные состояния экрана, а уже потом уходит уровнем выше.
+- Покрыты:
+  - home quick screens/create repo;
+  - account settings/change token;
+  - gists, notifications, apps, packages;
+  - repo settings/deploy keys/archive confirm;
+  - collaborators, teams, branch protection;
+  - webhooks/deliveries, discussions, rulesets/security;
+  - compare/diff/review comments;
+  - projects classic/v2;
+  - releases;
+  - code editor overlays;
+  - pull request and issue detail dialogs;
+  - Actions workflow/run detail local overlays.
+- Проверка:
+  - локальная Android сборка не запускалась по прямой просьбе пользователя;
+  - выполнены только статические проверки.

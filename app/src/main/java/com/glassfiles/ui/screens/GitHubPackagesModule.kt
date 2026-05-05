@@ -93,11 +93,15 @@ internal fun PackagesScreen(userLogin: String, onBack: () -> Unit) {
     LaunchedEffect(Unit) { orgs = GitHubManager.getOrganizations(context) }
     LaunchedEffect(selectedOwner, selectedType) { loadPackages() }
 
+    fun handlePackagesBack() {
+        if (selectedPackage != null) selectedPackage = null else onBack()
+    }
+
     selectedPackage?.let { pkg ->
         PackageDetailScreen(
             owner = selectedOwner,
             pkg = pkg,
-            onBack = { selectedPackage = null },
+            onBack = ::handlePackagesBack,
             onDeleted = {
                 selectedPackage = null
                 loadPackages()
@@ -115,7 +119,7 @@ internal fun PackagesScreen(userLogin: String, onBack: () -> Unit) {
 
     GitHubScreenFrame(
         title = "> packages",
-        onBack = onBack,
+        onBack = ::handlePackagesBack,
         trailing = {
             GitHubTopBarAction(
                 glyph = GhGlyphs.REFRESH,
@@ -203,9 +207,17 @@ private fun PackageDetailScreen(owner: PackageOwner, pkg: GHPackage, onBack: () 
 
     LaunchedEffect(owner, pkg.id) { loadDetail() }
 
+    fun handlePackageDetailBack() {
+        when {
+            deleteVersionConfirm != null -> deleteVersionConfirm = null
+            deletePackageConfirm -> deletePackageConfirm = false
+            else -> onBack()
+        }
+    }
+
     GitHubScreenFrame(
         title = "> ${detail.name.ifBlank { "package" }.lowercase()}",
-        onBack = onBack,
+        onBack = ::handlePackageDetailBack,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 GitHubTopBarAction(

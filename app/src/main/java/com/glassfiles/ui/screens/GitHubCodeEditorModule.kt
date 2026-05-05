@@ -182,6 +182,18 @@ fun CodeEditorScreen(
         }
     }
 
+    fun handleEditorBack() {
+        when {
+            showCommitDialog -> showCommitDialog = false
+            showDiscardDialog -> showDiscardDialog = false
+            showGoToLine -> showGoToLine = false
+            showOutline -> showOutline = false
+            showSearch -> showSearch = false
+            hasChanges && !isImage -> showDiscardDialog = true
+            else -> onBack()
+        }
+    }
+
     fun applyState(newState: TextFieldValue) {
         if (newState != textState) {
             snapshot()
@@ -438,7 +450,7 @@ fun CodeEditorScreen(
             canUndo = undoStack.isNotEmpty(),
             canRedo = redoStack.isNotEmpty(),
             hasOutline = symbols.isNotEmpty(),
-            onBack = { if (hasChanges && !isImage) showDiscardDialog = true else onBack() },
+            onBack = ::handleEditorBack,
             onToggleSearch = { showSearch = !showSearch },
             onGoTo = { showGoToLine = true },
             onOutline = { showOutline = true },

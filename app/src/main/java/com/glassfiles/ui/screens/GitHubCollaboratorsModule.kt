@@ -83,10 +83,21 @@ internal fun CollaboratorsScreen(
 
     LaunchedEffect(repoOwner, repoName) { loadCollaborators() }
 
+    fun handleCollaboratorsBack() {
+        when {
+            showAddDialog -> showAddDialog = false
+            userToRemove != null -> userToRemove = null
+            userToEdit != null -> userToEdit = null
+            invitationToCancel != null -> invitationToCancel = null
+            invitationToEdit != null -> invitationToEdit = null
+            else -> onBack()
+        }
+    }
+
     GitHubScreenFrame(
         title = "> collaborators",
         subtitle = "$repoOwner/$repoName",
-        onBack = onBack,
+        onBack = ::handleCollaboratorsBack,
         trailing = {
             GitHubTopBarAction(
                 glyph = GhGlyphs.PLUS,

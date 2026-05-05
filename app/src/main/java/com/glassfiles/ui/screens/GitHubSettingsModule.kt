@@ -163,7 +163,11 @@ internal fun GitHubSettingsScreen(
     }
 
     fun handleBack() {
-        if (currentSection == null) onBack() else currentSection = null
+        when {
+            showChangeToken -> showChangeToken = false
+            currentSection == null -> onBack()
+            else -> currentSection = null
+        }
     }
 
     suspend fun refreshSection(section: SettingsSection?) {

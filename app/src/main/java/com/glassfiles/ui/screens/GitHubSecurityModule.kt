@@ -83,12 +83,20 @@ internal fun RulesetsScreen(
 
     LaunchedEffect(repoOwner, repoName) { loadRulesets() }
 
+    fun handleRulesetsBack() {
+        when {
+            showCreateRuleset -> showCreateRuleset = false
+            selectedRuleset != null -> selectedRuleset = null
+            else -> onBack()
+        }
+    }
+
     selectedRuleset?.let { ruleset ->
         RulesetDetailScreen(
             repoOwner = repoOwner,
             repoName = repoName,
             ruleset = ruleset,
-            onBack = { selectedRuleset = null },
+            onBack = ::handleRulesetsBack,
             onChanged = {
                 selectedRuleset = null
                 loadRulesets()
@@ -104,7 +112,7 @@ internal fun RulesetsScreen(
     GitHubScreenFrame(
         title = "> rulesets",
         subtitle = "$repoOwner/$repoName",
-        onBack = onBack,
+        onBack = ::handleRulesetsBack,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 GitHubTopBarAction(
@@ -278,10 +286,19 @@ private fun RulesetDetailScreen(
 
     LaunchedEffect(ruleset.id) { loadDetail() }
 
+    fun handleRulesetDetailBack() {
+        when {
+            showEditDialog -> showEditDialog = false
+            showDeleteDialog -> showDeleteDialog = false
+            selectedSuite != null -> selectedSuite = null
+            else -> onBack()
+        }
+    }
+
     GitHubScreenFrame(
         title = "> ${ruleset.name.ifBlank { "ruleset #${ruleset.id}" }.lowercase()}",
         subtitle = "$repoOwner/$repoName",
-        onBack = onBack,
+        onBack = ::handleRulesetDetailBack,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 GitHubTopBarAction(
@@ -699,10 +716,20 @@ internal fun SecurityScreen(
 
     LaunchedEffect(repoOwner, repoName, selectedTab) { loadAlerts() }
 
+    fun handleSecurityBack() {
+        when {
+            selectedDependabotAlert != null -> selectedDependabotAlert = null
+            selectedCodeAlert != null -> selectedCodeAlert = null
+            selectedSecretAlert != null -> selectedSecretAlert = null
+            selectedAdvisory != null -> selectedAdvisory = null
+            else -> onBack()
+        }
+    }
+
     GitHubScreenFrame(
         title = "> security",
         subtitle = "$repoOwner/$repoName - ${selectedTab.lowercase()}",
-        onBack = onBack,
+        onBack = ::handleSecurityBack,
         trailing = {
             GitHubTopBarAction(
                 glyph = GhGlyphs.REFRESH,
